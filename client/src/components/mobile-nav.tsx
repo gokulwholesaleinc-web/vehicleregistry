@@ -59,9 +59,9 @@ export default function MobileNav({ onAddEntry }: MobileNavProps) {
       
       <SheetContent 
         side="left" 
-        className="w-[300px] bg-gradient-to-b from-white to-blue-50 dark:from-gray-900 dark:to-blue-900 border-r border-blue-100 dark:border-blue-800 p-0"
+        className="w-[300px] h-full max-h-screen bg-gradient-to-b from-white to-blue-50 dark:from-gray-900 dark:to-blue-900 border-r border-blue-100 dark:border-blue-800 p-0 flex flex-col"
       >
-        <SheetHeader className="p-6 pb-4 border-b border-blue-100 dark:border-blue-800">
+        <SheetHeader className="flex-shrink-0 p-6 pb-4 border-b border-blue-100 dark:border-blue-800">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
               <Car className="h-6 w-6 text-white" />
@@ -77,7 +77,8 @@ export default function MobileNav({ onAddEntry }: MobileNavProps) {
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overscroll-contain"
+             style={{ maxHeight: 'calc(100vh - 120px)' }}>
           {/* User Profile Section */}
           {isAuthenticated ? (
             <div className="p-6 border-b border-blue-100 dark:border-blue-800">
