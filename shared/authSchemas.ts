@@ -13,7 +13,7 @@ export const RegisterInput = z.object({
 });
 
 export const LoginInput = z.object({ 
-  email: Email, 
+  email: z.string().min(1, "Email or username is required"), // Allow username or email
   password: Password 
 });
 
