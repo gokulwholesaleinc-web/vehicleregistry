@@ -124,6 +124,7 @@ export default function CommunitySlideshow() {
   };
 
   const handleImageClick = () => {
+    console.log("Image clicked! Opening modal...");
     setIsModalOpen(true);
     setIsAutoPlaying(false);
   };
