@@ -13,6 +13,7 @@ import AIAssistantPanel from "@/components/ai-assistant-panel";
 import RealTimeClock from "@/components/real-time-clock";
 import VehicleDetailsModal from "@/components/vehicle-details-modal";
 import UserProfileModal from "@/components/user-profile-modal";
+import CommunitySlideshow from "@/components/community-slideshow";
 
 export default function Dashboard() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -39,6 +40,11 @@ export default function Dashboard() {
             onVehicleSelect={setSelectedVehicleId}
             onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
           />
+          
+          {/* Community Slideshow for users without vehicles */}
+          <div className="mt-8">
+            <CommunitySlideshow />
+          </div>
         </div>
       </div>
     );
@@ -57,6 +63,11 @@ export default function Dashboard() {
           onVehicleSelect={setSelectedVehicleId}
           onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
         />
+        
+        {/* Community Slideshow */}
+        <div className="mb-6 lg:mb-8">
+          <CommunitySlideshow />
+        </div>
         
         <QuickStats vehicleId={selectedVehicleId} />
         
