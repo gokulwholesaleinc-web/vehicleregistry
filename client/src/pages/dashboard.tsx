@@ -18,6 +18,8 @@ import { VinLookupModal } from "@/components/vin-lookup-modal";
 import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 import SmartMaintenancePredictions from "@/components/smart-maintenance-predictions";
 import CostAnalyticsDashboard from "@/components/cost-analytics-dashboard";
+import EnhancedPhotoManagement from "@/components/enhanced-photo-management";
+import LocalEnthusiastNetwork from "@/components/local-enthusiast-network";
 
 export default function Dashboard() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -155,6 +157,16 @@ export default function Dashboard() {
             
             {/* Cost Analytics Dashboard */}
             <CostAnalyticsDashboard vehicleId={selectedVehicleId} />
+          </div>
+          
+          {/* Enhanced Photo Management */}
+          <div className="mt-8">
+            <EnhancedPhotoManagement vehicleId={selectedVehicleId} />
+          </div>
+          
+          {/* Local Enthusiast Network */}
+          <div className="mt-8">
+            <LocalEnthusiastNetwork vehicleId={selectedVehicleId} />
           </div>
         </div>
       </div>
