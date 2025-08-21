@@ -14,6 +14,7 @@ import VehiclesPage from "@/pages/vehicles";
 import MaintenancePage from "@/pages/maintenance";
 import ModificationsPage from "@/pages/modifications";
 import ProfilePage from "@/pages/profile";
+import ShowcasePage from "@/pages/showcase";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -33,6 +34,7 @@ function Router() {
           <Route path="/maintenance" component={MaintenancePage} />
           <Route path="/modifications" component={ModificationsPage} />
           <Route path="/community" component={Community} />
+          <Route path="/showcase" component={ShowcasePage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/signin" component={SignIn} />

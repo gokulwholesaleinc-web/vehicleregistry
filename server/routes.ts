@@ -7,6 +7,10 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { googleAuthRouter } from "./auth/google";
 import { requireAuth, optionalAuth } from "./auth/middleware";
+import { showcaseRouter } from "./routes/showcase";
+import { mileageVerificationRouter } from "./routes/mileageVerification";
+import { pdfReportsRouter } from "./routes/pdfReports";
+import { csvImportExportRouter } from "./routes/csvImportExport";
 import { 
   insertVehicleSchema,
   insertModificationSchema,
@@ -108,6 +112,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Google OAuth routes
   app.use(googleAuthRouter);
+  
+  // Community showcase routes
+  app.use("/api/v1/showcase", showcaseRouter);
+  
+  // Mileage verification routes
+  app.use("/api/v1/mileage", mileageVerificationRouter);
+  
+  // PDF report generation routes
+  app.use("/api/v1/reports", pdfReportsRouter);
+  
+  // CSV import/export routes
+  app.use("/api/v1/csv", csvImportExportRouter);
 
   // Serve uploaded files
   app.use('/uploads', (req, res, next) => {

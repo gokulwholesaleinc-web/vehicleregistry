@@ -1,0 +1,262 @@
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+
+      /////////////////////
+   ///////////////////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////        Curious and driven?
+  ///////////////@@@@@@@///////        Work with us!
+  ///////////////@@@@@@@///////
+  ///////////////@@@@@@@///////        https://join.replit.com/hack.with.us
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@#//////////////
+   ///////////////////////////
+      /////////////////////
+      _app-669cb25dedeec5c9.js:13:5277
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Content-Security-Policy: The page’s settings blocked an inline script (script-src-elem) from being executed because it violates the following directive: “script-src 'self'”. Consider using a hash ('sha256-ALaDkBo93Qax4JosMrWAFtKE7+rUENfP37WzspJnRXU=') or a nonce. inpage.js:1:299468
+Partitioned cookie or storage access was provided to “https://js.stripe.com/v3/controller-with-preconnect-d68c62d902f46c45300c5eec23155be5.html#__shared_params__[version]=acacia&__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%22195f7287-f291-47a1-8f19-52d7eac66a84%22%2C%22assignments%22%3A%7B%22elements_pe_initializer_render%22%3A%22control%22%7D%7D&apiKey=pk_live_515YpNsJAmnYVOvfnsBqRdATWS6SzbNAslOz1z2tujdKuvRMDAwWMeFXp6dJL1YKRrQjB0WAp0UDGwlFYL7hxw7Fc00QkfxBFsL&apiVersion=2025-01-27.acacia&stripeJsId=195f7287-f291-47a1-8f19-52d7eac66a84&stripeObjId=sobj-1fe3b43b-d09d-4090-9184-17f3bcbf944b&firstStripeInstanceCreatedLatency=6&controllerCount=1&isCheckout=false&stripeJsLoadTime=1755754843015&manualBrowserDeprecationRollout=false&mids[guid]=NA&mids[muid]=66f7d2d6-12ac-47d5-b18b-56c521a7afb73cf3e9&mids[sid]=NA&referrer=https%3A%2F%2Freplit.com%2F~&controllerId=__privateStripeController0491” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+Content-Security-Policy warnings 4
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Partitioned cookie or storage access was provided to “https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=6LdqhwwoAAAAAFPdw8jCuvY3PaHQItGj3RzOS4fW&co=aHR0cHM6Ly9yZXBsaXQuY29tOjQ0Mw..&hl=en&v=07cvpCr3Xe3g2ttJNUkC6W0J&size=invisible&anchor-ms=20000&execute-ms=15000&cb=l5t19xedv2xo” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+Ignoring unsupported entryTypes: longtask. recaptcha__en.js:125:202
+[LaunchDarkly] LaunchDarkly client initialized _app-669cb25dedeec5c9.js:13:5277
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Content-Security-Policy: The page’s settings blocked an inline script (script-src-elem) from being executed because it violates the following directive: “script-src 'self'”. Consider using a hash ('sha256-ALaDkBo93Qax4JosMrWAFtKE7+rUENfP37WzspJnRXU=') or a nonce. inpage.js:1:299468
+Content-Security-Policy: (Report-Only policy) The page’s settings would block an inline script (script-src-elem) from being executed because it violates the following directive: “script-src 'self'”. Consider using a hash ('sha256-ALaDkBo93Qax4JosMrWAFtKE7+rUENfP37WzspJnRXU=') or a nonce. inpage.js:1:299468
+Partitioned cookie or storage access was provided to “https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Freplit.com%2F~&title=Home%20-%20Replit&referrer=&muid=66f7d2d6-12ac-47d5-b18b-56c521a7afb73cf3e9&sid=NA&version=6&preview=false&__shared_params__[version]=acacia” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Content-Security-Policy: The page’s settings blocked an inline script (script-src-elem) from being executed because it violates the following directive: “script-src https://m.stripe.network 'sha256-5DA+a07wxWmEka9IdoWjSPVHb17Cp5284/lJzfbl8KA=' 'sha256-/5Guo2nzv5n/w6ukZpOBZOtTJBJPSkJ6mhHpnBgm3Ls='”. Consider using a hash ('sha256-ALaDkBo93Qax4JosMrWAFtKE7+rUENfP37WzspJnRXU=') or a nonce. inpage.js:1:299468
+Partitioned cookie or storage access was provided to “https://m.stripe.network/inner.html#url=https%3A%2F%2Freplit.com%2F~&title=Home%20-%20Replit&referrer=&muid=66f7d2d6-12ac-47d5-b18b-56c521a7afb73cf3e9&sid=NA&version=6&preview=false&__shared_params__[version]=acacia” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Cookie warnings 2
+Partitioned cookie or storage access was provided to “https://www.googletagmanager.com/static/service_worker/5840/sw_iframe.html?origin=https%3A%2F%2Freplit.com” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+Cookie warnings 3
+Content-Security-Policy warnings 4
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Partitioned cookie or storage access was provided to “https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=6LdqhwwoAAAAAFPdw8jCuvY3PaHQItGj3RzOS4fW&co=aHR0cHM6Ly9yZXBsaXQuY29tOjQ0Mw..&hl=en&v=07cvpCr3Xe3g2ttJNUkC6W0J&size=invisible&anchor-ms=20000&execute-ms=15000&cb=jm8ewesuy0uk” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+Ignoring unsupported entryTypes: longtask. recaptcha__en.js:125:202
+Cookie warnings 2
+Cookie warnings 5
+Scroll anchoring was disabled in a scroll container because of too many consecutive adjustments (10) with too little total distance (-0.683333349227905 px average, -6.83333 px total). 9773-2d28b82cb784195d.js:1:2683210
+Empty string passed to getElementById(). AutoChronicle
+Scroll anchoring was disabled in a scroll container because of too many consecutive adjustments (10) with too little total distance (0.683333349227905 px average, 6.83333 px total). 9773-2d28b82cb784195d.js:1:2683210
+Feature Policy: Skipping unsupported feature name “accelerometer”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “ambient-light-sensor”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “autoplay”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “battery”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “encrypted-media”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “execution-while-not-rendered”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “execution-while-out-of-viewport”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “gyroscope”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “layout-animations”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “legacy-image-formats”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “magnetometer”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “midi”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “navigation-override”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “oversized-images”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “payment”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “picture-in-picture”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “publickey-credentials”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “sync-xhr”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “unoptimized-images”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “unsized-media”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “usb”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “xr-spatial-tracking”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “clipboard-read”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “clipboard-write”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “pointer-lock”. framework-11d6b58ec42cbdb9.js:1:44626
+Feature Policy: Skipping unsupported feature name “accelerometer”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “ambient-light-sensor”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “autoplay”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “battery”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “encrypted-media”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “execution-while-not-rendered”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “execution-while-out-of-viewport”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “gyroscope”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “layout-animations”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “legacy-image-formats”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “magnetometer”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “midi”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “navigation-override”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “oversized-images”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “payment”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “picture-in-picture”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “publickey-credentials”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “sync-xhr”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “unoptimized-images”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “unsized-media”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “usb”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “xr-spatial-tracking”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “clipboard-read”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “clipboard-write”. framework-11d6b58ec42cbdb9.js:1:130991
+Feature Policy: Skipping unsupported feature name “pointer-lock”. framework-11d6b58ec42cbdb9.js:1:130991
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Feature Policy: Skipping unsupported feature name “accelerometer”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “ambient-light-sensor”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “autoplay”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “battery”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “encrypted-media”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “execution-while-not-rendered”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “execution-while-out-of-viewport”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “gyroscope”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “layout-animations”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “legacy-image-formats”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “magnetometer”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “midi”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “navigation-override”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “oversized-images”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “payment”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “picture-in-picture”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “publickey-credentials”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “sync-xhr”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “unoptimized-images”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “unsized-media”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “usb”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “xr-spatial-tracking”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “clipboard-read”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “clipboard-write”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “accelerometer”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “ambient-light-sensor”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “autoplay”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “battery”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “encrypted-media”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “execution-while-not-rendered”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “execution-while-out-of-viewport”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “gyroscope”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “layout-animations”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “legacy-image-formats”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “magnetometer”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “midi”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “navigation-override”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “oversized-images”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “payment”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “picture-in-picture”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “publickey-credentials”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “sync-xhr”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “unoptimized-images”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “unsized-media”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “usb”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “xr-spatial-tracking”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “clipboard-read”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “clipboard-write”. workspace_iframe.html
+Feature Policy: Skipping unsupported feature name “accelerometer”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “ambient-light-sensor”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “autoplay”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “battery”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “encrypted-media”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “execution-while-not-rendered”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “execution-while-out-of-viewport”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “gyroscope”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “layout-animations”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “legacy-image-formats”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “magnetometer”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “midi”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “navigation-override”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “oversized-images”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “payment”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “picture-in-picture”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “publickey-credentials”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “sync-xhr”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “unoptimized-images”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “unsized-media”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “usb”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “xr-spatial-tracking”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “clipboard-read”. workspace_iframe.html:151:20
+Feature Policy: Skipping unsupported feature name “clipboard-write”. workspace_iframe.html:151:20
+Partitioned cookie or storage access was provided to “https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar15h%3A” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+Cookie warnings 3
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Partitioned cookie or storage access was provided to “https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/signin” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+The script from “https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js” was loaded even though its MIME type (“text/plain”) is not a valid JavaScript MIME type. signin
+The script from “https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/__replco/static/devtools/injected.js” was loaded even though its MIME type (“text/plain”) is not a valid JavaScript MIME type. signin
+Layout was forced before the page was fully loaded. If stylesheets are not yet loaded this may cause a flash of unstyled content. eruda.js:2:105892
+[vite] connecting... eruda.js:2:135516
+[vite] connected. eruda.js:2:135516
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+Content-Security-Policy warnings 5
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+Partitioned cookie or storage access was provided to “https://accounts.google.com/gsi/button?theme=outline&size=large&text=continue_with&shape=pill&width=100%25&is_fedcm_supported=false&client_id=undefined&iframe_id=gsi_788873_28623&cas=BGzXjSlpnHtP9C1y4k%2Fp1HZ71VwF93M6LYnWxsG2uZE” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+[GSI_LOGGER]: The given client ID is not found. m=credential_button_library:75:89
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+GET
+https://accounts.google.com/gsi/button?theme=outline&size=large&text=continue_with&shape=pill&width=100%&is_fedcm_supported=false&client_id=undefined&iframe_id=gsi_806115_678435&cas=eo/tsNeCzsBOO8BBknaesmZN7M1GinpiNS4Nsh8QP9g
+[HTTP/3 403  90ms]
+
+Content-Security-Policy warnings 5
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+[GSI_LOGGER]: The given client ID is not found. m=credential_button_library:75:89
+Partitioned cookie or storage access was provided to “https://accounts.google.com/gsi/button?theme=outline&size=large&text=continue_with&shape=pill&width=100%25&is_fedcm_supported=false&client_id=undefined&iframe_id=gsi_806115_678435&cas=eo%2FtsNeCzsBOO8BBknaesmZN7M1GinpiNS4Nsh8QP9g” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577
+[GSI_LOGGER]: Provided button width is invalid: 100% eruda.js:2:135516
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:269:387
+Feature Policy: Skipping unsupported feature name “identity-credentials-get”. client:271:178
+GET
+https://accounts.google.com/gsi/button?theme=outline&size=large&text=continue_with&shape=pill&width=100%&is_fedcm_supported=false&client_id=undefined&iframe_id=gsi_806564_143344&cas=i0WEXU28eJP1likEeHGNEyvRsGW4WSQ8YANozy9QBnc
+[HTTP/3 403  97ms]
+
+Content-Security-Policy warnings 5
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+[GSI_LOGGER]: The given client ID is not found. m=credential_button_library:75:89
+Partitioned cookie or storage access was provided to “https://accounts.google.com/gsi/button?theme=outline&size=large&text=continue_with&shape=pill&width=100%25&is_fedcm_supported=false&client_id=undefined&iframe_id=gsi_806564_143344&cas=i0WEXU28eJP1likEeHGNEyvRsGW4WSQ8YANozy9QBnc” because it is loaded in the third-party context and dynamic state partitioning is enabled. contentscript.js:12:2577

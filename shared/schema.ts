@@ -23,6 +23,7 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   username: varchar("username").unique(),
+  password: varchar("password"), // For traditional auth
   bio: text("bio"),
   location: varchar("location"),
   isPublic: boolean("is_public").default(true).notNull(),
@@ -282,6 +283,177 @@ export const maintenanceRecordsRelations = relations(maintenanceRecords, ({ one 
   }),
   user: one(users, {
     fields: [maintenanceRecords.userId],
+    references: [users.id],
+  }),
+}));
+
+// Build specifications and comparisons
+export const specs = pgTable("specs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vin: varchar("vin", { length: 17 }).notNull(),
+  title: varchar("title", { length: 80 }).default("Current Build").notNull(),
+  wheels: varchar("wheels", { length: 160 }),
+  tires: varchar("tires", { length: 160 }),
+  suspension: varchar("suspension", { length: 160 }),
+  power: varchar("power", { length: 160 }),
+  brakes: varchar("brakes", { length: 160 }),
+  aero: varchar("aero", { length: 160 }),
+  weight: varchar("weight", { length: 60 }),
+  notes: text("notes"),
+  isStockBaseline: boolean("is_stock_baseline").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_specs_vin").on(table.vin),
+  index("idx_specs_stock").on(table.isStockBaseline),
+]);
+
+// Social features - likes
+export const likes = pgTable("likes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vin: varchar("vin", { length: 17 }).notNull(),
+  userId: varchar("user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_likes_vin").on(table.vin),
+  index("idx_likes_user").on(table.userId),
+]);
+
+// Social features - follows
+export const follows = pgTable("follows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vin: varchar("vin", { length: 17 }).notNull(),
+  userId: varchar("user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_follows_vin").on(table.vin),
+  index("idx_follows_user").on(table.userId),
+]);
+
+// Community comments
+export const comments = pgTable("comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vin: varchar("vin", { length: 17 }).notNull(),
+  recordId: varchar("record_id"),
+  userId: varchar("user_id").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_comments_vin").on(table.vin),
+  index("idx_comments_user").on(table.userId),
+  index("idx_comments_record").on(table.recordId),
+]);
+
+// Events and meetups
+export const events = pgTable("events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vin: varchar("vin", { length: 17 }).notNull(),
+  title: varchar("title", { length: 120 }).notNull(),
+  kind: varchar("kind", { length: 40 }).default("meet").notNull(), // meet | show | trackday | dyno
+  occurredAt: timestamp("occurred_at").notNull(),
+  location: varchar("location", { length: 160 }),
+  description: text("description"),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_events_vin").on(table.vin),
+  index("idx_events_date").on(table.occurredAt),
+  index("idx_events_creator").on(table.createdBy),
+]);
+
+// Event photos and documents
+export const eventAssets = pgTable("event_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull(),
+  storageKey: varchar("storage_key", { length: 255 }).notNull(),
+  caption: varchar("caption", { length: 160 }),
+  photographer: varchar("photographer", { length: 120 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_event_assets_event").on(table.eventId),
+]);
+
+// Mileage verification with EXIF
+export const mileageProofs = pgTable("mileage_proofs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vin: varchar("vin", { length: 17 }).notNull(),
+  userId: varchar("user_id").notNull(),
+  storageKey: varchar("storage_key", { length: 255 }).notNull(),
+  mileage: integer("mileage").notNull(),
+  exifDatetime: timestamp("exif_datetime"),
+  verified: boolean("verified").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_mileage_proofs_vin").on(table.vin),
+  index("idx_mileage_proofs_user").on(table.userId),
+  index("idx_mileage_proofs_verified").on(table.verified),
+]);
+
+// Relations for new tables
+export const specsRelations = relations(specs, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [specs.vin],
+    references: [vehicles.vin],
+  }),
+}));
+
+export const likesRelations = relations(likes, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [likes.vin],
+    references: [vehicles.vin],
+  }),
+  user: one(users, {
+    fields: [likes.userId],
+    references: [users.id],
+  }),
+}));
+
+export const followsRelations = relations(follows, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [follows.vin],
+    references: [vehicles.vin],
+  }),
+  user: one(users, {
+    fields: [follows.userId],
+    references: [users.id],
+  }),
+}));
+
+export const commentsRelations = relations(comments, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [comments.vin],
+    references: [vehicles.vin],
+  }),
+  user: one(users, {
+    fields: [comments.userId],
+    references: [users.id],
+  }),
+}));
+
+export const eventsRelations = relations(events, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [events.vin],
+    references: [vehicles.vin],
+  }),
+  creator: one(users, {
+    fields: [events.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const eventAssetsRelations = relations(eventAssets, ({ one }) => ({
+  event: one(events, {
+    fields: [eventAssets.eventId],
+    references: [events.id],
+  }),
+}));
+
+export const mileageProofsRelations = relations(mileageProofs, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [mileageProofs.vin],
+    references: [vehicles.vin],
+  }),
+  user: one(users, {
+    fields: [mileageProofs.userId],
     references: [users.id],
   }),
 }));

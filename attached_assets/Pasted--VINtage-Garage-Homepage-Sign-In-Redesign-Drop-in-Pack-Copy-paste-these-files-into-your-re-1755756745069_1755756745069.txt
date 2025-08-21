@@ -1,0 +1,244 @@
+# VINtage Garage — Homepage + Sign‑In Redesign (Drop‑in Pack)
+
+> Copy‑paste these files into your repo. This removes the gradient hero, adds your **VINtage Garage** badge as a tasteful background watermark on the homepage and puts the logo on the **/signin** page. All components are Tailwind‑ready and avoid stocky marketing vibes.
+
+## 0) Assets
+
+Place your logo file in one of these locations (choose one):
+
+* `client/public/vintage-badge.png`  *(recommended)*
+* or `client/src/assets/vintage-badge.png`
+
+> In the snippets below I assume **`/public/vintage-badge.png`** (served at `/vintage-badge.png`). Update the path if you use a different location.
+
+---
+
+## 1) Global styles — kill the gradient
+
+**`client/src/index.css`** (or wherever you keep Tailwind base)
+
+```css
+/* Clean light background and subtle paper texture */
+html, body, #root { height: 100%; }
+body { @apply bg-slate-50 text-slate-900; }
+/* Optional: remove any old gradient classes from the document/body in your layout */
+```
+
+If you have a layout component that was setting a gradient on `<main>` or `<body>`, remove that utility class now.
+
+---
+
+## 2) Brand stripes (tiny accent component)
+
+**`client/src/components/BrandStripes.tsx`**
+
+```tsx
+export default function BrandStripes() {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="h-1 w-6 bg-red-500"/>
+      <span className="h-1 w-6 bg-yellow-500"/>
+      <span className="h-1 w-6 bg-green-500"/>
+    </div>
+  );
+}
+```
+
+---
+
+## 3) Homepage hero (real, authentic, with logo watermark)
+
+Replace your current hero section with this component.
+
+**`client/src/components/Hero.tsx`**
+
+```tsx
+import BrandStripes from "./BrandStripes";
+
+export default function Hero({ coverUrl }: { coverUrl: string }) {
+  return (
+    <section className="relative isolate">
+      {/* Real photo cover */}
+      <img src={coverUrl} alt="Featured build" className="h-[56vh] w-full object-cover" />
+      {/* Dark overlay for readable text */}
+      <div className="absolute inset-0 bg-black/40" />
+
+      {/* Watermark badge in the background */}
+      <img
+        src="/vintage-badge.png"
+        alt="VINtage Garage badge"
+        className="pointer-events-none select-none absolute right-8 bottom-6 w-40 opacity-40 mix-blend-overlay hidden md:block"
+      />
+
+      {/* Copy + CTAs */}
+      <div className="absolute inset-0 flex items-center">
+        <div className="mx-auto w-full max-w-6xl px-6">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-white">Trust every mile.</h1>
+          <p className="mt-3 text-white/90 max-w-xl">
+            A living logbook for every VIN. Share it. Transfer it. Preserve it.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a href="/new" className="px-4 py-2 rounded-lg bg-white text-slate-900 font-semibold">Create VIN profile</a>
+            <a href="/signin" className="px-4 py-2 rounded-lg border border-white/80 text-white">Sign up / Sign in</a>
+          </div>
+          <div className="mt-6"><BrandStripes/></div>
+        </div>
+      </div>
+    </section>
+  );
+}
+```
+
+**Usage in Home page** — make sure your page imports the new Hero and passes a real photo from your public builds. If you don’t have dynamic data yet, use one of your own car pics in `/public/hero.jpg`.
+
+**`client/src/pages/Home.tsx`** (replace the existing hero area)
+
+```tsx
+import Hero from "../components/Hero";
+import RecentBuildsGrid from "../components/RecentBuildsGrid"; // optional if you already have a grid
+
+export default function Home() {
+  return (
+    <main>
+      <Hero coverUrl="/hero.jpg" />
+      <RecentBuildsGridFallback />
+    </main>
+  );
+}
+
+function RecentBuildsGridFallback(){
+  // Simple placeholder section using real content when available
+  return (
+    <section className="max-w-6xl mx-auto px-6 py-10">
+      <h2 className="text-2xl font-bold">Recently updated builds</h2>
+      <p className="text-slate-600">Real cars from the community—no stock photos.</p>
+      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {[1,2,3].map(i => (
+          <article key={i} className="bg-white border rounded-2xl overflow-hidden shadow-sm">
+            <div className="h-44 bg-slate-200" />
+            <div className="p-4">
+              <div className="text-sm text-slate-500">Year Make Model</div>
+              <h3 className="font-semibold">Build title or VIN nickname</h3>
+              <ul className="mt-2 text-sm text-slate-600">
+                <li>• Latest mod record</li>
+                <li>• Latest maintenance</li>
+              </ul>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+```
+
+> Remove any gradient wrappers on your previous hero. The watermark badge uses `mix-blend-overlay` + `opacity-40` so it feels printed on the photo rather than pasted.
+
+---
+
+## 4) Sign‑In page with logo and clean layout
+
+**`client/src/pages/SignIn.tsx`** — swap your existing page for this minimal, authentic version. It supports both Google and email/password (if you installed the previous canvas), and places the badge at the top.
+
+```tsx
+import GoogleSignInButton from "../components/GoogleSignInButton"; // if you added Google OAuth canvas
+
+export default function SignIn() {
+  return (
+    <main className="min-h-screen grid place-items-center bg-slate-50 p-6">
+      <div className="w-full max-w-sm bg-white border rounded-2xl p-6 shadow-sm">
+        <div className="flex justify-center mb-4">
+          <img src="/vintage-badge.png" alt="VINtage Garage" className="h-16 w-auto"/>
+        </div>
+        <h1 className="text-xl font-semibold text-center">Welcome back</h1>
+        <p className="text-sm text-slate-600 text-center">Sign in to manage your builds and logs</p>
+
+        {/* Google */}
+        <div className="mt-4">
+          <GoogleSignInButton onSuccess={() => (window.location.href = "/")} />
+        </div>
+
+        {/* Divider */}
+        <div className="my-4 flex items-center gap-3 text-xs text-slate-500">
+          <div className="h-px flex-1 bg-slate-200"/><span>or</span><div className="h-px flex-1 bg-slate-200"/>
+        </div>
+
+        {/* Email/Password fallback (optional) */}
+        <form className="space-y-3" onSubmit={async (e) => {
+          e.preventDefault();
+          const fd = new FormData(e.currentTarget as HTMLFormElement);
+          const payload = { email: String(fd.get("email")), password: String(fd.get("password")) };
+          const r = await fetch(import.meta.env.VITE_API_BASE + "/auth/login", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+          const j = await r.json();
+          if (r.ok && j.ok) { localStorage.setItem("vg.jwt", j.token); location.href = "/"; }
+          else alert(j?.error?.message || "Login failed");
+        }}>
+          <input name="email" type="email" placeholder="Email" className="w-full border rounded-lg px-3 py-2" required />
+          <input name="password" type="password" placeholder="Password" className="w-full border rounded-lg px-3 py-2" required />
+          <button className="w-full bg-slate-900 text-white rounded-lg py-2">Sign in</button>
+        </form>
+
+        <div className="mt-3 text-center text-sm">
+          <a href="/register" className="text-slate-700 hover:underline">Create account</a>
+          <span className="text-slate-400"> · </span>
+          <a href="/reset" className="text-slate-700 hover:underline">Forgot password?</a>
+        </div>
+      </div>
+    </main>
+  );
+}
+```
+
+---
+
+## 5) Optional: replace gradient section under hero with authentic content
+
+If you had a big gradient feature area, switch to “How it works” with simple UI screenshots.
+
+**`client/src/components/HowItWorks.tsx`**
+
+```tsx
+export default function HowItWorks(){
+  const Step = ({n, title, body}:{n:string; title:string; body:string}) => (
+    <div className="bg-white border rounded-2xl p-4 shadow-sm">
+      <div className="text-xs font-semibold text-slate-500">STEP {n}</div>
+      <h3 className="text-lg font-semibold">{title}</h3>
+      <p className="text-slate-600 text-sm">{body}</p>
+    </div>
+  );
+  return (
+    <section className="max-w-6xl mx-auto px-6 py-10">
+      <h2 className="text-2xl font-bold">How it works</h2>
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <Step n="01" title="Create a VIN profile" body="Decode your VIN and set privacy (private by default)."/>
+        <Step n="02" title="Log mods & maintenance" body="Attach photos and receipts. Timeline builds itself."/>
+        <Step n="03" title="Transfer on sale" body="Send a secure token to the buyer; history stays with the car."/>
+      </div>
+    </section>
+  );
+}
+```
+
+Add it under the hero in `Home.tsx` if you like:
+
+```tsx
+<HowItWorks/>
+```
+
+---
+
+## 6) QA checklist
+
+* [ ] No gradient classes applied anywhere on the homepage or layout.
+* [ ] `/vintage-badge.png` exists and loads (check Network tab).
+* [ ] Hero watermark visible on md+ screens, subtle on top of real photo.
+* [ ] Sign‑in page displays the logo at top and both Google + email flows work.
+
+---
+
+## 7) Notes for the Replit Agent
+
+* Ensure the logo file is saved at **`client/public/vintage-badge.png`**.
+* Replace the existing hero section with **`Hero`** component. Remove any gradient utilities from old components.
+* Update the `/signin` route to use the new SignIn component above.
+* If the app uses different paths, adjust imports accordingly (`src/pages/Home.tsx`, `src/pages/SignIn.tsx`).
