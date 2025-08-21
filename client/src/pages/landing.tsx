@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Car, Users, History, Shield, Sparkles, Zap, Globe, Lock, ArrowRight } from "lucide-react";
+import QuickSignupModal from "@/components/quick-signup-modal";
 
 export default function Landing() {
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
+
   return (
     <div className="min-h-screen overflow-hidden">
       {/* Hero Section with Animated Background */}
@@ -34,23 +38,45 @@ export default function Landing() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-up" style={{animationDelay: "0.4s"}}>
               <Button 
                 size="lg" 
-                className="btn-primary text-lg px-8 py-4 group"
-                onClick={() => window.location.href = '/api/login'}
+                className="btn-primary text-lg px-8 py-4 group shadow-2xl"
+                onClick={() => setIsSignupModalOpen(true)}
                 data-testid="button-login"
               >
-                Get Started Free
+                <Globe className="w-5 h-5 mr-2" />
+                Sign Up with Email
                 <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
               
-              <Button 
-                variant="outline"
-                size="lg"
-                className="btn-secondary text-lg px-8 py-4"
-                onClick={() => window.location.href = '/api/login'}
-                data-testid="button-learn-more"
-              >
-                Learn More
-              </Button>
+              <div className="flex items-center gap-3 text-white/80 text-sm">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span>Quick signup</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                  <span>Gmail supported</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                  <span>Free forever</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Quick features highlight */}
+            <div className="mt-8 flex flex-wrap justify-center gap-4 text-white/70 text-sm animate-slide-up" style={{animationDelay: "0.6s"}}>
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1">
+                <Zap className="w-3 h-3 text-yellow-400" />
+                <span>30-second setup</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1">
+                <Shield className="w-3 h-3 text-green-400" />
+                <span>Secure authentication</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1">
+                <Users className="w-3 h-3 text-blue-400" />
+                <span>Join 10,000+ users</span>
+              </div>
             </div>
           </div>
         </div>
@@ -147,23 +173,35 @@ export default function Landing() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Button 
                 size="lg"
-                className="btn-primary text-lg px-8 py-4 group"
-                onClick={() => window.location.href = '/api/login'}
+                className="btn-primary text-lg px-8 py-4 group shadow-2xl"
+                onClick={() => setIsSignupModalOpen(true)}
                 data-testid="button-join-community"
               >
                 <Zap className="w-5 h-5 mr-2" />
-                Start Your Journey
+                Create Account Now
                 <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
               
-              <div className="flex items-center gap-2 text-white/70">
-                <Lock className="w-4 h-4" />
-                <span className="text-sm">Free to join • No credit card required</span>
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-white/70">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  <span className="text-sm">Free forever • No credit card required</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="bg-green-500/20 text-green-300 px-2 py-1 rounded-full">✓ Gmail</span>
+                  <span className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full">✓ Any Email</span>
+                  <span className="bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full">✓ Instant Access</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+      
+      <QuickSignupModal 
+        isOpen={isSignupModalOpen} 
+        onClose={() => setIsSignupModalOpen(false)} 
+      />
     </div>
   );
 }

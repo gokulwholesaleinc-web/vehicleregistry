@@ -1,4 +1,4 @@
-import { Car, Plus, Bell, Users, LogOut } from "lucide-react";
+import { Car, Plus, Bell, Users, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
@@ -75,12 +75,12 @@ export default function Header({ onAddEntry }: HeaderProps) {
             <Button variant="ghost" size="icon" data-testid="button-notifications">
               <Bell className="h-5 w-5 text-steel-gray-600" />
             </Button>
-            {isAuthenticated && (
+            {isAuthenticated ? (
               <div className="flex items-center space-x-3">
                 <Avatar className="w-8 h-8">
-                  <AvatarImage src={user?.profileImageUrl || ''} alt="Profile" />
+                  <AvatarImage src={(user as any)?.profileImageUrl || ''} alt="Profile" />
                   <AvatarFallback>
-                    {user?.firstName?.charAt(0) || user?.email?.charAt(0) || '?'}
+                    {(user as any)?.firstName?.charAt(0) || (user as any)?.email?.charAt(0) || '?'}
                   </AvatarFallback>
                 </Avatar>
                 
@@ -93,6 +93,17 @@ export default function Header({ onAddEntry }: HeaderProps) {
                   <LogOut className="w-4 h-4" />
                 </Button>
               </div>
+            ) : (
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="btn-secondary bg-white/80 backdrop-blur-sm border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50"
+                onClick={() => window.location.href = '/api/login'}
+                data-testid="button-login-header"
+              >
+                <User className="w-4 h-4 mr-2" />
+                Quick Sign Up
+              </Button>
             )}
           </div>
         </div>
