@@ -4,6 +4,7 @@ import RotatingHero from "@/components/RotatingHero";
 import HowItWorks from "@/components/HowItWorks";
 import { Link } from "wouter";
 import QuickSignupModal from "@/components/quick-signup-modal";
+import CommunitySlideshow from "@/components/community-slideshow";
 
 export default function Landing() {
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
@@ -16,24 +17,12 @@ export default function Landing() {
       {/* How It Works Section */}
       <HowItWorks />
 
-      {/* Recent Builds Section */}
+      {/* Community Showcase Section */}
       <section className="max-w-6xl mx-auto px-6 py-10">
-        <h2 className="text-2xl font-bold">Recently updated builds</h2>
-        <p className="text-slate-600">Real cars from the community—no stock photos.</p>
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {[1,2,3].map(i => (
-            <article key={i} className="bg-white border rounded-2xl overflow-hidden shadow-sm">
-              <div className="h-44 bg-slate-200" />
-              <div className="p-4">
-                <div className="text-sm text-slate-500">Year Make Model</div>
-                <h3 className="font-semibold">Build title or VIN nickname</h3>
-                <ul className="mt-2 text-sm text-slate-600">
-                  <li>• Latest mod record</li>
-                  <li>• Latest maintenance</li>
-                </ul>
-              </div>
-            </article>
-          ))}
+        <h2 className="text-2xl font-bold text-center mb-2">Featured Community Builds</h2>
+        <p className="text-slate-600 dark:text-slate-300 text-center mb-8">Real cars from the community—click any image to view full size.</p>
+        <div className="max-w-4xl mx-auto">
+          <CommunitySlideshow />
         </div>
       </section>
 
