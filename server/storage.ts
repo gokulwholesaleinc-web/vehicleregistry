@@ -31,11 +31,13 @@ import { db } from "./db";
 import { eq, and, or, desc, asc, sql } from "drizzle-orm";
 
 export interface IStorage {
-  // Users (for Replit Auth)
+  // Users (for Replit Auth + Local Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUser(id: string, updateData: Partial<UpsertUser>): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  updateUserLastLogin(id: string): Promise<User>;
 
   // Vehicles (VIN-based with ownership)
   getVehiclesByOwner(userId: string): Promise<Vehicle[]>;
@@ -122,6 +124,23 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async updateUserLastLogin(id: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        lastLoginAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
   }
 
   // Vehicles (VIN-based with ownership)

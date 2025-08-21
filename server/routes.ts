@@ -7,6 +7,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { googleAuthRouter } from "./auth/google";
 import { requireAuth, optionalAuth } from "./auth/middleware";
+import localAuthRouter from "./auth/localAuth";
 import { showcaseRouter } from "./routes/showcase";
 import { mileageVerificationRouter } from "./routes/mileageVerification";
 import { pdfReportsRouter } from "./routes/pdfReports";
@@ -112,6 +113,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Google OAuth routes
   app.use(googleAuthRouter);
+  
+  // Local auth routes
+  app.use("/api/auth", localAuthRouter);
   
   // Community showcase routes
   app.use("/api/v1/showcase", showcaseRouter);

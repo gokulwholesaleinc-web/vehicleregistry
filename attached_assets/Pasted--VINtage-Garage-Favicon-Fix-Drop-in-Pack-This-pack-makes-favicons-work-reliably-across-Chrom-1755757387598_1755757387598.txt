@@ -1,0 +1,192 @@
+# VINtage Garage — Favicon Fix (Drop‑in Pack)
+
+> This pack makes favicons work reliably across Chrome/Edge/Firefox/Safari, removes gradient leftovers, and ensures the icon shows on tabs, iOS home screen, and PWA installs. Copy these files into your repo and run the icon builder.
+
+---
+
+## 0) What usually breaks favicons
+
+* Icon files not in `/public` (with Vite, they must be there to be served at `/`).
+* Only `.ico` or only `.png` provided; some browsers prefer SVG, others fallback.
+* Wrong `base` path when deploying to a subfolder.
+* Heavy caching (browser keeps old icon). We version query strings (`?v=3`).
+
+---
+
+## 1) Place these files
+
+### A) **`client/public/favicon.svg`** (crisp, scalable, dark-on-light)
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <clipPath id="r"><rect rx="20" ry="20" x="8" y="8" width="112" height="112"/></clipPath>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="20" fill="#0f172a"/>
+  <g clip-path="url(#r)">
+    <!-- stripes -->
+    <rect x="70" y="96" width="12" height="20" fill="#ef4444"/>
+    <rect x="84" y="96" width="12" height="20" fill="#eab308"/>
+    <rect x="98" y="96" width="12" height="20" fill="#22c55e"/>
+  </g>
+  <!-- VG letters -->
+  <path fill="#ffffff" d="M24 86l18-44h10L34 86H24zm38-44h12c16 0 26 8 26 22s-10 22-26 22H62V42zm12 34c10 0 14-5 14-12s-4-12-14-12h-4v24h4z"/>
+</svg>
+```
+
+### B) **`client/public/safari-pinned-tab.svg`** (monochrome for Safari pinned tabs)
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect x="8" y="8" width="112" height="112" rx="20" fill="#000"/>
+  <path fill="#fff" d="M24 86l18-44h10L34 86H24zm38-44h12c16 0 26 8 26 22s-10 22-26 22H62V42zm12 34c10 0 14-5 14-12s-4-12-14-12h-4v24h4z"/>
+</svg>
+```
+
+### C) **`client/public/site.webmanifest`**
+
+```json
+{
+  "name": "VINtage Garage",
+  "short_name": "VINtage",
+  "theme_color": "#0f172a",
+  "background_color": "#f8fafc",
+  "display": "standalone",
+  "icons": [
+    { "src": "/favicon-192.png?v=3", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
+```
+
+---
+
+## 2) Head tags (Vite index.html)
+
+Edit **`client/index.html`** (or your root HTML) and make the `<head>` look like this:
+
+```html
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+  <link rel="alternate icon" href="/favicon.ico?v=3" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
+  <link rel="mask-icon" href="/safari-pinned-tab.svg?v=3" color="#0f172a" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <!-- Dynamic theme-color for light/dark -->
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+  <title>VINtage Garage</title>
+</head>
+```
+
+> **Important:** All file paths are root-relative (`/…`) because Vite serves everything in `public/` at the site root.
+
+---
+
+## 3) Generate PNG + ICO automatically (script)
+
+Browsers still want PNG/ICO. Add this tiny build script to generate them from the SVG.
+
+### A) Install tool deps
+
+```bash
+pnpm add -D sharp to-ico
+```
+
+### B) **`scripts/build-icons.mjs`**
+
+```js
+// Generates favicon-192.png, favicon-512.png, apple-touch-icon.png, and favicon.ico from favicon.svg
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import sharp from 'sharp';
+import toIco from 'to-ico';
+
+const pub = path.resolve('client/public');
+const svg = await fs.readFile(path.join(pub, 'favicon.svg'));
+
+// PNG sizes
+const sizes = [192, 512, 180];
+const names = ['favicon-192.png', 'favicon-512.png', 'apple-touch-icon.png'];
+await Promise.all(sizes.map((s, i) => sharp(svg).resize(s, s).png().toFile(path.join(pub, names[i]))));
+
+// ICO (16,32,48)
+const icoBufs = await Promise.all([16,32,48].map(size => sharp(svg).resize(size, size).png().toBuffer()));
+const ico = await toIco(icoBufs);
+await fs.writeFile(path.join(pub, 'favicon.ico'), ico);
+
+console.log('✓ icons written to client/public');
+```
+
+### C) `package.json` script
+
+Add:
+
+```json
+{
+  "scripts": {
+    "icons": "node scripts/build-icons.mjs"
+  }
+}
+```
+
+Run it:
+
+```bash
+pnpm run icons
+```
+
+This will generate:
+
+* `/client/public/favicon-192.png`
+* `/client/public/favicon-512.png`
+* `/client/public/apple-touch-icon.png`
+* `/client/public/favicon.ico`
+
+---
+
+## 4) Vite base path (only if deploying to a subfolder)
+
+If your site isn’t at the domain root, set `base`:
+
+**`vite.config.ts`**
+
+```ts
+export default defineConfig({
+  base: '/', // change to '/your-subpath/' if deployed under a subfolder
+});
+```
+
+---
+
+## 5) Hard refresh + cache busting
+
+Browsers cache favicons **aggressively**. After deploying:
+
+* Visit your site, open DevTools → Application → Clear storage → Clear site data.
+* Then hard‑reload.
+* The `?v=3` query string forces a cache refresh next time too; bump it if needed.
+
+---
+
+## 6) Optional: use your badge art instead of the default SVG
+
+If you want to use your detailed badge image instead of the minimalist SVG:
+
+1. Save the badge as `client/public/badge.svg` or `badge.png`.
+2. Update `build-icons.mjs` to read `badge.svg` (or `badge.png` with `sharp`).
+3. Re-run `pnpm run icons`.
+
+---
+
+## 7) Quick checklist
+
+* [ ] Icon files exist in `client/public` and load at `/favicon.svg` and `/favicon.ico`.
+* [ ] `index.html` has all `<link rel="icon">` tags with `?v=3`.
+* [ ] PNG/ICO generated via `pnpm run icons`.
+* [ ] On iOS, add to Home Screen shows the correct icon (`apple-touch-icon.png`).
+* [ ] PWA install shows correct icons (from `site.webmanifest`).
+
+**That’s it.** Once this is in, your tab icon should render reliably in all browsers/environments.

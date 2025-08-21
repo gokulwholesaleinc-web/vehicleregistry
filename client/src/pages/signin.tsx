@@ -47,7 +47,7 @@ export default function SignIn() {
     try {
       const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
       const payload = isLogin 
-        ? { usernameOrEmail: formData.usernameOrEmail, password: formData.password }
+        ? { email: formData.usernameOrEmail, password: formData.password }
         : { 
             username: formData.username,
             email: formData.email, 
@@ -66,13 +66,17 @@ export default function SignIn() {
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Authentication failed");
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error?.message || "Authentication failed");
       }
 
-      // Store token and user data
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      // Store token and user data - session is already set by server
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+      }
       
       handleSignInSuccess();
     } catch (err) {

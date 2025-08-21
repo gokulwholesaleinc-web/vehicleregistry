@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Landing from "@/pages/landing";
 import SignIn from "@/pages/signin";
+import Register from "@/pages/register";
 import Community from "@/pages/community";
 import AdminDashboard from "@/pages/admin";
 import VehiclesPage from "@/pages/vehicles";
@@ -25,6 +26,7 @@ function Router() {
         <>
           <Route path="/" component={Landing} />
           <Route path="/signin" component={SignIn} />
+          <Route path="/register" component={Register} />
         </>
       ) : (
         <>
@@ -38,6 +40,7 @@ function Router() {
           <Route path="/profile" component={ProfilePage} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/signin" component={SignIn} />
+          <Route path="/register" component={Register} />
         </>
       )}
       <Route component={NotFound} />
