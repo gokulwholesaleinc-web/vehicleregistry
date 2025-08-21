@@ -183,6 +183,23 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert;
 
+// Notifications table
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  title: varchar("title").notNull(),
+  message: text("message").notNull(),
+  type: varchar("type", { length: 50 }).notNull().default("info"), // info, success, warning, error
+  isRead: boolean("is_read").default(false),
+  relatedEntityId: varchar("related_entity_id"), // vehicle ID, transfer ID, etc.
+  relatedEntityType: varchar("related_entity_type"), // vehicle, transfer, maintenance, etc.
+  createdAt: timestamp("created_at").defaultNow(),
+  readAt: timestamp("read_at"),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
 export type VehicleOwnership = typeof vehicleOwnership.$inferSelect;
 export type InsertVehicleOwnership = typeof vehicleOwnership.$inferInsert;
 

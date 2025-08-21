@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Car, Users, History, Shield, Sparkles, Zap, Globe, Lock, ArrowRight } from "lucide-react";
 import QuickSignupModal from "@/components/quick-signup-modal";
+import CommunitySlideshow from "@/components/community-slideshow";
 
 export default function Landing() {
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
@@ -145,6 +146,38 @@ export default function Landing() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Community Showcase Section */}
+      <div className="py-16 sm:py-24 bg-white dark:bg-gray-950 relative">
+        <div className="container-responsive">
+          <div className="text-center mb-12 animate-slide-up">
+            <h2 className="heading-lg mb-4 sm:mb-6">
+              See What Our Community Builds
+            </h2>
+            <p className="mobile-text sm:text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              Discover incredible builds, modifications, and maintenance records from automotive enthusiasts around the world.
+            </p>
+          </div>
+          
+          <div className="max-w-4xl mx-auto">
+            <CommunitySlideshow />
+          </div>
+          
+          <div className="text-center mt-8">
+            <Button 
+              variant="outline"
+              size="lg"
+              onClick={() => setIsSignupModalOpen(true)}
+              className="btn-secondary group"
+              data-testid="button-explore-community"
+            >
+              <Users className="w-5 h-5 mr-2" />
+              Join the Community
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   upcomingMaintenance,
   vehicleOwnership,
   vehicleTransfers,
+  notifications,
   type User,
   type UpsertUser,
   type Vehicle,
@@ -20,6 +21,8 @@ import {
   type InsertVehicleOwnership,
   type VehicleTransfer,
   type InsertVehicleTransfer,
+  type Notification,
+  type InsertNotification,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc } from "drizzle-orm";
@@ -28,6 +31,8 @@ export interface IStorage {
   // Users (for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUser(id: string, updateData: Partial<UpsertUser>): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
 
   // Vehicles (VIN-based with ownership)
   getVehiclesByOwner(userId: string): Promise<Vehicle[]>;
@@ -58,6 +63,12 @@ export interface IStorage {
   createTransferRequest(transfer: InsertVehicleTransfer): Promise<VehicleTransfer>;
   getTransfersByUser(userId: string): Promise<VehicleTransfer[]>;
   processTransfer(transferId: string, accept: boolean): Promise<boolean>;
+
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(userId: string, unreadOnly?: boolean): Promise<Notification[]>;
+  markNotificationRead(notificationId: string): Promise<boolean>;
+  markAllNotificationsRead(userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -80,6 +91,23 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async updateUser(id: string, updateData: Partial<UpsertUser>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        ...updateData,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
   }
 
   // Vehicles (VIN-based with ownership)
@@ -285,6 +313,44 @@ export class DatabaseStorage implements IStorage {
       console.error("Transfer processing failed:", error);
       return false;
     }
+  }
+
+  // Notifications
+  async createNotification(notificationData: InsertNotification): Promise<Notification> {
+    const [notification] = await db
+      .insert(notifications)
+      .values(notificationData)
+      .returning();
+    return notification;
+  }
+
+  async getNotifications(userId: string, unreadOnly = false): Promise<Notification[]> {
+    const query = db
+      .select()
+      .from(notifications)
+      .where(unreadOnly ? 
+        and(eq(notifications.userId, userId), eq(notifications.isRead, false)) :
+        eq(notifications.userId, userId)
+      )
+      .orderBy(desc(notifications.createdAt));
+    
+    return await query;
+  }
+
+  async markNotificationRead(notificationId: string): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(notifications.id, notificationId));
+    return result.rowCount > 0;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return result.rowCount > 0;
   }
 }
 

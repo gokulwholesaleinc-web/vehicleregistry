@@ -16,6 +16,7 @@ import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
+import { vehicleTransfers } from "@shared/schema";
 import { 
   decodeVIN, 
   generateMaintenanceRecommendations, 
@@ -74,6 +75,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // User profile update
+  app.patch('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updateData = z.object({
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        location: z.string().optional(),
+        isPublic: z.boolean().optional()
+      }).parse(req.body);
+      
+      const updatedUser = await storage.updateUser(userId, updateData);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ message: "Failed to update user profile" });
+    }
+  });
+
+  // User lookup by email or username
+  app.get('/api/users/search', isAuthenticated, async (req, res) => {
+    try {
+      const { email } = z.object({
+        email: z.string().email()
+      }).parse(req.query);
+      
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Return limited user info for privacy
+      res.json({
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email
+      });
+    } catch (error) {
+      console.error("Error searching for user:", error);
+      res.status(500).json({ message: "Failed to search for user" });
+    }
+  });
+
+  // Search functionality
+  app.get('/api/search', isAuthenticated, async (req: any, res) => {
+    try {
+      const { q, type = 'all' } = z.object({
+        q: z.string().min(1),
+        type: z.enum(['all', 'vehicles', 'modifications', 'maintenance']).default('all')
+      }).parse(req.query);
+      
+      const userId = req.user.claims.sub;
+      const results: any = {};
+      
+      if (type === 'all' || type === 'vehicles') {
+        const vehicles = await storage.getVehiclesByOwner(userId);
+        results.vehicles = vehicles.filter(vehicle => 
+          vehicle.make.toLowerCase().includes(q.toLowerCase()) ||
+          vehicle.model.toLowerCase().includes(q.toLowerCase()) ||
+          vehicle.year.toString().includes(q) ||
+          vehicle.vin.toLowerCase().includes(q.toLowerCase())
+        );
+      }
+      
+      if (type === 'all' || type === 'modifications') {
+        // Search modifications across all user's vehicles
+        const userVehicles = await storage.getVehiclesByOwner(userId);
+        const allModifications = [];
+        for (const vehicle of userVehicles) {
+          const mods = await storage.getModifications(vehicle.id);
+          allModifications.push(...mods.map(mod => ({ ...mod, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` })));
+        }
+        results.modifications = allModifications.filter(mod =>
+          mod.title.toLowerCase().includes(q.toLowerCase()) ||
+          mod.description?.toLowerCase().includes(q.toLowerCase()) ||
+          mod.category?.toLowerCase().includes(q.toLowerCase())
+        );
+      }
+      
+      if (type === 'all' || type === 'maintenance') {
+        // Search maintenance records across all user's vehicles
+        const userVehicles = await storage.getVehiclesByOwner(userId);
+        const allRecords = [];
+        for (const vehicle of userVehicles) {
+          const records = await storage.getMaintenanceRecords(vehicle.id);
+          allRecords.push(...records.map(record => ({ ...record, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` })));
+        }
+        results.maintenance = allRecords.filter(record =>
+          record.title.toLowerCase().includes(q.toLowerCase()) ||
+          record.description?.toLowerCase().includes(q.toLowerCase()) ||
+          record.category?.toLowerCase().includes(q.toLowerCase())
+        );
+      }
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "Search failed" });
+    }
+  });
+
+  // Notifications
+  app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const unreadOnly = req.query.unread === 'true';
+      const notifications = await storage.getNotifications(userId, unreadOnly);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch('/api/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+    try {
+      const success = await storage.markNotificationRead(req.params.id);
+      if (success) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ message: "Notification not found" });
+      }
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.patch('/api/notifications/read-all', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const success = await storage.markAllNotificationsRead(userId);
+      res.json({ success });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
     }
   });
 
@@ -177,6 +318,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message,
         expiresAt,
       } as any);
+
+      // Create notification for recipient
+      const vehicleData = await storage.getVehicle(req.params.id);
+      await storage.createNotification({
+        userId: toUserId,
+        title: "Vehicle Transfer Request",
+        message: `You have received a vehicle transfer request for ${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`,
+        type: "info",
+        relatedEntityId: transfer.id,
+        relatedEntityType: "transfer"
+      });
       
       res.json(transfer);
     } catch (error) {
@@ -197,11 +349,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/transfers/:id/accept', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const [transfer] = await db.select().from(vehicleTransfers).where(eq(vehicleTransfers.id, req.params.id));
       const success = await storage.processTransfer(req.params.id, true);
       
       if (!success) {
         return res.status(400).json({ message: 'Failed to accept transfer' });
       }
+
+      // Create notification for the sender
+      const vehicleInfo = await storage.getVehicle(transfer.vehicleId);
+      await storage.createNotification({
+        userId: transfer.fromUserId,
+        title: "Transfer Accepted",
+        message: `Your transfer request for ${vehicleInfo?.year} ${vehicleInfo?.make} ${vehicleInfo?.model} has been accepted`,
+        type: "success",
+        relatedEntityId: req.params.id,
+        relatedEntityType: "transfer"
+      });
       
       res.json({ message: 'Transfer accepted successfully' });
     } catch (error) {
@@ -211,11 +375,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/transfers/:id/reject', isAuthenticated, async (req: any, res) => {
     try {
+      const [transfer] = await db.select().from(vehicleTransfers).where(eq(vehicleTransfers.id, req.params.id));
       const success = await storage.processTransfer(req.params.id, false);
       
       if (!success) {
         return res.status(400).json({ message: 'Failed to reject transfer' });
       }
+
+      // Create notification for the sender
+      const vehicleDetails = await storage.getVehicle(transfer.vehicleId);
+      await storage.createNotification({
+        userId: transfer.fromUserId,
+        title: "Transfer Rejected",
+        message: `Your transfer request for ${vehicleDetails?.year} ${vehicleDetails?.make} ${vehicleDetails?.model} has been rejected`,
+        type: "warning",
+        relatedEntityId: req.params.id,
+        relatedEntityType: "transfer"
+      });
       
       res.json({ message: 'Transfer rejected' });
     } catch (error) {
