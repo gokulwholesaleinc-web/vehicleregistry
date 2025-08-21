@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 import { Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
+import { setAuthToken } from "@/lib/auth";
 
 export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
@@ -68,12 +69,9 @@ export default function SignIn() {
         throw new Error(data.error?.message || "Authentication failed");
       }
 
-      // Store token and user data - session is already set by server
+      // Store token using proper auth system
       if (data.token) {
-        localStorage.setItem("token", data.token);
-      }
-      if (data.user) {
-        localStorage.setItem("user", JSON.stringify(data.user));
+        setAuthToken(data.token);
       }
       
       handleSignInSuccess();
