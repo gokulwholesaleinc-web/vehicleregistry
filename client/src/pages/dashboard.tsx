@@ -16,6 +16,8 @@ import UserProfileModal from "@/components/user-profile-modal";
 import CommunitySlideshow from "@/components/community-slideshow";
 import { VinLookupModal } from "@/components/vin-lookup-modal";
 import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
+import SmartMaintenancePredictions from "@/components/smart-maintenance-predictions";
+import CostAnalyticsDashboard from "@/components/cost-analytics-dashboard";
 
 export default function Dashboard() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -142,6 +144,17 @@ export default function Dashboard() {
             <PhotoGallery vehicleId={selectedVehicleId} />
             <UpcomingMaintenance vehicleId={selectedVehicleId} />
             <CostSummary vehicleId={selectedVehicleId} />
+          </div>
+        </div>
+
+        {/* Smart Features Section */}
+        <div className="mt-8 space-y-6 lg:space-y-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
+            {/* Smart Maintenance Predictions */}
+            <SmartMaintenancePredictions vehicleId={selectedVehicleId} />
+            
+            {/* Cost Analytics Dashboard */}
+            <CostAnalyticsDashboard vehicleId={selectedVehicleId} />
           </div>
         </div>
       </div>
