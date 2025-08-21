@@ -5,11 +5,11 @@ export function useAuth() {
   const token = getAuthToken();
   
   const { data: user, isLoading, error } = useQuery({
-    queryKey: ["/api/auth/user"],
+    queryKey: ["/api/jwt/user"],
     queryFn: async () => {
       if (!token) return null;
       try {
-        return await api("/api/auth/user");
+        return await api("/api/jwt/user");
       } catch (err) {
         // Token might be expired, remove it
         if (err instanceof Error && err.message.includes("401")) {
