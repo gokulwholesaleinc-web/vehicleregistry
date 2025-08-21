@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <clipPath id="r"><rect rx="20" ry="20" x="8" y="8" width="112" height="112"/></clipPath>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="20" fill="#0f172a"/>
+  <g clip-path="url(#r)">
+    <!-- stripes -->
+    <rect x="70" y="96" width="12" height="20" fill="#ef4444"/>
+    <rect x="84" y="96" width="12" height="20" fill="#eab308"/>
+    <rect x="98" y="96" width="12" height="20" fill="#22c55e"/>
+  </g>
+  <!-- VG letters -->
+  <path fill="#ffffff" d="M24 86l18-44h10L34 86H24zm38-44h12c16 0 26 8 26 22s-10 22-26 22H62V42zm12 34c10 0 14-5 14-12s-4-12-14-12h-4v24h4z"/>
+</svg>
