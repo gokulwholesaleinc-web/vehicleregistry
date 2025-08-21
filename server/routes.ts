@@ -283,6 +283,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced VIN-based vehicle creation
+  app.post('/api/vehicles/create-from-vin', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { vin, currentMileage } = z.object({ 
+        vin: z.string().min(17).max(17),
+        currentMileage: z.number().optional()
+      }).parse(req.body);
+
+      // Check if vehicle already exists
+      const existingVehicle = await storage.getVehicleByVin(vin);
+      if (existingVehicle) {
+        return res.status(400).json({ message: 'Vehicle with this VIN already exists in the system' });
+      }
+
+      // Decode VIN using AI
+      const vinData = await decodeVIN(vin);
+      
+      if (vinData.confidence < 0.5) {
+        return res.status(400).json({ message: 'Unable to decode VIN with sufficient confidence. Please enter vehicle details manually.' });
+      }
+
+      // Create vehicle with AI-decoded data
+      const vehicleData = {
+        vin,
+        year: vinData.year,
+        make: vinData.make,
+        model: vinData.model,
+        trim: vinData.trim || null,
+        currentMileage: currentMileage || 0,
+        currentOwnerId: userId,
+        autoFilled: true,
+        isDraft: false
+      };
+
+      const vehicle = await storage.createVehicle(vehicleData as any, userId);
+
+      res.json({ 
+        vehicle, 
+        vinData,
+        message: 'Vehicle created successfully using AI VIN decoding'
+      });
+    } catch (error) {
+      console.error('VIN vehicle creation error:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to create vehicle from VIN' });
+    }
+  });
+
+  // Create draft vehicle (without VIN)
+  app.post('/api/vehicles/create-draft', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const vehicleData = insertVehicleSchema.parse({
+        ...req.body,
+        currentOwnerId: userId,
+        isDraft: true,
+        autoFilled: false
+      });
+
+      const vehicle = await storage.createVehicle(vehicleData, userId);
+
+      res.json({ vehicle, message: 'Draft vehicle created successfully' });
+    } catch (error) {
+      console.error('Draft vehicle creation error:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to create draft vehicle' });
+    }
+  });
+
+  // Convert draft to full vehicle (add VIN later)
+  app.post('/api/vehicles/:id/add-vin', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { vin } = z.object({ vin: z.string().min(17).max(17) }).parse(req.body);
+
+      // Check if VIN already exists
+      const existingVehicle = await storage.getVehicleByVin(vin);
+      if (existingVehicle) {
+        return res.status(400).json({ message: 'Vehicle with this VIN already exists in the system' });
+      }
+
+      // Get current vehicle
+      const vehicle = await storage.getVehicle(req.params.id);
+      if (!vehicle || vehicle.currentOwnerId !== userId) {
+        return res.status(403).json({ message: 'Not authorized to modify this vehicle' });
+      }
+
+      if (!vehicle.isDraft) {
+        return res.status(400).json({ message: 'Vehicle is not a draft' });
+      }
+
+      // Decode VIN and update vehicle
+      const vinData = await decodeVIN(vin);
+      
+      const updatedVehicle = await storage.updateVehicle(req.params.id, {
+        vin,
+        year: vinData.confidence > 0.7 ? vinData.year : vehicle.year,
+        make: vinData.confidence > 0.7 ? vinData.make : vehicle.make,
+        model: vinData.confidence > 0.7 ? vinData.model : vehicle.model,
+        trim: vinData.confidence > 0.7 ? vinData.trim : vehicle.trim,
+        isDraft: false,
+        autoFilled: vinData.confidence > 0.7
+      });
+
+      res.json({ 
+        vehicle: updatedVehicle, 
+        vinData,
+        message: 'VIN added successfully and vehicle updated'
+      });
+    } catch (error) {
+      console.error('Add VIN error:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to add VIN to vehicle' });
+    }
+  });
+
   app.post('/api/vehicles', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

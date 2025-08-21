@@ -14,6 +14,7 @@ import RealTimeClock from "@/components/real-time-clock";
 import VehicleDetailsModal from "@/components/vehicle-details-modal";
 import UserProfileModal from "@/components/user-profile-modal";
 import CommunitySlideshow from "@/components/community-slideshow";
+import { VinLookupModal } from "@/components/vin-lookup-modal";
 
 export default function Dashboard() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -35,11 +36,18 @@ export default function Dashboard() {
           onOpenProfile={() => setIsUserProfileModalOpen(true)}
         />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <VehicleSelector 
-            selectedVehicleId={selectedVehicleId}
-            onVehicleSelect={setSelectedVehicleId}
-            onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
-          />
+          <div className="flex flex-col gap-6">
+            <div className="flex justify-between items-center">
+              <h1 className="text-2xl font-bold text-gray-900">Your Vehicle Registry</h1>
+              <VinLookupModal />
+            </div>
+            
+            <VehicleSelector 
+              selectedVehicleId={selectedVehicleId}
+              onVehicleSelect={setSelectedVehicleId}
+              onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
+            />
+          </div>
           
           {/* Community Slideshow for users without vehicles */}
           <div className="mt-8">

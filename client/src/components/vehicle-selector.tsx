@@ -1,18 +1,9 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Plus } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { insertVehicleSchema, type Vehicle, type InsertVehicle } from "@shared/schema";
-import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { FileText, Sparkles } from "lucide-react";
+import { type Vehicle } from "@shared/schema";
 
 interface VehicleSelectorProps {
   selectedVehicleId: string;
@@ -21,55 +12,11 @@ interface VehicleSelectorProps {
 }
 
 export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, onOpenVehicleDetails }: VehicleSelectorProps) {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
     queryKey: ["/api/vehicles"],
   });
 
   const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId);
-
-  const form = useForm<InsertVehicle>({
-    resolver: zodResolver(insertVehicleSchema),
-    defaultValues: {
-      year: new Date().getFullYear(),
-      make: "",
-      model: "",
-      vin: "",
-      currentMileage: 0,
-      lastServiceDate: "",
-    },
-  });
-
-  const createVehicleMutation = useMutation({
-    mutationFn: async (data: InsertVehicle) => {
-      const response = await apiRequest("POST", "/api/vehicles", data);
-      return response.json();
-    },
-    onSuccess: (newVehicle) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
-      onVehicleSelect(newVehicle.id);
-      setIsDialogOpen(false);
-      form.reset();
-      toast({
-        title: "Vehicle added successfully",
-        description: `${newVehicle.year} ${newVehicle.make} ${newVehicle.model}`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error adding vehicle",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const onSubmit = (data: InsertVehicle) => {
-    createVehicleMutation.mutate(data);
-  };
 
   if (isLoading) {
     return (
@@ -102,13 +49,27 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, on
                   >
                     {selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}
                   </button>
+                  <div className="flex items-center gap-2 mb-1">
+                    {selectedVehicle.isDraft && (
+                      <Badge variant="secondary" className="text-xs">
+                        <FileText className="h-3 w-3 mr-1" />
+                        Draft
+                      </Badge>
+                    )}
+                    {selectedVehicle.autoFilled && (
+                      <Badge variant="default" className="text-xs">
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        AI Enhanced
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 truncate" data-testid="text-vehicle-vin">
-                    VIN: {selectedVehicle.vin}
+                    {selectedVehicle.vin ? `VIN: ${selectedVehicle.vin}` : "No VIN (Draft Vehicle)"}
                   </p>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-2 space-y-1 sm:space-y-0">
                     <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                       Mileage: <span className="font-medium text-blue-600 dark:text-blue-400" data-testid="text-current-mileage">
-                        {selectedVehicle.currentMileage.toLocaleString()}
+                        {selectedVehicle.currentMileage?.toLocaleString() || 'Not set'}
                       </span>
                     </span>
                     {selectedVehicle.lastServiceDate && (
@@ -131,159 +92,25 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, on
               <SelectContent>
                 {vehicles.map((vehicle) => (
                   <SelectItem key={vehicle.id} value={vehicle.id}>
-                    {vehicle.year} {vehicle.make} {vehicle.model}
+                    <div className="flex items-center justify-between w-full">
+                      <span>{vehicle.year} {vehicle.make} {vehicle.model}</span>
+                      <div className="flex gap-1 ml-2">
+                        {vehicle.isDraft && (
+                          <Badge variant="secondary" className="text-xs px-1">
+                            Draft
+                          </Badge>
+                        )}
+                        {vehicle.autoFilled && (
+                          <Badge variant="default" className="text-xs px-1">
+                            AI
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  className="btn-primary w-full sm:w-auto touch-friendly"
-                  data-testid="button-add-vehicle"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">Add Vehicle</span>
-                  <span className="sm:hidden">Add</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-[95vw] max-w-[425px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle className="mobile-heading">Add New Vehicle</DialogTitle>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <FormField
-                        control={form.control}
-                        name="year"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Year</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                {...field} 
-                                onChange={(e) => field.onChange(parseInt(e.target.value))}
-                                data-testid="input-year"
-                                className="touch-friendly"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="make"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Make</FormLabel>
-                            <FormControl>
-                              <Input {...field} data-testid="input-make" className="touch-friendly" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="model"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Model</FormLabel>
-                          <FormControl>
-                            <Input {...field} data-testid="input-model" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="vin"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>VIN (Required - must be unique)</FormLabel>
-                          <FormControl>
-                            <Input {...field} data-testid="input-vin" placeholder="Enter 17-character VIN" maxLength={17} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="trim"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Trim (Optional)</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value || ''} placeholder="e.g., EX-L, Sport" data-testid="input-trim" className="touch-friendly" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="color"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Color (Optional)</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value || ''} placeholder="e.g., Red, Blue" data-testid="input-color" className="touch-friendly" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="currentMileage"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Current Mileage</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              {...field} 
-                              onChange={(e) => field.onChange(parseInt(e.target.value))}
-                              data-testid="input-mileage"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="flex justify-end space-x-2 pt-4">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => setIsDialogOpen(false)}
-                        data-testid="button-cancel"
-                      >
-                        Cancel
-                      </Button>
-                      <Button 
-                        type="submit" 
-                        disabled={createVehicleMutation.isPending}
-                        className="bg-automotive-blue-600 hover:bg-automotive-blue-700"
-                        data-testid="button-save-vehicle"
-                      >
-                        {createVehicleMutation.isPending ? "Adding..." : "Add Vehicle"}
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
           </div>
         </div>
       </CardContent>

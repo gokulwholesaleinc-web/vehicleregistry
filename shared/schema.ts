@@ -33,25 +33,28 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// VIN-based vehicles with community features
+// VIN-based vehicles with community features and draft support
 export const vehicles = pgTable("vehicles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vin: varchar("vin").notNull().unique(), // Primary identifier
+  vin: varchar("vin"), // Optional for draft vehicles
   year: integer("year").notNull(),
   make: text("make").notNull(),
   model: text("model").notNull(),
   trim: text("trim"),
   color: text("color"),
-  currentMileage: integer("current_mileage").notNull(),
+  currentMileage: integer("current_mileage"),
   lastServiceDate: text("last_service_date"),
   currentOwnerId: varchar("current_owner_id").notNull(),
   isPublic: boolean("is_public").default(false).notNull(),
   allowPreviousOwners: boolean("allow_previous_owners").default(true).notNull(),
+  isDraft: boolean("is_draft").default(false).notNull(), // Track draft status
+  autoFilled: boolean("auto_filled").default(false).notNull(), // Track if filled via AI
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_vehicles_vin").on(table.vin),
   index("idx_vehicles_current_owner").on(table.currentOwnerId),
+  index("idx_vehicles_draft").on(table.isDraft),
 ]);
 
 // Vehicle ownership history for transfers
@@ -142,6 +145,10 @@ export const vehicleTransfers = pgTable("vehicle_transfers", {
 export const insertVehicleSchema = createInsertSchema(vehicles).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
+}).extend({
+  vin: z.string().optional(), // Make VIN optional for draft vehicles
+  currentMileage: z.number().optional() // Make mileage optional for draft vehicles
 });
 
 export const insertModificationSchema = createInsertSchema(modifications).omit({

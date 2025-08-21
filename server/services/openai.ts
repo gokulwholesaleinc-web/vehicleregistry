@@ -7,6 +7,7 @@ export interface VinDecodeResult {
   make: string;
   model: string;
   year: number;
+  trim?: string;
   engine: string;
   transmission: string;
   fuelType: string;
@@ -36,6 +37,7 @@ export async function decodeVIN(vin: string): Promise<VinDecodeResult> {
             "make": "string",
             "model": "string", 
             "year": number,
+            "trim": "string (optional)",
             "engine": "string",
             "transmission": "string",
             "fuelType": "string",
@@ -43,7 +45,8 @@ export async function decodeVIN(vin: string): Promise<VinDecodeResult> {
             "drivetrain": "string",
             "confidence": number (0-1)
           }
-          Be as accurate as possible. If you cannot determine a field with high confidence, use "Unknown" for strings and 0 for numbers.`
+          Be as accurate as possible. If you cannot determine a field with high confidence, use "Unknown" for strings and 0 for numbers.
+          Include trim level if identifiable from VIN.`
         },
         {
           role: "user",
@@ -60,6 +63,7 @@ export async function decodeVIN(vin: string): Promise<VinDecodeResult> {
       make: result.make || 'Unknown',
       model: result.model || 'Unknown',
       year: result.year || 0,
+      trim: result.trim || undefined,
       engine: result.engine || 'Unknown',
       transmission: result.transmission || 'Unknown',
       fuelType: result.fuelType || 'Unknown',
