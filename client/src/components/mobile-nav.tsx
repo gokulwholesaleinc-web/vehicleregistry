@@ -126,7 +126,7 @@ export default function MobileNav({ onAddEntry }: MobileNavProps) {
                   <User className="w-8 h-8 text-gray-500" />
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900 dark:text-white">Welcome to CarTracker</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">Welcome to VINtage Garage Registry</p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Sign up to get started</p>
                 </div>
                 <Button 

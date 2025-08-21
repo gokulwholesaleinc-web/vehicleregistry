@@ -117,7 +117,7 @@ export default function UserProfileModal({ isOpen, onClose }: UserProfileModalPr
                   <div className="mt-1">
                     <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
                       <Crown className="w-3 h-3 mr-1" />
-                      CarTracker Pro
+                      VINtage Garage Registry
                     </Badge>
                   </div>
                 </div>

@@ -28,7 +28,7 @@ export default function Landing() {
             </div>
             
             <h1 className="heading-xl mb-4 sm:mb-6 animate-pulse-glow">
-              CarTracker Pro
+              VINtage Garage Registry
             </h1>
             
             <p className="mobile-text sm:text-lg lg:text-xl text-white/90 mb-8 sm:mb-12 max-w-4xl mx-auto leading-relaxed animate-slide-up px-4" style={{animationDelay: "0.2s"}}>
