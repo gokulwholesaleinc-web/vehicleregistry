@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import RealTimeClock from "@/components/real-time-clock";
 
 interface HeaderProps {
   onAddEntry: () => void;
@@ -60,6 +61,9 @@ export default function Header({ onAddEntry }: HeaderProps) {
             </nav>
           </div>
           <div className="flex items-center space-x-4">
+            <div className="hidden lg:block">
+              <RealTimeClock variant="header" />
+            </div>
             <Button 
               onClick={onAddEntry}
               className="bg-automotive-blue-600 text-white hover:bg-automotive-blue-700"

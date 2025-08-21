@@ -15,6 +15,12 @@ import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
+import { 
+  decodeVIN, 
+  generateMaintenanceRecommendations, 
+  analyzeModificationPhoto, 
+  smartCategorizeEntry 
+} from "./services/openai";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -422,6 +428,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(stats);
     } catch (error) {
       res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch statistics' });
+    }
+  });
+
+  // AI-Powered Endpoints
+  app.post('/api/ai/decode-vin', isAuthenticated, async (req, res) => {
+    try {
+      const { vin } = z.object({ vin: z.string().min(17).max(17) }).parse(req.body);
+      const decoded = await decodeVIN(vin);
+      res.json(decoded);
+    } catch (error) {
+      console.error('VIN decode error:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to decode VIN' });
+    }
+  });
+
+  app.post('/api/ai/maintenance-recommendations', isAuthenticated, async (req, res) => {
+    try {
+      const vehicleData = z.object({
+        make: z.string(),
+        model: z.string(),
+        year: z.number(),
+        mileage: z.number(),
+        modifications: z.array(z.string()).optional(),
+        lastMaintenance: z.array(z.string()).optional()
+      }).parse(req.body);
+      
+      const recommendations = await generateMaintenanceRecommendations(vehicleData);
+      res.json(recommendations);
+    } catch (error) {
+      console.error('Maintenance recommendations error:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to generate recommendations' });
+    }
+  });
+
+  app.post('/api/ai/analyze-photo', isAuthenticated, upload.single('photo'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Photo is required' });
+      }
+
+      // Convert image to base64
+      const base64Image = req.file.buffer.toString('base64');
+      const analysis = await analyzeModificationPhoto(base64Image);
+      res.json(analysis);
+    } catch (error) {
+      console.error('Photo analysis error:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to analyze photo' });
+    }
+  });
+
+  app.post('/api/ai/categorize-entry', isAuthenticated, async (req, res) => {
+    try {
+      const { title, description, cost } = z.object({
+        title: z.string(),
+        description: z.string(),
+        cost: z.number()
+      }).parse(req.body);
+      
+      const categorization = await smartCategorizeEntry(title, description, cost);
+      res.json(categorization);
+    } catch (error) {
+      console.error('Entry categorization error:', error);
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to categorize entry' });
+    }
+  });
+
+  // Cache Management Endpoints
+  app.post('/api/cache/invalidate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      // Simple cache invalidation by setting cache headers
+      res.set({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+      res.json({ message: 'Cache invalidated successfully' });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to invalidate cache' });
+    }
+  });
+
+  // Duplicate Prevention Endpoint
+  app.post('/api/registry/check-duplicate', isAuthenticated, async (req, res) => {
+    try {
+      const { type, identifier } = z.object({
+        type: z.enum(['vin', 'modification', 'maintenance']),
+        identifier: z.string()
+      }).parse(req.body);
+
+      let exists = false;
+      let existingRecord = null;
+
+      switch (type) {
+        case 'vin':
+          existingRecord = await storage.getVehicleByVin(identifier);
+          exists = !!existingRecord;
+          break;
+        case 'modification':
+          // Check for similar modification entries by title
+          const vehicles = await storage.getVehiclesByOwner(req.user?.claims?.sub);
+          for (const vehicle of vehicles) {
+            const modifications = await storage.getModifications(vehicle.id);
+            existingRecord = modifications.find(mod => 
+              mod.title.toLowerCase().includes(identifier.toLowerCase()) ||
+              identifier.toLowerCase().includes(mod.title.toLowerCase())
+            );
+            if (existingRecord) {
+              exists = true;
+              break;
+            }
+          }
+          break;
+        case 'maintenance':
+          // Similar check for maintenance records
+          const userVehicles = await storage.getVehiclesByOwner(req.user?.claims?.sub);
+          for (const vehicle of userVehicles) {
+            const records = await storage.getMaintenanceRecords(vehicle.id);
+            existingRecord = records.find(record => 
+              record.title.toLowerCase().includes(identifier.toLowerCase()) ||
+              identifier.toLowerCase().includes(record.title.toLowerCase())
+            );
+            if (existingRecord) {
+              exists = true;
+              break;
+            }
+          }
+          break;
+      }
+
+      res.json({ 
+        exists, 
+        existingRecord: exists ? existingRecord : null,
+        suggestion: exists ? 'Similar record found. Consider updating the existing one instead.' : null
+      });
+    } catch (error) {
+      console.error('Duplicate check error:', error);
+      res.status(500).json({ message: 'Failed to check for duplicates' });
     }
   });
 

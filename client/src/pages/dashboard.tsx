@@ -9,6 +9,8 @@ import PhotoGallery from "@/components/photo-gallery";
 import UpcomingMaintenance from "@/components/upcoming-maintenance";
 import CostSummary from "@/components/cost-summary";
 import AddEntryModal from "@/components/add-entry-modal";
+import AIAssistantPanel from "@/components/ai-assistant-panel";
+import RealTimeClock from "@/components/real-time-clock";
 
 export default function Dashboard() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -35,10 +37,10 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 font-inter">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 font-inter">
       <Header onAddEntry={() => handleAddEntry("modification")} />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="container-responsive py-6 lg:py-8">
         <VehicleSelector 
           selectedVehicleId={selectedVehicleId}
           onVehicleSelect={setSelectedVehicleId}
@@ -46,15 +48,24 @@ export default function Dashboard() {
         
         <QuickStats vehicleId={selectedVehicleId} />
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 lg:gap-8">
           {/* Main Content Area */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className="xl:col-span-2 space-y-6 lg:space-y-8">
             <RecentModifications vehicleId={selectedVehicleId} />
             <MaintenanceTimeline vehicleId={selectedVehicleId} />
           </div>
 
+          {/* AI Assistant Panel - Full width on mobile, dedicated column on desktop */}
+          <div className="xl:col-span-1 space-y-6 lg:space-y-8">
+            <AIAssistantPanel />
+            {/* Mobile-only clock widget */}
+            <div className="block lg:hidden">
+              <RealTimeClock variant="full" />
+            </div>
+          </div>
+
           {/* Sidebar */}
-          <div className="space-y-8">
+          <div className="xl:col-span-1 space-y-6 lg:space-y-8">
             <QuickActions onAddEntry={handleAddEntry} />
             <PhotoGallery vehicleId={selectedVehicleId} />
             <UpcomingMaintenance vehicleId={selectedVehicleId} />
