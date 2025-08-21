@@ -1,11 +1,16 @@
-import { Car, Plus, Bell } from "lucide-react";
+import { Car, Plus, Bell, Users, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Link } from "wouter";
+import { useAuth } from "@/hooks/useAuth";
 
 interface HeaderProps {
   onAddEntry: () => void;
 }
 
 export default function Header({ onAddEntry }: HeaderProps) {
+  const { user, isAuthenticated } = useAuth();
+
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -46,13 +51,12 @@ export default function Header({ onAddEntry }: HeaderProps) {
               >
                 Modifications
               </a>
-              <a 
-                href="#" 
+              <Link 
+                href="/community"
                 className="text-steel-gray-600 hover:text-automotive-blue-600 pb-4"
-                data-testid="nav-analytics"
               >
-                Analytics
-              </a>
+                <a data-testid="nav-community">Community</a>
+              </Link>
             </nav>
           </div>
           <div className="flex items-center space-x-4">
@@ -67,14 +71,25 @@ export default function Header({ onAddEntry }: HeaderProps) {
             <Button variant="ghost" size="icon" data-testid="button-notifications">
               <Bell className="h-5 w-5 text-steel-gray-600" />
             </Button>
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-automotive-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-automotive-blue-600 font-medium text-sm">JD</span>
+            {isAuthenticated && (
+              <div className="flex items-center space-x-3">
+                <Avatar className="w-8 h-8">
+                  <AvatarImage src={user?.profileImageUrl || ''} alt="Profile" />
+                  <AvatarFallback>
+                    {user?.firstName?.charAt(0) || user?.email?.charAt(0) || '?'}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => window.location.href = '/api/logout'}
+                  data-testid="button-logout"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
               </div>
-              <span className="text-steel-gray-700 font-medium" data-testid="text-user-name">
-                John Doe
-              </span>
-            </div>
+            )}
           </div>
         </div>
       </div>

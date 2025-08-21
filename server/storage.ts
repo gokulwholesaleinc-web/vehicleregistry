@@ -1,211 +1,291 @@
-import { 
-  type User, 
-  type InsertUser, 
-  type Vehicle, 
+import {
+  users,
+  vehicles,
+  modifications,
+  maintenanceRecords,
+  upcomingMaintenance,
+  vehicleOwnership,
+  vehicleTransfers,
+  type User,
+  type UpsertUser,
+  type Vehicle,
   type InsertVehicle,
   type Modification,
   type InsertModification,
   type MaintenanceRecord,
   type InsertMaintenanceRecord,
   type UpcomingMaintenance,
-  type InsertUpcomingMaintenance
+  type InsertUpcomingMaintenance,
+  type VehicleOwnership,
+  type InsertVehicleOwnership,
+  type VehicleTransfer,
+  type InsertVehicleTransfer,
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, and, or, desc, asc } from "drizzle-orm";
 
 export interface IStorage {
-  // Users
+  // Users (for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  upsertUser(user: UpsertUser): Promise<User>;
 
-  // Vehicles
-  getVehicles(userId: string): Promise<Vehicle[]>;
+  // Vehicles (VIN-based with ownership)
+  getVehiclesByOwner(userId: string): Promise<Vehicle[]>;
+  getVehicleByVin(vin: string): Promise<Vehicle | undefined>;
   getVehicle(id: string): Promise<Vehicle | undefined>;
-  createVehicle(vehicle: InsertVehicle): Promise<Vehicle>;
+  createVehicle(vehicle: InsertVehicle, userId: string): Promise<Vehicle>;
   updateVehicle(id: string, vehicle: Partial<InsertVehicle>): Promise<Vehicle | undefined>;
+  transferVehicle(vehicleId: string, fromUserId: string, toUserId: string, notes?: string): Promise<boolean>;
 
-  // Modifications
+  // Community features
+  getPublicVehicles(limit?: number, offset?: number): Promise<Vehicle[]>;
+  getVehicleHistory(vehicleId: string): Promise<VehicleOwnership[]>;
+
+  // Modifications (with user tracking)
   getModifications(vehicleId: string): Promise<Modification[]>;
-  getModification(id: string): Promise<Modification | undefined>;
   createModification(modification: InsertModification): Promise<Modification>;
-  updateModification(id: string, modification: Partial<InsertModification>): Promise<Modification | undefined>;
 
-  // Maintenance Records
+  // Maintenance Records (with user tracking)
   getMaintenanceRecords(vehicleId: string): Promise<MaintenanceRecord[]>;
-  getMaintenanceRecord(id: string): Promise<MaintenanceRecord | undefined>;
   createMaintenanceRecord(record: InsertMaintenanceRecord): Promise<MaintenanceRecord>;
-  updateMaintenanceRecord(id: string, record: Partial<InsertMaintenanceRecord>): Promise<MaintenanceRecord | undefined>;
 
   // Upcoming Maintenance
   getUpcomingMaintenance(vehicleId: string): Promise<UpcomingMaintenance[]>;
   createUpcomingMaintenance(maintenance: InsertUpcomingMaintenance): Promise<UpcomingMaintenance>;
   deleteUpcomingMaintenance(id: string): Promise<boolean>;
+
+  // Vehicle Transfers
+  createTransferRequest(transfer: InsertVehicleTransfer): Promise<VehicleTransfer>;
+  getTransfersByUser(userId: string): Promise<VehicleTransfer[]>;
+  processTransfer(transferId: string, accept: boolean): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private vehicles: Map<string, Vehicle>;
-  private modifications: Map<string, Modification>;
-  private maintenanceRecords: Map<string, MaintenanceRecord>;
-  private upcomingMaintenance: Map<string, UpcomingMaintenance>;
-
-  constructor() {
-    this.users = new Map();
-    this.vehicles = new Map();
-    this.modifications = new Map();
-    this.maintenanceRecords = new Map();
-    this.upcomingMaintenance = new Map();
-  }
-
-  // Users
+export class DatabaseStorage implements IStorage {
+  // Users (for Replit Auth)
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
     return user;
   }
 
-  // Vehicles
-  async getVehicles(userId: string): Promise<Vehicle[]> {
-    return Array.from(this.vehicles.values()).filter(
-      (vehicle) => vehicle.userId === userId
-    );
+  // Vehicles (VIN-based with ownership)
+  async getVehiclesByOwner(userId: string): Promise<Vehicle[]> {
+    return await db
+      .select()
+      .from(vehicles)
+      .where(eq(vehicles.currentOwnerId, userId))
+      .orderBy(desc(vehicles.createdAt));
+  }
+
+  async getVehicleByVin(vin: string): Promise<Vehicle | undefined> {
+    const [vehicle] = await db.select().from(vehicles).where(eq(vehicles.vin, vin));
+    return vehicle || undefined;
   }
 
   async getVehicle(id: string): Promise<Vehicle | undefined> {
-    return this.vehicles.get(id);
+    const [vehicle] = await db.select().from(vehicles).where(eq(vehicles.id, id));
+    return vehicle || undefined;
   }
 
-  async createVehicle(insertVehicle: InsertVehicle): Promise<Vehicle> {
-    const id = randomUUID();
-    const vehicle: Vehicle = { 
-      ...insertVehicle, 
-      id, 
-      createdAt: new Date(),
-      lastServiceDate: insertVehicle.lastServiceDate || null
-    };
-    this.vehicles.set(id, vehicle);
+  async createVehicle(vehicleData: InsertVehicle, userId: string): Promise<Vehicle> {
+    // Create vehicle with current owner
+    const [vehicle] = await db
+      .insert(vehicles)
+      .values({
+        ...vehicleData,
+        currentOwnerId: userId,
+      })
+      .returning();
+
+    // Create initial ownership record
+    await db.insert(vehicleOwnership).values({
+      vehicleId: vehicle.id,
+      userId: userId,
+      isCurrent: true,
+    });
+
     return vehicle;
   }
 
-  async updateVehicle(id: string, updateData: Partial<InsertVehicle>): Promise<Vehicle | undefined> {
-    const vehicle = this.vehicles.get(id);
-    if (!vehicle) return undefined;
-    
-    const updated = { ...vehicle, ...updateData };
-    this.vehicles.set(id, updated);
-    return updated;
+  async updateVehicle(id: string, vehicleData: Partial<InsertVehicle>): Promise<Vehicle | undefined> {
+    const [vehicle] = await db
+      .update(vehicles)
+      .set({ ...vehicleData, updatedAt: new Date() })
+      .where(eq(vehicles.id, id))
+      .returning();
+    return vehicle || undefined;
   }
 
-  // Modifications
+  async transferVehicle(vehicleId: string, fromUserId: string, toUserId: string, notes?: string): Promise<boolean> {
+    try {
+      // End current ownership
+      await db
+        .update(vehicleOwnership)
+        .set({ endDate: new Date(), isCurrent: false })
+        .where(and(eq(vehicleOwnership.vehicleId, vehicleId), eq(vehicleOwnership.isCurrent, true)));
+
+      // Create new ownership
+      await db.insert(vehicleOwnership).values({
+        vehicleId,
+        userId: toUserId,
+        transferredBy: fromUserId,
+        transferNotes: notes,
+        isCurrent: true,
+      });
+
+      // Update vehicle owner
+      await db
+        .update(vehicles)
+        .set({ currentOwnerId: toUserId, updatedAt: new Date() })
+        .where(eq(vehicles.id, vehicleId));
+
+      return true;
+    } catch (error) {
+      console.error("Vehicle transfer failed:", error);
+      return false;
+    }
+  }
+
+  // Community features
+  async getPublicVehicles(limit = 20, offset = 0): Promise<Vehicle[]> {
+    return await db
+      .select()
+      .from(vehicles)
+      .where(eq(vehicles.isPublic, true))
+      .orderBy(desc(vehicles.updatedAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getVehicleHistory(vehicleId: string): Promise<VehicleOwnership[]> {
+    return await db
+      .select()
+      .from(vehicleOwnership)
+      .where(eq(vehicleOwnership.vehicleId, vehicleId))
+      .orderBy(desc(vehicleOwnership.startDate));
+  }
+
+  // Modifications (with user tracking)
   async getModifications(vehicleId: string): Promise<Modification[]> {
-    return Array.from(this.modifications.values())
-      .filter((mod) => mod.vehicleId === vehicleId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return await db
+      .select()
+      .from(modifications)
+      .where(eq(modifications.vehicleId, vehicleId))
+      .orderBy(desc(modifications.createdAt));
   }
 
-  async getModification(id: string): Promise<Modification | undefined> {
-    return this.modifications.get(id);
-  }
-
-  async createModification(insertModification: InsertModification): Promise<Modification> {
-    const id = randomUUID();
-    const modification: Modification = { 
-      ...insertModification, 
-      id, 
-      createdAt: new Date(),
-      description: insertModification.description || null,
-      photos: insertModification.photos || [],
-      documents: insertModification.documents || []
-    };
-    this.modifications.set(id, modification);
+  async createModification(modificationData: InsertModification): Promise<Modification> {
+    const [modification] = await db
+      .insert(modifications)
+      .values(modificationData)
+      .returning();
     return modification;
   }
 
-  async updateModification(id: string, updateData: Partial<InsertModification>): Promise<Modification | undefined> {
-    const modification = this.modifications.get(id);
-    if (!modification) return undefined;
-    
-    const updated = { ...modification, ...updateData };
-    this.modifications.set(id, {
-      ...updated,
-      photos: updated.photos || [],
-      documents: updated.documents || []
-    });
-    return updated;
-  }
-
-  // Maintenance Records
+  // Maintenance Records (with user tracking)
   async getMaintenanceRecords(vehicleId: string): Promise<MaintenanceRecord[]> {
-    return Array.from(this.maintenanceRecords.values())
-      .filter((record) => record.vehicleId === vehicleId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return await db
+      .select()
+      .from(maintenanceRecords)
+      .where(eq(maintenanceRecords.vehicleId, vehicleId))
+      .orderBy(desc(maintenanceRecords.createdAt));
   }
 
-  async getMaintenanceRecord(id: string): Promise<MaintenanceRecord | undefined> {
-    return this.maintenanceRecords.get(id);
-  }
-
-  async createMaintenanceRecord(insertRecord: InsertMaintenanceRecord): Promise<MaintenanceRecord> {
-    const id = randomUUID();
-    const record: MaintenanceRecord = { 
-      ...insertRecord, 
-      id, 
-      createdAt: new Date(),
-      description: insertRecord.description || null,
-      shop: insertRecord.shop || null,
-      photos: insertRecord.photos || [],
-      documents: insertRecord.documents || []
-    };
-    this.maintenanceRecords.set(id, record);
+  async createMaintenanceRecord(recordData: InsertMaintenanceRecord): Promise<MaintenanceRecord> {
+    const [record] = await db
+      .insert(maintenanceRecords)
+      .values(recordData)
+      .returning();
     return record;
-  }
-
-  async updateMaintenanceRecord(id: string, updateData: Partial<InsertMaintenanceRecord>): Promise<MaintenanceRecord | undefined> {
-    const record = this.maintenanceRecords.get(id);
-    if (!record) return undefined;
-    
-    const updated = { ...record, ...updateData };
-    this.maintenanceRecords.set(id, {
-      ...updated,
-      photos: updated.photos || [],
-      documents: updated.documents || []
-    });
-    return updated;
   }
 
   // Upcoming Maintenance
   async getUpcomingMaintenance(vehicleId: string): Promise<UpcomingMaintenance[]> {
-    return Array.from(this.upcomingMaintenance.values())
-      .filter((maintenance) => maintenance.vehicleId === vehicleId)
-      .sort((a, b) => a.dueMileage - b.dueMileage);
+    return await db
+      .select()
+      .from(upcomingMaintenance)
+      .where(eq(upcomingMaintenance.vehicleId, vehicleId))
+      .orderBy(asc(upcomingMaintenance.dueMileage));
   }
 
-  async createUpcomingMaintenance(insertMaintenance: InsertUpcomingMaintenance): Promise<UpcomingMaintenance> {
-    const id = randomUUID();
-    const maintenance: UpcomingMaintenance = { 
-      ...insertMaintenance, 
-      id, 
-      createdAt: new Date(),
-      description: insertMaintenance.description || null
-    };
-    this.upcomingMaintenance.set(id, maintenance);
+  async createUpcomingMaintenance(maintenanceData: InsertUpcomingMaintenance): Promise<UpcomingMaintenance> {
+    const [maintenance] = await db
+      .insert(upcomingMaintenance)
+      .values(maintenanceData)
+      .returning();
     return maintenance;
   }
 
   async deleteUpcomingMaintenance(id: string): Promise<boolean> {
-    return this.upcomingMaintenance.delete(id);
+    const result = await db
+      .delete(upcomingMaintenance)
+      .where(eq(upcomingMaintenance.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Vehicle Transfers
+  async createTransferRequest(transferData: InsertVehicleTransfer): Promise<VehicleTransfer> {
+    const [transfer] = await db
+      .insert(vehicleTransfers)
+      .values(transferData)
+      .returning();
+    return transfer;
+  }
+
+  async getTransfersByUser(userId: string): Promise<VehicleTransfer[]> {
+    return await db
+      .select()
+      .from(vehicleTransfers)
+      .where(or(eq(vehicleTransfers.fromUserId, userId), eq(vehicleTransfers.toUserId, userId)))
+      .orderBy(desc(vehicleTransfers.createdAt));
+  }
+
+  async processTransfer(transferId: string, accept: boolean): Promise<boolean> {
+    try {
+      const [transfer] = await db
+        .select()
+        .from(vehicleTransfers)
+        .where(eq(vehicleTransfers.id, transferId));
+
+      if (!transfer || transfer.status !== "pending") {
+        return false;
+      }
+
+      if (accept) {
+        // Complete the transfer
+        await this.transferVehicle(transfer.vehicleId, transfer.fromUserId, transfer.toUserId);
+        
+        await db
+          .update(vehicleTransfers)
+          .set({ status: "accepted", completedAt: new Date() })
+          .where(eq(vehicleTransfers.id, transferId));
+      } else {
+        await db
+          .update(vehicleTransfers)
+          .set({ status: "rejected" })
+          .where(eq(vehicleTransfers.id, transferId));
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Transfer processing failed:", error);
+      return false;
+    }
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

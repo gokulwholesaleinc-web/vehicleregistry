@@ -24,16 +24,8 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Mock user ID - in real app this would come from auth
-  const userId = "mock-user-id";
-
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
-    queryKey: ["/api/vehicles", { userId }],
-    queryFn: async () => {
-      const response = await fetch(`/api/vehicles?userId=${userId}`);
-      if (!response.ok) throw new Error("Failed to fetch vehicles");
-      return response.json();
-    },
+    queryKey: ["/api/vehicles"],
   });
 
   const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId);
@@ -47,7 +39,6 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
       vin: "",
       currentMileage: 0,
       lastServiceDate: "",
-      userId,
     },
   });
 
@@ -208,14 +199,44 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
                       name="vin"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>VIN</FormLabel>
+                          <FormLabel>VIN (Required - must be unique)</FormLabel>
                           <FormControl>
-                            <Input {...field} data-testid="input-vin" />
+                            <Input {...field} data-testid="input-vin" placeholder="Enter 17-character VIN" maxLength={17} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="trim"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Trim (Optional)</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="e.g., EX-L, Sport" data-testid="input-trim" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="color"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Color (Optional)</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="e.g., Red, Blue" data-testid="input-color" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                     <FormField
                       control={form.control}
                       name="currentMileage"

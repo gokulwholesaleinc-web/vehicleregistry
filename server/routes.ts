@@ -4,16 +4,17 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { 
   insertVehicleSchema,
   insertModificationSchema,
   insertMaintenanceRecordSchema,
-  insertUpcomingMaintenanceSchema,
-  insertUserSchema
+  insertUpcomingMaintenanceSchema
 } from "@shared/schema";
 import { z } from "zod";
 import path from "path";
 import fs from "fs";
+import { randomUUID } from "crypto";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -48,31 +49,44 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Auth middleware
+  await setupAuth(app);
+
   // Serve uploaded files
   app.use('/uploads', (req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     next();
   }, express.static(uploadsDir));
 
-  // Users
-  app.post('/api/users', async (req, res) => {
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
-      const user = await storage.createUser(userData);
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
       res.json(user);
     } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid user data' });
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
-  // Vehicles
-  app.get('/api/vehicles', async (req, res) => {
+  // Community routes (public)
+  app.get('/api/community/vehicles', async (req, res) => {
     try {
-      const userId = req.query.userId as string;
-      if (!userId) {
-        return res.status(400).json({ message: 'User ID is required' });
-      }
-      const vehicles = await storage.getVehicles(userId);
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const vehicles = await storage.getPublicVehicles(limit, offset);
+      res.json(vehicles);
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch public vehicles' });
+    }
+  });
+
+  // Vehicles (protected)
+  app.get('/api/vehicles', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const vehicles = await storage.getVehiclesByOwner(userId);
       res.json(vehicles);
     } catch (error) {
       res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch vehicles' });
@@ -91,26 +105,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/vehicles', async (req, res) => {
+  app.get('/api/vehicles/:id/history', async (req, res) => {
     try {
+      const history = await storage.getVehicleHistory(req.params.id);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch vehicle history' });
+    }
+  });
+
+  app.post('/api/vehicles', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
       const vehicleData = insertVehicleSchema.parse(req.body);
-      const vehicle = await storage.createVehicle(vehicleData);
+      
+      // Check if VIN already exists
+      const existingVehicle = await storage.getVehicleByVin(vehicleData.vin);
+      if (existingVehicle) {
+        return res.status(400).json({ message: 'Vehicle with this VIN already exists' });
+      }
+      
+      const vehicle = await storage.createVehicle(vehicleData, userId);
       res.json(vehicle);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid vehicle data' });
     }
   });
 
-  app.patch('/api/vehicles/:id', async (req, res) => {
+  app.patch('/api/vehicles/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const updateData = insertVehicleSchema.partial().parse(req.body);
-      const vehicle = await storage.updateVehicle(req.params.id, updateData);
-      if (!vehicle) {
-        return res.status(404).json({ message: 'Vehicle not found' });
+      const userId = req.user.claims.sub;
+      const vehicle = await storage.getVehicle(req.params.id);
+      
+      if (!vehicle || vehicle.currentOwnerId !== userId) {
+        return res.status(403).json({ message: 'Not authorized to update this vehicle' });
       }
-      res.json(vehicle);
+      
+      const updateData = insertVehicleSchema.partial().parse(req.body);
+      const updatedVehicle = await storage.updateVehicle(req.params.id, updateData);
+      res.json(updatedVehicle);
     } catch (error) {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid update data' });
+    }
+  });
+
+  // Vehicle Transfer routes
+  app.post('/api/vehicles/:id/transfer', isAuthenticated, async (req: any, res) => {
+    try {
+      const fromUserId = req.user.claims.sub;
+      const { toUserId, message } = req.body;
+      
+      const vehicle = await storage.getVehicle(req.params.id);
+      if (!vehicle || vehicle.currentOwnerId !== fromUserId) {
+        return res.status(403).json({ message: 'Not authorized to transfer this vehicle' });
+      }
+      
+      const transferCode = randomUUID().slice(0, 8).toUpperCase();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      
+      const transfer = await storage.createTransferRequest({
+        vehicleId: req.params.id,
+        fromUserId,
+        toUserId,
+        transferCode,
+        message,
+        expiresAt,
+      });
+      
+      res.json(transfer);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create transfer request' });
+    }
+  });
+
+  app.get('/api/transfers', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const transfers = await storage.getTransfersByUser(userId);
+      res.json(transfers);
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch transfers' });
+    }
+  });
+
+  app.post('/api/transfers/:id/accept', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const success = await storage.processTransfer(req.params.id, true);
+      
+      if (!success) {
+        return res.status(400).json({ message: 'Failed to accept transfer' });
+      }
+      
+      res.json({ message: 'Transfer accepted successfully' });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to accept transfer' });
+    }
+  });
+
+  app.post('/api/transfers/:id/reject', isAuthenticated, async (req: any, res) => {
+    try {
+      const success = await storage.processTransfer(req.params.id, false);
+      
+      if (!success) {
+        return res.status(400).json({ message: 'Failed to reject transfer' });
+      }
+      
+      res.json({ message: 'Transfer rejected' });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to reject transfer' });
     }
   });
 
@@ -124,14 +227,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/vehicles/:vehicleId/modifications', upload.fields([
+  app.post('/api/vehicles/:vehicleId/modifications', isAuthenticated, upload.fields([
     { name: 'photos', maxCount: 10 },
     { name: 'documents', maxCount: 5 }
-  ]), async (req, res) => {
+  ]), async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const modificationData = insertModificationSchema.parse({
         ...req.body,
-        vehicleId: req.params.vehicleId
+        vehicleId: req.params.vehicleId,
+        userId: userId
       });
 
       const files = req.files as any;
@@ -192,14 +297,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/vehicles/:vehicleId/maintenance', upload.fields([
+  app.post('/api/vehicles/:vehicleId/maintenance', isAuthenticated, upload.fields([
     { name: 'photos', maxCount: 10 },
     { name: 'documents', maxCount: 5 }
-  ]), async (req, res) => {
+  ]), async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const recordData = insertMaintenanceRecordSchema.parse({
         ...req.body,
-        vehicleId: req.params.vehicleId
+        vehicleId: req.params.vehicleId,
+        userId: userId
       });
 
       const files = req.files as any;
