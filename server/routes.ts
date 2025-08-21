@@ -3,6 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import sharp from "sharp";
+import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { googleAuthRouter } from "./auth/google";
@@ -118,7 +119,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const token = authHeader.slice(7);
-      const jwt = require('jsonwebtoken');
       const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET!;
       
       let claims;

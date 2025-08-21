@@ -1,0 +1,203 @@
+# Auth 404 After Login — Fix Pack (JWT + Router Guard + SPA Fallback)
+
+> Symptom: after logging in, **every page/link shows 404**. Root cause is almost always a **JWT verification failure** (mismatched `JWT_SECRET`, missing token, or bad middleware) causing requests to fall through to the 404 handler instead of returning a 401 — *or* a missing SPA catch‑all. This pack fixes both.
+
+---
+
+## 0) Checklist (do these first)
+
+* Ensure **the same `JWT_SECRET`** is used to **sign** tokens on login and to **verify** them in middleware. In Replit, add it under *Secrets* and restart the server.
+* If you recently changed `JWT_SECRET`, previously issued tokens become invalid → **log out** (clear localStorage/cookies) and sign in again.
+* Confirm the client actually sends `Authorization: Bearer <token>` on every API call.
+
+---
+
+## 1) Single source of truth for JWT
+
+**`/server/auth/jwt.ts`**
+
+```ts
+import jwt from "jsonwebtoken";
+
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+  console.error("[FATAL] Missing or weak JWT_SECRET. Set a strong value in env.");
+  process.exit(1);
+}
+
+export type Claims = { id: number; email: string };
+
+export function signAccess(claims: Claims) {
+  return jwt.sign(claims, process.env.JWT_SECRET!, { expiresIn: "1h" });
+}
+
+export function verifyAccess(token: string): Claims {
+  return jwt.verify(token, process.env.JWT_SECRET!) as Claims;
+}
+```
+
+---
+
+## 2) Robust auth middleware (never fall through to 404)
+
+**`/server/http/middleware.auth.ts`**
+
+```ts
+import type { Request, Response, NextFunction } from "express";
+import { verifyAccess } from "../auth/jwt";
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const hdr = req.headers.authorization || "";
+  const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : undefined;
+  if (!token) return res.status(401).json({ ok: false, error: { code: "NO_TOKEN", message: "Unauthorized" } });
+  try {
+    (req as any).user = verifyAccess(token);
+    return next();
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: { code: "BAD_TOKEN", message: "Invalid/expired token" } });
+  }
+}
+```
+
+> If verification fails, we **send 401** and stop the chain. No more accidental 404s.
+
+---
+
+## 3) WhoAmI endpoint to test tokens quickly
+
+**`/server/http/routes/auth.whoami.ts`**
+
+```ts
+import { Router } from "express";
+import { requireAuth } from "../middleware.auth";
+
+export const whoamiRouter = Router();
+whoamiRouter.get("/whoami", requireAuth, (req, res) => {
+  res.json({ ok: true, user: (req as any).user });
+});
+```
+
+Mount under `/api/v1/auth`.
+
+---
+
+## 4) Normalize endpoint registry + JSON errors
+
+**`/server/http/app.ts`** (excerpt)
+
+```ts
+import express from "express";
+import cors from "cors";
+import path from "node:path";
+import { whoamiRouter } from "./routes/auth.whoami";
+// ... import your other routers
+
+export function buildApp() {
+  const app = express();
+  app.use(cors({ origin: ["http://localhost:5173"], credentials: false }));
+  app.use(express.json());
+
+  // API routes
+  app.use("/api/v1/auth", whoamiRouter);
+  // app.use("/api/v1/vehicles", vehiclesRouter);
+  // app.use("/api/v1/records", recordsRouter);
+  // ... etc.
+
+  // --- SPA fallback (serve client for non-API routes) ---
+  const dist = path.resolve("client/dist");
+  app.use(express.static(dist));
+  app.get(/^(?!\/api\/).*/, (req, res) => {
+    res.sendFile(path.join(dist, "index.html"));
+  });
+
+  // 404 for unknown API routes
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api/")) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND" } });
+    next();
+  });
+
+  // Global error handler
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    console.error("[error]", err);
+    res.status(500).json({ ok: false, error: { code: "SERVER_ERROR" } });
+  });
+
+  return app;
+}
+```
+
+> The **SPA fallback** ensures deep links like `/garage/abc` render your React app instead of a server 404.
+
+---
+
+## 5) Client: one API helper + 401 handling
+
+**`/client/src/lib/api.ts`**
+
+```ts
+export function getToken() { return localStorage.getItem("vg.jwt"); }
+export function setToken(t: string | null) { t ? localStorage.setItem("vg.jwt", t) : localStorage.removeItem("vg.jwt"); }
+
+export async function api(path: string, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "application/json");
+  const t = getToken();
+  if (t) headers.set("Authorization", `Bearer ${t}`);
+  const r = await fetch(import.meta.env.VITE_API_BASE + path, { ...init, headers });
+  if (r.status === 401) {
+    setToken(null);
+    window.location.href = "/signin"; // don’t show 404, go sign in
+    throw new Error("Unauthorized");
+  }
+  const json = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(json?.error?.message || `HTTP ${r.status}`);
+  return json;
+}
+```
+
+Use `api()` everywhere instead of `fetch()`.
+
+---
+
+## 6) Client: login stores the token
+
+Ensure your login flow calls `setToken(j.token)` after a successful response. Example:
+
+```ts
+const j = await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+setToken(j.token);
+location.href = "/";
+```
+
+---
+
+## 7) Quick test plan
+
+1. **Boot** the server. If `JWT_SECRET` is missing/short, the server exits with a clear error.
+2. **Register/Login**, then call:
+
+   * `GET /api/v1/auth/whoami` → should return `{ ok:true, user:{ id,email } }`.
+3. Temporarily change `JWT_SECRET` and restart; your existing token should now produce **401** (not 404). Log in again to fix.
+4. Navigate to a client route (e.g., `/garage/your-vin`) → React app should render due to SPA fallback.
+
+---
+
+## 8) Common gotchas that cause this exact 404-after-login
+
+* `requireAuth` throws but doesn’t send a response → request “falls through” and hits 404 handler.
+* Signing tokens with `JWT_SECRET` but verifying with `JWT_REFRESH_SECRET` (or vice‑versa).
+* Login server and API server have **different env scopes** (e.g., Replit runs build vs run with different secrets).
+* Client not sending `Authorization` header after login.
+* Missing **SPA catch‑all** (`app.get('*')`) so deep links go 404.
+
+---
+
+## 9) Minimal `.env.example`
+
+```env
+JWT_SECRET=change_me_to_a_long_random_value
+VITE_API_BASE=http://localhost:3000/api/v1
+```
+
+---
+
+**Drop these files in, restart, and test `/api/v1/auth/whoami`.** If it returns your user, the JWT path is fixed. If pages still 404, the SPA fallback in `app.ts` will handle client routes instead of the API 404.
