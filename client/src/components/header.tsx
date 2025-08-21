@@ -73,6 +73,15 @@ export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
                 </a>
               </Link>
               <Link 
+                href="/showcase"
+                className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
+              >
+                <a data-testid="nav-showcase">
+                  Showcase
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                </a>
+              </Link>
+              <Link 
                 href="/modifications"
                 className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
               >

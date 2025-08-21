@@ -61,11 +61,10 @@ pdfReportsRouter.post("/:vehicleId/build-report", requireAuth, async (req, res) 
     doc.text(`Make: ${vehicle.make}`);
     doc.text(`Model: ${vehicle.model}`);
     if (vehicle.trim) doc.text(`Trim: ${vehicle.trim}`);
-    if (vehicle.mileage) doc.text(`Mileage: ${vehicle.mileage.toLocaleString()} miles`);
-    if (vehicle.description) {
+    if (vehicle.currentMileage) doc.text(`Mileage: ${vehicle.currentMileage.toLocaleString()} miles`);
+    if (vehicle.color) {
       doc.moveDown(0.5);
-      doc.text('Description:');
-      doc.text(vehicle.description, { width: 500 });
+      doc.text(`Color: ${vehicle.color}`);
     }
     doc.moveDown(1);
 
@@ -87,8 +86,8 @@ pdfReportsRouter.post("/:vehicleId/build-report", requireAuth, async (req, res) 
           doc.fontSize(12).font('Helvetica');
           
           if (mod.category) doc.text(`Category: ${mod.category}`);
-          if (mod.cost) doc.text(`Cost: $${mod.cost.toFixed(2)}`);
-          if (mod.dateInstalled) doc.text(`Date: ${new Date(mod.dateInstalled).toLocaleDateString()}`);
+          if (mod.cost) doc.text(`Cost: $${parseFloat(mod.cost || '0').toFixed(2)}`);
+          if (mod.installDate) doc.text(`Date: ${new Date(mod.installDate).toLocaleDateString()}`);
           
           if (mod.description) {
             doc.text('Description:');
@@ -114,13 +113,13 @@ pdfReportsRouter.post("/:vehicleId/build-report", requireAuth, async (req, res) 
           addPageBreakIfNeeded(doc, 80);
           
           doc.fontSize(14).font('Helvetica-Bold');
-          doc.text(`${index + 1}. ${record.title}`);
+          doc.text(`${index + 1}. ${record.serviceType}`);
           doc.fontSize(12).font('Helvetica');
           
-          if (record.category) doc.text(`Category: ${record.category}`);
-          if (record.cost) doc.text(`Cost: $${record.cost.toFixed(2)}`);
+          if (record.serviceType) doc.text(`Category: ${record.serviceType}`);
+          if (record.cost) doc.text(`Cost: $${parseFloat(record.cost || '0').toFixed(2)}`);
           if (record.mileage) doc.text(`Mileage: ${record.mileage.toLocaleString()} miles`);
-          if (record.datePerformed) doc.text(`Date: ${new Date(record.datePerformed).toLocaleDateString()}`);
+          if (record.serviceDate) doc.text(`Date: ${new Date(record.serviceDate).toLocaleDateString()}`);
           
           if (record.description) {
             doc.text('Description:');
@@ -249,7 +248,7 @@ pdfReportsRouter.post("/:vehicleId/sale-report", requireAuth, async (req, res) =
     doc.text(`Make: ${vehicle.make}`);
     doc.text(`Model: ${vehicle.model}`);
     if (vehicle.trim) doc.text(`Trim: ${vehicle.trim}`);
-    if (vehicle.mileage) doc.text(`Current Mileage: ${vehicle.mileage.toLocaleString()} miles`);
+    if (vehicle.currentMileage) doc.text(`Current Mileage: ${vehicle.currentMileage.toLocaleString()} miles`);
     doc.moveDown(1);
 
     // Sale info
@@ -274,8 +273,8 @@ pdfReportsRouter.post("/:vehicleId/sale-report", requireAuth, async (req, res) =
       storage.getMaintenanceRecords(vehicleId)
     ]);
 
-    const totalModificationCost = modifications.reduce((sum, mod) => sum + (mod.cost || 0), 0);
-    const totalMaintenanceCost = maintenanceRecords.reduce((sum, record) => sum + (record.cost || 0), 0);
+    const totalModificationCost = modifications.reduce((sum, mod) => sum + parseFloat(mod.cost || '0'), 0);
+    const totalMaintenanceCost = maintenanceRecords.reduce((sum, record) => sum + parseFloat(record.cost || '0'), 0);
 
     doc.fontSize(16).font('Helvetica-Bold');
     doc.text('Investment Summary');

@@ -49,9 +49,9 @@ csvImportExportRouter.get("/:vehicleId/export", requireAuth, async (req, res) =>
         Category: mod.category || '',
         Description: mod.description || '',
         Cost: mod.cost || 0,
-        Date: mod.dateInstalled ? new Date(mod.dateInstalled).toISOString().split('T')[0] : '',
-        Mileage: '',
-        Notes: mod.notes || ''
+        Date: mod.installDate ? new Date(mod.installDate).toISOString().split('T')[0] : '',
+        Mileage: mod.mileage || '',
+        Notes: mod.description || ''
       }));
       csvData.push(...modData);
     }
@@ -60,13 +60,13 @@ csvImportExportRouter.get("/:vehicleId/export", requireAuth, async (req, res) =>
       const maintenanceRecords = await storage.getMaintenanceRecords(vehicleId);
       const maintenanceData = maintenanceRecords.map(record => ({
         Type: 'Maintenance',
-        Title: record.title,
-        Category: record.category || '',
+        Title: record.serviceType,
+        Category: record.serviceType || '',
         Description: record.description || '',
         Cost: record.cost || 0,
-        Date: record.datePerformed ? new Date(record.datePerformed).toISOString().split('T')[0] : '',
+        Date: record.serviceDate ? new Date(record.serviceDate).toISOString().split('T')[0] : '',
         Mileage: record.mileage || '',
-        Notes: record.notes || ''
+        Notes: record.description || ''
       }));
       csvData.push(...maintenanceData);
     }
@@ -75,13 +75,13 @@ csvImportExportRouter.get("/:vehicleId/export", requireAuth, async (req, res) =>
       const upcomingMaintenance = await storage.getUpcomingMaintenance(vehicleId);
       const upcomingData = upcomingMaintenance.map(item => ({
         Type: 'Upcoming Maintenance',
-        Title: item.title,
-        Category: item.category || '',
+        Title: item.serviceType,
+        Category: item.serviceType || '',
         Description: item.description || '',
-        Cost: item.estimatedCost || 0,
-        Date: item.dueDate ? new Date(item.dueDate).toISOString().split('T')[0] : '',
+        Cost: 0,
+        Date: '',
         Mileage: item.dueMileage || '',
-        Notes: item.notes || ''
+        Notes: item.description || ''
       }));
       csvData.push(...upcomingData);
     }
@@ -157,8 +157,7 @@ csvImportExportRouter.post("/:vehicleId/import", requireAuth, upload.single('csv
             category: row.Category || '',
             description: row.Description || '',
             cost: parseFloat(row.Cost) || 0,
-            dateInstalled: row.Date ? new Date(row.Date) : new Date(),
-            notes: row.Notes || '',
+            installDate: row.Date ? new Date(row.Date).toISOString() : new Date().toISOString(),
             userId
           });
           results.imported++;
@@ -170,9 +169,8 @@ csvImportExportRouter.post("/:vehicleId/import", requireAuth, upload.single('csv
             category: row.Category || '',
             description: row.Description || '',
             cost: parseFloat(row.Cost) || 0,
-            datePerformed: row.Date ? new Date(row.Date) : new Date(),
-            mileage: parseInt(row.Mileage) || undefined,
-            notes: row.Notes || '',
+            serviceDate: row.Date ? new Date(row.Date).toISOString() : new Date().toISOString(),
+            mileage: parseInt(row.Mileage) || 0,
             userId
           });
           results.imported++;
@@ -183,10 +181,7 @@ csvImportExportRouter.post("/:vehicleId/import", requireAuth, upload.single('csv
             title: row.Title || `Imported Upcoming ${i + 1}`,
             category: row.Category || '',
             description: row.Description || '',
-            estimatedCost: parseFloat(row.Cost) || 0,
-            dueDate: row.Date ? new Date(row.Date) : undefined,
-            dueMileage: parseInt(row.Mileage) || undefined,
-            notes: row.Notes || '',
+            dueMileage: parseInt(row.Mileage) || 0,
             userId
           });
           results.imported++;

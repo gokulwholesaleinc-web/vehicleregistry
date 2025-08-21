@@ -1,0 +1,288 @@
+# VINtage Garage — Endpoint Registry & Cache Diagnostics (Drop‑in Pack)
+
+> Drop these files in to standardize your router mounting, expose health checks, print a route table at boot, add HTTP caching (ETag + SWR), and wire Redis caching with safe invalidation. Use this even if your repo already has pieces—this will show you exactly what’s mounted and cached.
+
+---
+
+## 0) Install
+
+```bash
+pnpm add redis
+```
+
+Add to `.env.example`:
+
+```env
+REDIS_URL=redis://localhost:6379
+SERVICE_NAME=vin-garage-api
+```
+
+---
+
+## 1) Single endpoint registry
+
+**/server/http/app.ts**
+
+```ts
+import express from "express";
+import cors from "cors";
+import { healthRouter } from "./routes/health";
+// Adjust imports below to your real router files
+import { vehiclesRouter } from "./routes/vehicles";
+import { recordsRouter } from "./routes/records";
+import { uploadsRouter } from "./routes/uploads";
+import { showcaseRouter } from "./routes/showcase";
+import { eventRouter } from "./routes/events";
+import { listRoutes } from "./util/listRoutes";
+
+export function buildApp() {
+  const app = express();
+  app.use(cors({ origin: ["http://localhost:5173"], credentials: false }));
+  app.use(express.json());
+
+  app.use("/api/v1/health", healthRouter);
+  app.use("/api/v1/vehicles", vehiclesRouter);
+  app.use("/api/v1/records", recordsRouter);
+  app.use("/api/v1/uploads", uploadsRouter);
+  app.use("/api/v1/showcase", showcaseRouter);
+  app.use("/api/v1/events", eventRouter);
+
+  // Print route table at startup
+  if (process.env.NODE_ENV !== "test") {
+    setImmediate(() => console.log(listRoutes(app)));
+  }
+
+  return app;
+}
+```
+
+**/server/http/index.ts**
+
+```ts
+import { buildApp } from "./app";
+const app = buildApp();
+const port = Number(process.env.PORT || 3000);
+app.listen(port, () => console.log(`[${process.env.SERVICE_NAME || "api"}] listening on ${port}`));
+```
+
+---
+
+## 2) Health and readiness
+
+**/server/http/routes/health.ts**
+
+```ts
+import { Router } from "express";
+import { redis } from "../../infra/redis";
+
+export const healthRouter = Router();
+
+healthRouter.get("/healthz", (req, res) => res.json({ status: "ok" }));
+
+healthRouter.get("/readyz", async (req, res) => {
+  try {
+    await redis.ping();
+    res.json({ status: "ready" });
+  } catch (e: any) {
+    res.status(500).json({ status: "degraded", error: String(e?.message || e) });
+  }
+});
+```
+
+---
+
+## 3) Route table printer
+
+**/server/http/util/listRoutes.ts**
+
+```ts
+import type { Application } from "express";
+
+export function listRoutes(app: Application) {
+  const lines: string[] = ["\n[Routes]"];
+  const stack: any[] = (app as any)?._router?.stack || [];
+  const push = (methods: string[], path: string) => {
+    lines.push(`${methods.join(",").padEnd(10)} ${path}`);
+  };
+  for (const l of stack) {
+    if (l.route) {
+      push(Object.keys(l.route.methods).map((m) => m.toUpperCase()), l.route.path);
+    } else if (l.name === "router" && l.handle?.stack) {
+      const base = l.regexp?.toString().replace(/\\\/?\^?\/?\(\?:\(\?=\.|\)\)\?\)/g, "").replace(/\\\//g, "/");
+      for (const h of l.handle.stack) {
+        const r = h.route;
+        if (r) push(Object.keys(r.methods).map((m) => m.toUpperCase()), `${base} -> ${r.path}`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+```
+
+---
+
+## 4) HTTP cache helpers (ETag + stale-while-revalidate)
+
+**/server/http/util/httpCache.ts**
+
+```ts
+import crypto from "crypto";
+import type { Response, Request } from "express";
+
+export function sendCachedJson(req: Request, res: Response, body: unknown, maxAge = 60, swr = 120) {
+  const json = JSON.stringify(body);
+  const etag = crypto.createHash("sha1").update(json).digest("hex");
+  res.setHeader("ETag", etag);
+  res.setHeader("Cache-Control", `public, max-age=${maxAge}, stale-while-revalidate=${swr}`);
+  if (req.headers["if-none-match"] === etag) return res.status(304).end();
+  res.type("application/json").send(json);
+}
+```
+
+Use in GET handlers:
+
+```ts
+return sendCachedJson(req, res, { ok: true, data });
+```
+
+---
+
+## 5) Redis infra, withCache, and invalidation
+
+**/server/infra/redis.ts**
+
+```ts
+import { createClient } from "redis";
+
+export const redis = createClient({ url: process.env.REDIS_URL });
+redis.on("error", (e) => console.error("[redis]", e));
+(async () => { try { if (!redis.isOpen) await redis.connect(); } catch (e) { console.error("[redis] connect", e); } })();
+
+export async function withCache<T>(key: string, ttlSec: number, fetcher: () => Promise<T>): Promise<T> {
+  const hit = await redis.get(key);
+  if (hit) return JSON.parse(hit);
+  const val = await fetcher();
+  await redis.setEx(key, ttlSec, JSON.stringify(val));
+  return val;
+}
+
+export async function invalidate(patterns: string[]) {
+  const keys: string[] = [];
+  for (const p of patterns) {
+    for await (const k of redis.scanIterator({ MATCH: p })) keys.push(k);
+  }
+  if (keys.length) await redis.del(keys);
+}
+```
+
+**Key conventions:**
+
+* `vin:${vin}` — vehicle public view
+* `vin:${vin}:records:${kind}:p=${page}` — timeline pages
+* `user:${id}:vehicles` — owner’s list of cars
+
+On any write affecting a VIN:
+
+```ts
+await invalidate([`vin:${vin}*`, `user:${userId}:vehicles*`]);
+```
+
+---
+
+## 6) Example: Vehicle GET using cache + headers
+
+**/server/http/routes/vehicles.ts** (excerpt)
+
+```ts
+import { Router } from "express";
+import { withCache } from "../../infra/redis";
+import { sendCachedJson } from "../util/httpCache";
+import { db } from "../../db/client"; // replace with your real import
+
+export const vehiclesRouter = Router();
+
+vehiclesRouter.get(`/:vin`, async (req, res) => {
+  const { vin } = req.params;
+  const data = await withCache(`vin:${vin}`, 60, async () => {
+    // Implement: fetch vehicle + privacy rules + summary
+    return await db.getVehiclePublicView(vin);
+  });
+  return sendCachedJson(req, res, { ok: true, data });
+});
+```
+
+On writes (create/edit/delete/transfer/privacy toggle):
+
+```ts
+await invalidate([`vin:${vin}*`]);
+```
+
+---
+
+## 7) Example: Records list with paginated cache
+
+**/server/http/routes/records.ts** (excerpt)
+
+```ts
+import { Router } from "express";
+import { withCache } from "../../infra/redis";
+import { sendCachedJson } from "../util/httpCache";
+import { db } from "../../db/client";
+
+export const recordsRouter = Router();
+
+recordsRouter.get(`/:vin`, async (req, res) => {
+  const { vin } = req.params;
+  const kind = String(req.query.kind || "all");
+  const page = Number(req.query.page || 0);
+  const key = `vin:${vin}:records:${kind}:p=${page}`;
+  const data = await withCache(key, 60, async () => {
+    return await db.listRecords(vin, { kind, page });
+  });
+  return sendCachedJson(req, res, { ok: true, data });
+});
+```
+
+---
+
+## 8) Static/asset caching
+
+Set your S3/R2 or CDN headers for images and receipts:
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+Use unique keys per upload so you can cache forever.
+
+---
+
+## 9) Quick smoke script (optional)
+
+**/server/scripts/smoke.ts**
+
+```ts
+import fetch from "node-fetch";
+const vin = process.argv[2] || "TESTVIN000000000";
+(async () => {
+  for (let i = 0; i < 3; i++) {
+    const t0 = Date.now();
+    const r = await fetch(`http://localhost:3000/api/v1/vehicles/${vin}`);
+    console.log(i, r.status, Date.now() - t0, "ms");
+  }
+})();
+```
+
+1st call should hit DB (slower), 2nd/3rd hit Redis or return 304 with ETag (faster).
+
+---
+
+## 10) Verification checklist
+
+* [ ] All routers mounted under `/api/v1/*` in one registry file.
+* [ ] Boot logs print a full route table.
+* [ ] `/api/v1/health/healthz` returns `{status: "ok"}`.
+* [ ] `/api/v1/health/readyz` pings Redis successfully.
+* [ ] GET endpoints send `ETag` and `Cache-Control` headers.
+* [ ] Writes call `invalidate([` + "vin:\${vin}\*" + `])`.
+* [ ] CDN for images uses immutable caching.
