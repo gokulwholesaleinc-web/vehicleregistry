@@ -1,0 +1,249 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import Hero from "@/components/Hero";
+import HowItWorks from "@/components/HowItWorks";
+import { Link } from "wouter";
+import QuickSignupModal from "@/components/quick-signup-modal";
+import CommunitySlideshow from "@/components/community-slideshow";
+
+export default function Landing() {
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      {/* Hero Section with Real Photo and Logo Watermark */}
+      <Hero coverUrl="/hero.jpg" />
+
+      {/* How It Works Section */}
+      <HowItWorks />
+
+      {/* Community Showcase Section - NOW PROMINENTLY FEATURED */}
+      <div className="py-12 sm:py-16 bg-white dark:bg-gray-950 relative">
+        <div className="container-responsive">
+          <div className="text-center mb-8 sm:mb-12 animate-slide-up">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4">
+              Featured Community Builds
+            </h2>
+            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto mb-6">
+              Discover incredible builds from automotive enthusiasts worldwide
+            </p>
+          </div>
+          
+          <div className="max-w-4xl mx-auto">
+            <CommunitySlideshow />
+          </div>
+          
+          <div className="text-center mt-6 sm:mt-8">
+            <Button 
+              size="lg"
+              onClick={() => window.location.href = '/signin'}
+              className="btn-primary group"
+              data-testid="button-explore-community"
+            >
+              <Users className="w-5 h-5 mr-2" />
+              Join the Community
+              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Features Section - Moved Below Community */}
+      <div className="py-12 sm:py-16 bg-gray-50 dark:bg-gray-900 relative">
+        <div className="container-responsive">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {[
+              {
+                icon: Car,
+                title: "VIN Registry",
+                description: "Complete vehicle history tracking",
+                color: "text-blue-600 dark:text-blue-400",
+              },
+              {
+                icon: Users,
+                title: "Community",
+                description: "Share builds with enthusiasts",
+                color: "text-emerald-600 dark:text-emerald-400",
+              },
+              {
+                icon: History,
+                title: "History",
+                description: "Track ownership changes",
+                color: "text-purple-600 dark:text-purple-400",
+              },
+              {
+                icon: Shield,
+                title: "Secure",
+                description: "Safe ownership transfers",
+                color: "text-red-600 dark:text-red-400",
+              }
+            ].map((feature, index) => (
+              <Card 
+                key={index} 
+                className="card-modern text-center"
+              >
+                <CardContent className="p-4">
+                  <div className="flex justify-center mb-3">
+                    <feature.icon className={`w-6 h-6 ${feature.color}`} />
+                  </div>
+                  <CardTitle className="text-sm font-semibold mb-1">{feature.title}</CardTitle>
+                  <CardDescription className="text-xs">
+                    {feature.description}
+                  </CardDescription>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* CTA Section */}
+      <div className="py-20 sm:py-32 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900/50 via-blue-900/30 to-purple-900/50 opacity-80"></div>
+        
+        <div className="relative container-responsive text-center">
+          <div className="max-w-4xl mx-auto animate-slide-up">
+            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-8">
+              <Globe className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-medium text-white">Join the Community</span>
+            </div>
+            
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-6">
+              Connect with Car Enthusiasts Worldwide
+            </h2>
+            
+            <p className="text-lg sm:text-xl text-white/90 mb-12 leading-relaxed">
+              Join thousands of meticulous car enthusiasts who value detailed records, quality builds, 
+              and sharing knowledge with the community.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Button 
+                size="lg"
+                className="btn-primary text-lg px-8 py-4 group shadow-2xl"
+                onClick={() => setIsSignupModalOpen(true)}
+                data-testid="button-join-community"
+              >
+                <Zap className="w-5 h-5 mr-2" />
+                Create Account Now
+                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+              
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-white/70">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  <span className="text-sm">Free forever • No credit card required</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="bg-green-500/20 text-green-300 px-2 py-1 rounded-full">✓ Gmail</span>
+                  <span className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full">✓ Any Email</span>
+                  <span className="bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full">✓ Instant Access</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <QuickSignupModal 
+        isOpen={isSignupModalOpen} 
+        onClose={() => setIsSignupModalOpen(false)} 
+      />
+
+      {/* Footer */}
+      <footer className="bg-gray-900 border-t border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            
+            {/* Brand */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Car className="h-8 w-8 text-blue-500" />
+                <div>
+                  <h3 className="text-xl font-bold text-white">
+                    <span className="text-blue-400">VIN</span>
+                    <span className="text-orange-500">tage</span>
+                    <span className="text-orange-500">Garage</span>
+                  </h3>
+                  <div className="text-xs text-gray-400 -mt-1 tracking-wider font-medium">
+                    REGISTRY
+                  </div>
+                </div>
+              </div>
+              <p className="text-gray-400 text-sm">
+                The premier automotive community for car enthusiasts who value detailed records and quality builds.
+              </p>
+            </div>
+
+            {/* Product */}
+            <div className="space-y-4">
+              <h4 className="text-white font-semibold">Platform</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+                <li><a href="#community" className="hover:text-white transition-colors">Community</a></li>
+                <li><a href="#showcase" className="hover:text-white transition-colors">Vehicle Showcase</a></li>
+                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
+              </ul>
+            </div>
+
+            {/* Support */}
+            <div className="space-y-4">
+              <h4 className="text-white font-semibold">Support</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li><a href="mailto:support@vintagegarage.com" className="hover:text-white transition-colors">Help Center</a></li>
+                <li><a href="mailto:contact@vintagegarage.com" className="hover:text-white transition-colors">Contact Us</a></li>
+                <li><a href="mailto:feedback@vintagegarage.com" className="hover:text-white transition-colors">Feedback</a></li>
+                <li><a href="/api/status" className="hover:text-white transition-colors">System Status</a></li>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div className="space-y-4">
+              <h4 className="text-white font-semibold">Legal</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li><Link href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+                <li><a href="/terms-of-service" className="hover:text-white transition-colors">Terms of Service</a></li>
+                <li><a href="/cookie-policy" className="hover:text-white transition-colors">Cookie Policy</a></li>
+                <li><a href="mailto:compliance@vintagegarage.com" className="hover:text-white transition-colors">Compliance</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-800 mt-8 pt-8">
+            <div className="flex flex-col md:flex-row justify-between items-center">
+              <div className="text-gray-400 text-sm mb-4 md:mb-0">
+                © 2025 VINtage Garage Registry. All rights reserved.
+              </div>
+              
+              <div className="flex items-center space-x-6">
+                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                  <Lock className="w-3 h-3" />
+                  <span>Secured by industry-standard encryption</span>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                  <Shield className="w-3 h-3" />
+                  <span>GDPR & CCPA Compliant</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Unsubscribe Notice - Required for Email Marketing Compliance */}
+            <div className="mt-4 p-3 bg-gray-800/50 rounded-lg">
+              <p className="text-xs text-gray-400 text-center">
+                📧 <strong>Email Marketing:</strong> We only send marketing emails to users who explicitly opt-in. 
+                You can unsubscribe anytime using the link in our emails or by contacting us at 
+                <a href="mailto:unsubscribe@vintagegarage.com" className="text-blue-400 hover:text-blue-300 ml-1">
+                  unsubscribe@vintagegarage.com
+                </a>
+                . We process unsubscribe requests within 10 business days.
+                <br />
+                <strong>Physical Address:</strong> VINtage Garage Registry, 123 Automotive Way, Detroit, MI 48201, USA
+              </p>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

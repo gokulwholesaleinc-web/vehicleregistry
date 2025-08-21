@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
-import { Car, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
 
 export default function SignIn() {
@@ -87,203 +85,178 @@ export default function SignIn() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 flex flex-col">
-      {/* Header with back link */}
-      <div className="p-4">
-        <Link href="/">
-          <Button variant="ghost" className="flex items-center gap-2">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Home
-          </Button>
-        </Link>
-      </div>
+    <main className="min-h-screen grid place-items-center bg-slate-50 dark:bg-slate-900 p-6">
+      <div className="w-full max-w-sm bg-white dark:bg-slate-800 border rounded-2xl p-6 shadow-sm">
+        <div className="flex justify-center mb-4">
+          <img src="/vintage-badge.png" alt="VINtage Garage" className="h-16 w-auto"/>
+        </div>
+        <h1 className="text-xl font-semibold text-center">Welcome back</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-300 text-center">Sign in to manage your builds and logs</p>
 
-      {/* Main content */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center space-y-4">
-            <div className="flex justify-center">
-              <div className="flex items-center space-x-3">
-                <img 
-                  src="@assets/Untitled_1755756007840.png" 
-                  alt="VINtage Garage Registry Logo" 
-                  className="h-12 w-auto"
-                />
+        {/* Google */}
+        <div className="mt-4">
+          <GoogleSignInButton onSuccess={handleSignInSuccess} onError={handleSignInError} />
+        </div>
+
+        {/* Divider */}
+        <div className="my-4 flex items-center gap-3 text-xs text-slate-500">
+          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700"/><span>or</span><div className="h-px flex-1 bg-slate-200 dark:bg-slate-700"/>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <Alert className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Toggle between login and register */}
+        <div className="mb-4 flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => setIsLogin(true)}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              isLogin 
+                ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm' 
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsLogin(false)}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              !isLogin 
+                ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm' 
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            Register
+          </button>
+        </div>
+
+        {/* Email/Password form */}
+        <form className="space-y-3" onSubmit={handleSubmit}>
+          {!isLogin && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <h1 className="text-xl font-bold">
-                    <span className="text-blue-900 dark:text-blue-100">VIN</span>
-                    <span className="text-orange-500">tage</span>
-                    <span className="text-orange-500">Garage</span>
-                  </h1>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 -mt-1 tracking-wider font-medium">
-                    REGISTRY
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div>
-              <CardTitle className="text-2xl">Welcome Back</CardTitle>
-              <CardDescription className="text-base mt-2">
-                Sign in to your VINtage Garage Registry account
-              </CardDescription>
-            </div>
-          </CardHeader>
-          
-          <CardContent className="space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            {/* Username/Password Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLogin && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        type="text"
-                        required={!isLogin}
-                        value={formData.firstName}
-                        onChange={handleInputChange}
-                        placeholder="John"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input
-                        id="lastName"
-                        name="lastName"
-                        type="text"
-                        required={!isLogin}
-                        value={formData.lastName}
-                        onChange={handleInputChange}
-                        placeholder="Doe"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      name="username"
-                      type="text"
-                      required={!isLogin}
-                      value={formData.username}
-                      onChange={handleInputChange}
-                      placeholder="johndoe"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      required={!isLogin}
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      placeholder="john@example.com"
-                    />
-                  </div>
-                </>
-              )}
-              
-              {isLogin && (
-                <div className="space-y-2">
-                  <Label htmlFor="usernameOrEmail">Username or Email</Label>
+                  <Label htmlFor="firstName" className="text-sm">First Name</Label>
                   <Input
-                    id="usernameOrEmail"
-                    name="usernameOrEmail"
+                    id="firstName"
+                    name="firstName"
                     type="text"
-                    required={isLogin}
-                    value={formData.usernameOrEmail}
+                    value={formData.firstName}
                     onChange={handleInputChange}
-                    placeholder="johndoe or john@example.com"
+                    placeholder="First"
+                    required={!isLogin}
+                    className="w-full border rounded-lg px-3 py-2"
                   />
                 </div>
-              )}
-              
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
+                <div>
+                  <Label htmlFor="lastName" className="text-sm">Last Name</Label>
                   <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={formData.password}
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    value={formData.lastName}
                     onChange={handleInputChange}
-                    placeholder="••••••••"
-                    minLength={6}
+                    placeholder="Last"
+                    required={!isLogin}
+                    className="w-full border rounded-lg px-3 py-2"
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
               </div>
-              
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={loading}
-              >
-                {loading ? "Please wait..." : (isLogin ? "Sign In" : "Create Account")}
-              </Button>
-            </form>
-            
-            <div className="text-center">
+              <div>
+                <Label htmlFor="username" className="text-sm">Username</Label>
+                <Input
+                  id="username"
+                  name="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={handleInputChange}
+                  placeholder="Username"
+                  required={!isLogin}
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+              <div>
+                <Label htmlFor="email" className="text-sm">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="Email"
+                  required={!isLogin}
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+            </>
+          )}
+
+          {isLogin && (
+            <div>
+              <Label htmlFor="usernameOrEmail" className="text-sm">Email or Username</Label>
+              <Input
+                id="usernameOrEmail"
+                name="usernameOrEmail"
+                type="text"
+                value={formData.usernameOrEmail}
+                onChange={handleInputChange}
+                placeholder="Email or Username"
+                required={isLogin}
+                className="w-full border rounded-lg px-3 py-2"
+              />
+            </div>
+          )}
+
+          <div>
+            <Label htmlFor="password" className="text-sm">Password</Label>
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={formData.password}
+                onChange={handleInputChange}
+                placeholder="Password"
+                required
+                className="w-full border rounded-lg px-3 py-2 pr-10"
+              />
               <Button
                 type="button"
-                variant="link"
-                onClick={() => setIsLogin(!isLogin)}
-                className="text-sm"
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                onClick={() => setShowPassword(!showPassword)}
               >
-                {isLogin 
-                  ? "Don't have an account? Sign up" 
-                  : "Already have an account? Sign in"
-                }
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </Button>
             </div>
-            
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator className="w-full" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-            
-            <GoogleSignInButton 
-              onSuccess={handleSignInSuccess}
-              onError={handleSignInError}
-            />
-            
-            <div className="text-center text-xs text-gray-500 dark:text-gray-500">
-              By signing in, you agree to our Terms of Service and Privacy Policy
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <Button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-slate-900 text-white rounded-lg py-2 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {loading ? "Loading..." : isLogin ? "Sign in" : "Register"}
+          </Button>
+        </form>
+
+        <div className="mt-3 text-center text-sm">
+          <Link href="/privacy-policy" className="text-slate-700 hover:underline">Privacy Policy</Link>
+          <span className="text-slate-400"> · </span>
+          <a href="/reset" className="text-slate-700 hover:underline">Forgot password?</a>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
