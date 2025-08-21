@@ -1,3 +1,14 @@
+# Header Cleanup — Single Admin Action (Drop‑in)
+
+> Removes the duplicate **Admin** button on the top‑right, keeps the logo square, and preserves Notifications/Add Entry. Drop this `AppHeader.tsx` in as a **replacement**. (No dependencies on previous canvases.)
+
+---
+
+## 1) Replace the header component
+
+**`client/src/components/AppHeader.tsx`**
+
+```tsx
 import { useEffect, useState } from "react";
 
 function NavLink({ href, label }: { href: string; label: string }) {
@@ -101,3 +112,30 @@ export default function AppHeader({ unread = 0 }: { unread?: number }) {
     </header>
   );
 }
+```
+
+---
+
+## 2) Remove any extra Admin buttons rendered elsewhere
+
+Search the repo for other hard‑coded Admin actions and delete/disable them to avoid duplicates:
+
+```
+// find likely duplicates
+grep -R "Admin" client/src | grep -E "button|chip|link|pill|<a|<Button"
+```
+
+Common culprits:
+
+* A leftover `AdminChip` in `Dashboard.tsx` or a page‑specific header
+* Legacy header rendering inside a page instead of the global layout
+
+Delete any page‑level Admin buttons you find.
+
+---
+
+## 3) QA checklist
+
+* [ ] Only **one** Admin button appears in the header (desktop + mobile sheet).
+* [ ] Logo is 1:1, not distorted.
+* [ ] Bell navigates to `/notifications` without 404.

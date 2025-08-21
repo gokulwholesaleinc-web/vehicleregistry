@@ -17,6 +17,7 @@ import MaintenancePage from "@/pages/maintenance";
 import ModificationsPage from "@/pages/modifications";
 import ProfilePage from "@/pages/profile";
 import ShowcasePage from "@/pages/showcase";
+import Notifications from "@/pages/notifications";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -40,6 +41,7 @@ function Router() {
           <Route path="/community" component={Community} />
           <Route path="/showcase" component={ShowcasePage} />
           <Route path="/profile" component={ProfilePage} />
+          <Route path="/notifications" component={Notifications} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/signin" component={SignIn} />
           <Route path="/register" component={Register} />
