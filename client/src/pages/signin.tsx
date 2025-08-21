@@ -23,17 +23,9 @@ export default function SignIn() {
   });
 
   const handleSignInSuccess = (user?: any) => {
-    // Redirect based on user role - admin users go to admin dashboard
-    console.log("Redirecting user:", user);
-    console.log("Is admin?", user?.role === "admin");
-    
-    if (user?.role === "admin") {
-      console.log("Redirecting to admin dashboard");
-      window.location.href = "/admin";
-    } else {
-      console.log("Redirecting to user dashboard");
-      window.location.href = "/";
-    }
+    // All users go to dashboard first, they can navigate to admin from there
+    console.log("Redirecting user to dashboard:", user);
+    window.location.href = "/dashboard";
   };
 
   const handleSignInError = (errorMsg: string) => {

@@ -151,6 +151,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const jwt = require('jsonwebtoken');
           const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET!;
           console.log("Using JWT secret:", secret ? "present" : "missing");
+          console.log("JWT_SECRET:", process.env.JWT_SECRET ? "set" : "not set");
+          console.log("SESSION_SECRET:", process.env.SESSION_SECRET ? "set" : "not set");
           const claims = jwt.verify(token, secret) as any;
           userId = claims.id;
           console.log("JWT auth successful for user:", userId);
