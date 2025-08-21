@@ -1,0 +1,179 @@
+# Showcase Modal Flicker Fix — Click Intent, Portal & Scroll Lock (Drop‑in)
+
+> Symptom: Clicking a community‑showcase card opens the modal but it **flickers/glitches** (opens & immediately closes or re‑opens). Root causes are usually: a swipe/drag firing alongside click, the carousel’s onClick bubbling, focus trap re‑mounts, or body scroll changes that trigger re‑render. This pack stabilizes the interaction.
+
+## 0) Add a portal root (once)
+
+**`client/index.html`**
+
+```html
+<body>
+  <div id="root"></div>
+  <div id="modal-root"></div>
+</body>
+```
+
+---
+
+## 1) Utilities
+
+### A) Scroll lock (prevents layout shift when modal opens)
+
+**`client/src/lib/useLockBodyScroll.ts`**
+
+```ts
+import { useLayoutEffect } from 'react';
+export default function useLockBodyScroll(locked: boolean){
+  useLayoutEffect(() => {
+    const { overflow, paddingRight } = getComputedStyle(document.body);
+    if (locked){
+      const scrollbar = window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.overflow = 'hidden';
+      if (scrollbar > 0) document.body.style.paddingRight = `${scrollbar}px`;
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, [locked]);
+}
+```
+
+### B) Click intent (ignore drags, only treat as click if movement < threshold & short duration)
+
+**`client/src/lib/useClickIntent.ts`**
+
+```ts
+import { useRef } from 'react';
+
+export default function useClickIntent({ maxMove=6, maxMs=300 }={}){
+  const start = useRef<{x:number;y:number;t:number}|null>(null);
+  function onPointerDown(e: React.PointerEvent){ start.current = { x:e.clientX, y:e.clientY, t:Date.now() }; }
+  function onPointerUp(e: React.PointerEvent){
+    const s = start.current; start.current = null; if(!s) return false;
+    const dx = Math.abs(e.clientX - s.x), dy = Math.abs(e.clientY - s.y);
+    const dt = Date.now() - s.t;
+    return dx <= maxMove && dy <= maxMove && dt <= maxMs;
+  }
+  return { onPointerDown, onPointerUp };
+}
+```
+
+---
+
+## 2) Stable modal component (portal + stopPropagation + ESC + focus)
+
+**`client/src/components/Modal.tsx`**
+
+```tsx
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import useLockBodyScroll from '@/lib/useLockBodyScroll';
+
+export default function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }){
+  useLockBodyScroll(open);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  const root = document.getElementById('modal-root');
+  if (!root) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100]" onClick={onClose}>
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 grid place-items-center p-4" aria-modal onClick={(e)=>e.stopPropagation()}>
+        <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl overflow-hidden">
+          {children}
+        </div>
+      </div>
+    </div>,
+    root
+  );
+}
+```
+
+---
+
+## 3) Wire the showcase card to use click‑intent (prevents carousel + modal double‑fire)
+
+**`client/src/components/ShowcaseCard.tsx`** *(replace your card’s clickable wrapper)*
+
+```tsx
+import { useState, useCallback } from 'react';
+import Modal from '@/components/Modal';
+import useClickIntent from '@/lib/useClickIntent';
+import ShowcaseSlide from '@/components/ShowcaseSlide';
+
+export default function ShowcaseCard({ item }:{ item: { id:string; title:string; photoUrl:string } }){
+  const [open, setOpen] = useState(false);
+  const { onPointerDown, onPointerUp } = useClickIntent();
+
+  const handleUp = useCallback((e: React.PointerEvent) => {
+    // If it was a true click (not a drag/slide), open the modal
+    if (onPointerUp(e)) setOpen(true);
+  }, [onPointerUp]);
+
+  return (
+    <div
+      className="group cursor-pointer select-none"
+      onPointerDown={onPointerDown}
+      onPointerUp={handleUp}
+      onClick={(e)=>e.preventDefault()} // guard against bubbling to carousel
+      role="button"
+      tabIndex={0}
+    >
+      {/* your existing slide/cover */}
+      <ShowcaseSlide photoUrl={item.photoUrl} title={item.title} />
+
+      <Modal open={open} onClose={() => setOpen(false)}>
+        {/* Modal content — reuse your viewer/gallery here */}
+        <div className="relative">
+          <ShowcaseSlide photoUrl={item.photoUrl} title={item.title} />
+          <button onClick={()=>setOpen(false)} className="absolute top-3 right-3 h-9 w-9 rounded-full bg-white/90 hover:bg-white shadow grid place-items-center" aria-label="Close">
+            <svg viewBox="0 0 24 24" className="h-5 w-5 text-slate-800"><path fill="currentColor" d="M6.4 4.9L4.9 6.4 10.5 12l-5.6 5.6 1.5 1.5L12 13.5l5.6 5.6 1.5-1.5L13.5 12l5.6-5.6-1.5-1.5L12 10.5 6.4 4.9z"/></svg>
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+```
+
+> Key fixes:
+>
+> * We open the modal **only** when the pointer didn’t move (no swipe).
+> * We call `preventDefault()` on the card `onClick` so carousel navigation doesn’t also fire.
+> * Modal renders in a **portal** and locks body scroll, eliminating layout reflow that causes flicker.
+
+---
+
+## 4) (Optional) Pause the carousel when modal is open
+
+If your carousel auto‑advances, pause it while the modal shows to avoid state churn.
+
+```ts
+useEffect(()=>{ open ? carouselRef.current?.pause?.() : carouselRef.current?.play?.(); }, [open]);
+```
+
+---
+
+## 5) QA checklist
+
+* [ ] Clicking a showcase card **opens smoothly**; no flicker or instant close.
+* [ ] Dragging to slide **doesn’t** open the modal.
+* [ ] Background doesn’t scroll while open; ESC and backdrop click close it.
+* [ ] No console warnings about nested interactive elements.
+
+---
+
+## 6) Notes for your Replit agent
+
+* Ensure imports use your alias setup (`@/…`). If you don’t have path aliases, convert to relative imports.
+* Replace the clickable wrapper of the existing showcase item with `ShowcaseCard` above (or apply the same pointer‑intent pattern to your current component).
+* If another handler still fires (e.g., `<Link>` around the slide), remove it for the showcase card — the modal acts as the primary interaction.

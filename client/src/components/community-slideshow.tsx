@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChevronLeft, ChevronRight, Heart, Eye, User, Calendar, Play, Pause, X, MapPin } from "lucide-react";
 import ShowcaseSlide from "./ShowcaseSlide";
+import Modal from "./Modal";
+import useClickIntent from "@/lib/useClickIntent";
 import bmwImage1 from "@assets/FB_IMG_1751951510231_1755750547262.jpg";
 import bmwImage2 from "@assets/FB_IMG_1751951504094_1755750547274.jpg";
 import bmwMeetImage from "@assets/DSC_1899_1755751395846.jpg";
@@ -96,14 +98,14 @@ export default function CommunitySlideshow() {
   const minSwipeDistance = 50;
 
   useEffect(() => {
-    if (!isAutoPlaying) return;
+    if (!isAutoPlaying || isModalOpen) return; // Pause when modal is open
     
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % samplePhotos.length);
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [isAutoPlaying]);
+  }, [isAutoPlaying, isModalOpen]);
 
   const nextSlide = () => {
     setCurrentIndex((prev) => (prev + 1) % samplePhotos.length);
@@ -124,9 +126,14 @@ export default function CommunitySlideshow() {
     setIsAutoPlaying(!isAutoPlaying);
   };
 
-  const handleImageClick = () => {
-    setIsModalOpen(true);
-    setIsAutoPlaying(false);
+  const { onPointerDown, onPointerUp } = useClickIntent();
+  
+  const handlePointerUp = (e: React.PointerEvent) => {
+    // Only open modal if it was a true click (not a drag/swipe)
+    if (onPointerUp(e)) {
+      setIsModalOpen(true);
+      setIsAutoPlaying(false);
+    }
   };
 
   // Touch handlers
@@ -204,9 +211,13 @@ export default function CommunitySlideshow() {
           {/* Main Image */}
           <div className="relative h-64 sm:h-80 lg:h-96">
             <div 
-              className="w-full h-full cursor-pointer transition-transform duration-200 hover:scale-105"
-              onClick={handleImageClick}
+              className="w-full h-full cursor-pointer transition-transform duration-200 hover:scale-105 select-none"
+              onPointerDown={onPointerDown}
+              onPointerUp={handlePointerUp}
+              onClick={(e) => e.preventDefault()} // Prevent bubbling to carousel
               data-testid="community-showcase-image"
+              role="button"
+              tabIndex={0}
             >
               <ShowcaseSlide 
                 photoUrl={currentPhoto.imageUrl}
