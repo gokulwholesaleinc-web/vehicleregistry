@@ -48,16 +48,16 @@ export default function Dashboard() {
               <VinLookupModal />
             </div>
             
+            {/* Community Slideshow - Featured prominently */}
+            <div className="mb-6">
+              <CommunitySlideshow />
+            </div>
+            
             <VehicleSelector 
               selectedVehicleId={selectedVehicleId}
               onVehicleSelect={setSelectedVehicleId}
               onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
             />
-          </div>
-          
-          {/* Community Slideshow for users without vehicles */}
-          <div className="mt-8">
-            <CommunitySlideshow />
           </div>
         </div>
       </div>
@@ -72,16 +72,20 @@ export default function Dashboard() {
       />
       
       <div className="container-responsive py-6 lg:py-8">
+        <div className="mb-6">
+          <Breadcrumb items={breadcrumbs} />
+        </div>
+        
+        {/* Community Slideshow - Featured prominently at the top */}
+        <div className="mb-6 lg:mb-8">
+          <CommunitySlideshow />
+        </div>
+        
         <VehicleSelector 
           selectedVehicleId={selectedVehicleId}
           onVehicleSelect={setSelectedVehicleId}
           onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
         />
-        
-        {/* Community Slideshow */}
-        <div className="mb-6 lg:mb-8">
-          <CommunitySlideshow />
-        </div>
         
         <QuickStats vehicleId={selectedVehicleId} />
         
