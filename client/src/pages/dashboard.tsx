@@ -11,11 +11,15 @@ import CostSummary from "@/components/cost-summary";
 import AddEntryModal from "@/components/add-entry-modal";
 import AIAssistantPanel from "@/components/ai-assistant-panel";
 import RealTimeClock from "@/components/real-time-clock";
+import VehicleDetailsModal from "@/components/vehicle-details-modal";
+import UserProfileModal from "@/components/user-profile-modal";
 
 export default function Dashboard() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
   const [isAddEntryModalOpen, setIsAddEntryModalOpen] = useState(false);
   const [entryType, setEntryType] = useState<"modification" | "maintenance">("modification");
+  const [isVehicleDetailsModalOpen, setIsVehicleDetailsModalOpen] = useState(false);
+  const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
 
   const handleAddEntry = (type: "modification" | "maintenance") => {
     setEntryType(type);
@@ -25,11 +29,15 @@ export default function Dashboard() {
   if (!selectedVehicleId) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header onAddEntry={() => handleAddEntry("modification")} />
+        <Header 
+          onAddEntry={() => handleAddEntry("modification")} 
+          onOpenProfile={() => setIsUserProfileModalOpen(true)}
+        />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <VehicleSelector 
             selectedVehicleId={selectedVehicleId}
             onVehicleSelect={setSelectedVehicleId}
+            onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
           />
         </div>
       </div>
@@ -38,12 +46,16 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 font-inter">
-      <Header onAddEntry={() => handleAddEntry("modification")} />
+      <Header 
+        onAddEntry={() => handleAddEntry("modification")} 
+        onOpenProfile={() => setIsUserProfileModalOpen(true)}
+      />
       
       <div className="container-responsive py-6 lg:py-8">
         <VehicleSelector 
           selectedVehicleId={selectedVehicleId}
           onVehicleSelect={setSelectedVehicleId}
+          onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
         />
         
         <QuickStats vehicleId={selectedVehicleId} />
@@ -80,6 +92,19 @@ export default function Dashboard() {
         vehicleId={selectedVehicleId}
         entryType={entryType}
         onEntryTypeChange={setEntryType}
+      />
+
+      {selectedVehicleId && (
+        <VehicleDetailsModal
+          isOpen={isVehicleDetailsModalOpen}
+          onClose={() => setIsVehicleDetailsModalOpen(false)}
+          vehicleId={selectedVehicleId}
+        />
+      )}
+
+      <UserProfileModal
+        isOpen={isUserProfileModalOpen}
+        onClose={() => setIsUserProfileModalOpen(false)}
       />
     </div>
   );

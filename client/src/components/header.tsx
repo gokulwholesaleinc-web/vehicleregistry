@@ -9,9 +9,10 @@ import MobileNav from "@/components/mobile-nav";
 
 interface HeaderProps {
   onAddEntry: () => void;
+  onOpenProfile?: () => void;
 }
 
-export default function Header({ onAddEntry }: HeaderProps) {
+export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
   const { user, isAuthenticated } = useAuth();
 
   return (
@@ -116,12 +117,18 @@ export default function Header({ onAddEntry }: HeaderProps) {
             </Button>
             {isAuthenticated ? (
               <div className="hidden md:flex items-center space-x-3">
-                <Avatar className="w-9 h-9 ring-2 ring-blue-200 dark:ring-blue-700 transition-all duration-200 hover:ring-4">
-                  <AvatarImage src={(user as any)?.profileImageUrl || ''} alt="Profile" />
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
-                    {(user as any)?.firstName?.charAt(0) || (user as any)?.email?.charAt(0) || '?'}
-                  </AvatarFallback>
-                </Avatar>
+                <button 
+                  onClick={onOpenProfile}
+                  className="focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full"
+                  data-testid="button-profile"
+                >
+                  <Avatar className="w-9 h-9 ring-2 ring-blue-200 dark:ring-blue-700 transition-all duration-200 hover:ring-4 cursor-pointer">
+                    <AvatarImage src={(user as any)?.profileImageUrl || ''} alt="Profile" />
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
+                      {(user as any)?.firstName?.charAt(0) || (user as any)?.email?.charAt(0) || '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
                 
                 <Button 
                   variant="ghost" 

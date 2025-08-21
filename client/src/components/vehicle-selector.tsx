@@ -17,9 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 interface VehicleSelectorProps {
   selectedVehicleId: string;
   onVehicleSelect: (vehicleId: string) => void;
+  onOpenVehicleDetails?: () => void;
 }
 
-export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: VehicleSelectorProps) {
+export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, onOpenVehicleDetails }: VehicleSelectorProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -94,9 +95,13 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
                   <span className="text-xs text-gray-500 dark:text-gray-400">No Image</span>
                 </div>
                 <div className="text-center sm:text-left">
-                  <h2 className="mobile-heading sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white" data-testid="text-vehicle-name">
+                  <button 
+                    onClick={onOpenVehicleDetails}
+                    className="mobile-heading sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer focus:outline-none focus:underline" 
+                    data-testid="text-vehicle-name"
+                  >
                     {selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}
-                  </h2>
+                  </button>
                   <p className="text-sm text-gray-600 dark:text-gray-400 truncate" data-testid="text-vehicle-vin">
                     VIN: {selectedVehicle.vin}
                   </p>
