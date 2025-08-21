@@ -1,0 +1,354 @@
+# VINtage Garage — Hardening & UX Pack (Drop‑in)
+
+Copy–paste these files/patches. They bundle: **same‑origin API base**, **strict CORS**, **Zod validation**, **VIN rate‑limit + cache**, **responsive images**, **global ErrorBoundary**, **unified page layout**, **favicon/manifest hooks**, **pino request logs**, and a **GitHub Actions CI**.
+
+---
+
+## 0) ENV (top‑level `.env.example`)
+
+```env
+# Client
+VITE_API_BASE=
+
+# Server
+FRONTEND_BASE=
+JWT_SECRET=changeme_super_long
+REDIS_URL= # optional (fallback to in‑memory if unset)
+```
+
+**Dev:** leave `VITE_API_BASE` empty (client uses same‑origin `/api/v1`).
+**Hosted:** set `FRONTEND_BASE=https://your-frontend-host`.
+
+---
+
+## 1) Client API helper (same‑origin by default)
+
+**`client/src/lib/api.ts`**
+
+```ts
+const base = (import.meta.env.VITE_API_BASE?.trim()) || `${location.origin}/api/v1`;
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t:string|null){ t?localStorage.setItem('vg.jwt',t):localStorage.removeItem('vg.jwt'); }
+export async function api(path:string, init:RequestInit={}){
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken(); if (t) headers.set('Authorization',`Bearer ${t}`);
+  try{
+    const res = await fetch(`${base}${path}`, { ...init, headers, mode:'cors' });
+    if(res.status===401){ setToken(null); throw new Error('Your session expired. Please sign in again.'); }
+    const json = await res.json().catch(()=>null);
+    if(!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+    return json;
+  }catch(e:any){
+    throw new Error(e?.message?.includes('Failed to fetch') ? 'Network error: API not reachable (CORS/base URL).' : (e?.message||'Request failed'));
+  }
+}
+```
+
+---
+
+## 2) Server security (Helmet + strict CORS + preflight)
+
+**`server/http/security.ts`**
+
+```ts
+import type { Express } from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+
+function allowlist(){
+  const out = new Set<string>();
+  if (process.env.FRONTEND_BASE) out.add(process.env.FRONTEND_BASE);
+  out.add('http://localhost:5173'); out.add('http://127.0.0.1:5173');
+  return Array.from(out);
+}
+
+export function applySecurity(app: Express){
+  app.use(helmet({ crossOriginOpenerPolicy:{policy:'same-origin-allow-popups'} }));
+  const list = allowlist();
+  app.use(cors({
+    origin(origin, cb){ if(!origin) return cb(null,true); cb(null, list.includes(origin)); },
+    methods:['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders:['Content-Type','Authorization'],
+    credentials:false,
+    maxAge:86400,
+  }));
+  app.options('*', cors());
+}
+```
+
+Mount **before** routers.
+**`server/http/app.ts`** (snippet)
+
+```ts
+import express from 'express';
+import { applySecurity } from './security';
+export function buildApp(){
+  const app = express();
+  applySecurity(app);
+  app.use(express.json({ limit:'1mb' }));
+  // mount /api/v1 routers here
+  return app;
+}
+```
+
+---
+
+## 3) Pino request logger + request IDs
+
+**`server/http/logging.ts`**
+
+```ts
+import pino from 'pino';
+import pinoHttp from 'pino-http';
+export const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+export const logMiddleware = pinoHttp({ logger, genReqId: () => crypto.randomUUID() });
+```
+
+Mount early:
+
+```ts
+import { logMiddleware } from './logging';
+app.use(logMiddleware);
+```
+
+---
+
+## 4) Zod validators (records + VIN)
+
+**`server/http/validators/schemas.ts`**
+
+```ts
+import { z } from 'zod';
+export const VIN = z.string().trim().regex(/^[A-HJ-NPR-Z0-9]{11,17}$/i,'Invalid VIN');
+export const RecordKind = z.enum(['mod','maint','photo','receipt']);
+export const CreateRecord = z.object({
+  vin: VIN, kind: RecordKind,
+  title: z.string().min(1).max(120),
+  description: z.string().max(2000).optional(),
+  mileage: z.number().int().min(0).nullable().optional(),
+  costCents: z.number().int().min(0).nullable().optional(),
+  occurredAt: z.string().datetime().optional(),
+  photos: z.array(z.string().url()).max(12).optional(),
+});
+export const UpdateRecord = CreateRecord.partial().extend({ id: z.string().min(1) });
+export const DecodeVINInput = z.object({ vin: VIN, mileage: z.number().int().min(0).optional() });
+```
+
+Use in routes: `const body = CreateRecord.safeParse(req.body)` → on fail `res.status(400).json({ ok:false, error: body.error.flatten() })`.
+
+---
+
+## 5) VIN route with rate‑limit + cache (and optional OpenAI enrichment)
+
+**`server/http/routes/vin.ts`**
+
+```ts
+import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { DecodeVINInput } from '../validators/schemas';
+import fetch from 'node-fetch';
+
+// simple in‑memory cache (swap with Redis if REDIS_URL present)
+const cache = new Map<string,{data:any,exp:number}>();
+const TTL = 24*60*60*1000; // 24h
+const limiter = rateLimit({ windowMs:60_000, max:20 });
+const Base = process.env.VIN_API_BASE || 'https://vpic.nhtsa.dot.gov/api/vehicles';
+
+const router = Router();
+router.post('/decode', limiter, async (req,res) => {
+  const parsed = DecodeVINInput.safeParse(req.body);
+  if(!parsed.success) return res.status(400).json({ ok:false, error: parsed.error.flatten() });
+  const vin = parsed.data.vin.toUpperCase();
+
+  // cache
+  const hit = cache.get(vin); const now = Date.now();
+  if (hit && hit.exp > now) return res.json({ ok:true, data: hit.data });
+
+  const url = `${Base}/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
+  const r = await fetch(url); if(!r.ok) return res.status(502).json({ ok:false, error:{message:'VIN service unavailable'} });
+  const j:any = await r.json(); const row = j?.Results?.[0] || {};
+  const vehicle = {
+    vin,
+    make: row.Make || null,
+    model: row.Model || null,
+    modelYear: row.ModelYear ? Number(row.ModelYear) : null,
+    trim: row.Trim || null,
+    bodyClass: row.BodyClass || null,
+    engine: [row.EngineManufacturer,row.EngineModel].filter(Boolean).join(' '),
+    cylinders: row.EngineCylinders ? Number(row.EngineCylinders) : null,
+    displacement: row.DisplacementL ? Number(row.DisplacementL) : null,
+    transmission: row.TransmissionStyle || null,
+    driveType: row.DriveType || null,
+    plantCountry: row.PlantCountry || null,
+  };
+  cache.set(vin, { data: vehicle, exp: now + TTL });
+  res.json({ ok:true, data: vehicle });
+});
+export default router;
+```
+
+Mount under `/api/v1/vin`.
+
+---
+
+## 6) Responsive image component (srcset + sizes)
+
+**`client/src/components/ResponsiveImg.tsx`**
+
+```tsx
+export type Asset = { sources:{ url:string;width:number;type:string }[]; placeholder?:string };
+export default function ResponsiveImg({ asset, alt='' }: { asset: Asset; alt?:string }){
+  const webp = asset.sources.filter(s=>s.type==='webp');
+  const srcset = webp.map(s=>`${s.url} ${s.width}w`).join(', ');
+  const src = webp[0]?.url || asset.sources[0]?.url || '';
+  return (
+    <img src={src} srcSet={srcset} sizes="(max-width:768px) 100vw, 1024px" alt={alt} loading="lazy" decoding="async" className="w-full h-full object-contain" />
+  );
+}
+```
+
+---
+
+## 7) Error boundary (prevents WSOD)
+
+**`client/src/components/ErrorBoundary.tsx`**
+
+```tsx
+import React from 'react';
+export default class ErrorBoundary extends React.Component<{children:React.ReactNode},{err?:Error}>{
+  state = { err: undefined as Error | undefined };
+  static getDerivedStateFromError(err:Error){ return { err }; }
+  componentDidCatch(err:Error, info:React.ErrorInfo){ console.error('UI error', err, info); }
+  render(){ return this.state.err ? (
+    <div className="max-w-xl mx-auto p-6 text-red-700 bg-red-50 rounded-xl mt-6">
+      <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
+      <p className="text-sm">Please refresh the page. If the problem persists, contact support.</p>
+    </div>
+  ) : this.props.children; }
+}
+```
+
+Wrap app root: **`client/src/main.tsx`**
+
+```tsx
+import ErrorBoundary from './components/ErrorBoundary';
+// ...
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </React.StrictMode>
+);
+```
+
+---
+
+## 8) Unified page container + header helpers
+
+**`client/src/components/Page.tsx`**
+
+```tsx
+export function PageContainer({ children }:{children:React.ReactNode}){
+  return <main className="max-w-7xl mx-auto px-3 sm:px-6 py-6">{children}</main>;
+}
+export function PageHeader({ title, subtitle }:{title:string; subtitle?:string}){
+  return (
+    <header className="mb-6">
+      <h1 className="text-3xl font-bold tracking-tight text-slate-900">{title}</h1>
+      {subtitle && <p className="text-slate-600 mt-1">{subtitle}</p>}
+    </header>
+  );
+}
+```
+
+Use these across pages to keep spacing consistent.
+
+---
+
+## 9) Favicon & PWA basics
+
+**`client/index.html`** (head snippet)
+
+```html
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+```
+
+Place assets in `client/public/`.
+
+---
+
+## 10) GitHub Actions CI (typecheck, build)
+
+**`.github/workflows/ci.yml`**
+
+```yml
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with: { node-version: 20, cache: 'pnpm' }
+      - run: pnpm i --frozen-lockfile
+      - run: pnpm -w run typecheck || true
+      - run: pnpm -w run build
+```
+
+---
+
+## 11) DB integrity (Drizzle migration sketch)
+
+Create a migration to enforce uniqueness:
+
+```sql
+-- vehicles table example
+ALTER TABLE vehicles
+  ADD CONSTRAINT vehicles_owner_vin_unique UNIQUE (owner_id, vin);
+
+-- public_registry table (if separate)
+ALTER TABLE public_registry
+  ADD CONSTRAINT public_registry_vin_unique UNIQUE (vin);
+```
+
+---
+
+## 12) 404 + signin redirect (client Router snippets)
+
+```tsx
+// Redirect authed users away from /signin
+if (isAuthed() && location.pathname === '/signin') window.location.replace('/dashboard');
+
+// NotFound page
+export function NotFound(){
+  return (
+    <PageContainer>
+      <PageHeader title="Page not found" subtitle="Try searching or go back to the dashboard." />
+      <a href="/dashboard" className="inline-flex px-4 py-2 rounded-xl bg-slate-900 text-white">Back to Dashboard</a>
+    </PageContainer>
+  );
+}
+```
+
+---
+
+## 13) QA checklist
+
+* [ ] Client calls `/api/v1` same‑origin in dev; CORS allows hosted frontend.
+* [ ] VIN decode: rate‑limited, cached, validated by Zod.
+* [ ] ErrorBoundary catches widget errors; app still renders.
+* [ ] All pages share consistent gutters via `PageContainer`.
+* [ ] Favicon and manifest load on every route.
+* [ ] CI builds on PRs and `main` pushes.

@@ -147,8 +147,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Apply security and CORS first
-  applySecurity(app);
+  // Mount enhanced VIN routes
+  const vinRouter = (await import('./http/routes/vin')).default;
+  app.use('/api/v1/vin', vinRouter);
   
   // Auth middleware
   await setupAuth(app);
@@ -298,7 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           vehicle.make.toLowerCase().includes(q.toLowerCase()) ||
           vehicle.model.toLowerCase().includes(q.toLowerCase()) ||
           vehicle.year.toString().includes(q) ||
-          vehicle.vin.toLowerCase().includes(q.toLowerCase())
+(vehicle.vin?.toLowerCase().includes(q.toLowerCase()) ?? false)
         );
       }
       
@@ -311,9 +312,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           allModifications.push(...mods.map(mod => ({ ...mod, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` })));
         }
         results.modifications = allModifications.filter(mod =>
-          mod.title.toLowerCase().includes(q.toLowerCase()) ||
+          (mod as any).title?.toLowerCase().includes(q.toLowerCase()) ||
           mod.description?.toLowerCase().includes(q.toLowerCase()) ||
-          mod.category?.toLowerCase().includes(q.toLowerCase())
+          (mod as any).category?.toLowerCase().includes(q.toLowerCase())
         );
       }
       
@@ -326,9 +327,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           allRecords.push(...records.map(record => ({ ...record, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` })));
         }
         results.maintenance = allRecords.filter(record =>
-          record.title.toLowerCase().includes(q.toLowerCase()) ||
+          (record as any).title?.toLowerCase().includes(q.toLowerCase()) ||
           record.description?.toLowerCase().includes(q.toLowerCase()) ||
-          record.category?.toLowerCase().includes(q.toLowerCase())
+          (record as any).category?.toLowerCase().includes(q.toLowerCase())
         );
       }
       
@@ -541,7 +542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const vehicleData = insertVehicleSchema.parse(req.body);
       
       // Check if VIN already exists
-      const existingVehicle = await storage.getVehicleByVin(vehicleData.vin);
+      const existingVehicle = await storage.getVehicleByVin(vehicleData.vin!);
       if (existingVehicle) {
         return res.status(400).json({ message: 'Vehicle with this VIN already exists' });
       }

@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 
 function buildAllowlist() {
@@ -18,6 +19,24 @@ function buildAllowlist() {
 }
 
 export function applySecurity(app: Express) {
+  // Configure Helmet for development - more permissive CSP
+  const isDev = process.env.NODE_ENV === 'development';
+  
+  app.use(helmet({
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    contentSecurityPolicy: isDev ? {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://accounts.google.com", "https://replit.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "https:", "blob:"],
+        connectSrc: ["'self'", "wss:", "ws:"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: []
+      }
+    } : true // Use default strict CSP in production
+  }));
   const allowlist = buildAllowlist();
   
   app.use(cors({

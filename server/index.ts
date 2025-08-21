@@ -1,13 +1,22 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { applySecurity } from "./http/security";
+import { logMiddleware } from "./http/logging";
 import { config } from "dotenv";
 
 // Load environment variables
 config();
 
 const app = express();
-app.use(express.json());
+
+// Apply security first
+applySecurity(app);
+
+// Add request logging
+app.use(logMiddleware);
+
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 
 app.use((req, res, next) => {

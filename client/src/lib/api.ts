@@ -1,4 +1,4 @@
-const base = (import.meta.env.VITE_API_BASE?.trim()) || `${location.origin}/api`;
+const base = (import.meta.env.VITE_API_BASE?.trim()) || `${location.origin}/api/v1`;
 
 export function getToken() { 
   return localStorage.getItem("vg.jwt"); 
