@@ -143,15 +143,15 @@ export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
               </Badge>
             </Button>
             {isAuthenticated ? (
-              <div className="hidden md:flex items-center space-x-3">
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 <button 
                   onClick={onOpenProfile}
                   className="focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full"
                   data-testid="button-profile"
                 >
-                  <Avatar className="w-9 h-9 ring-2 ring-blue-200 dark:ring-blue-700 transition-all duration-200 hover:ring-4 cursor-pointer">
+                  <Avatar className="w-8 h-8 sm:w-9 sm:h-9 ring-2 ring-blue-200 dark:ring-blue-700 transition-all duration-200 hover:ring-4 cursor-pointer">
                     <AvatarImage src={(user as any)?.profileImageUrl || ''} alt="Profile" />
-                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-sm">
                       {(user as any)?.firstName?.charAt(0) || (user as any)?.email?.charAt(0) || '?'}
                     </AvatarFallback>
                   </Avatar>
@@ -165,19 +165,20 @@ export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
                   data-testid="button-logout"
                 >
                   <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline ml-1">Logout</span>
                 </Button>
               </div>
             ) : (
               <Button 
                 variant="outline" 
                 size="sm"
-                className="hidden md:flex bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-2 border-blue-200 dark:border-blue-700 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 shadow-lg"
+                className="flex bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-2 border-blue-200 dark:border-blue-700 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 shadow-lg"
                 onClick={() => window.location.href = '/api/login'}
                 data-testid="button-login-header"
               >
                 <User className="w-4 h-4 mr-2" />
-                <span className="hidden lg:inline">Quick Sign Up</span>
-                <span className="lg:hidden">Sign Up</span>
+                <span className="hidden sm:inline">Sign In</span>
+                <span className="sm:hidden">Sign In</span>
               </Button>
             )}
           </div>
