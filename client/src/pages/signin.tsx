@@ -22,9 +22,13 @@ export default function SignIn() {
     usernameOrEmail: "",
   });
 
-  const handleSignInSuccess = () => {
-    // Redirect to dashboard after successful sign in
-    window.location.href = "/";
+  const handleSignInSuccess = (user?: any) => {
+    // Redirect based on user role - admin users go to admin dashboard
+    if (user?.role === "admin") {
+      window.location.href = "/admin";
+    } else {
+      window.location.href = "/";
+    }
   };
 
   const handleSignInError = (errorMsg: string) => {
@@ -74,7 +78,7 @@ export default function SignIn() {
         setAuthToken(data.token);
       }
       
-      handleSignInSuccess();
+      handleSignInSuccess(data.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -93,7 +97,7 @@ export default function SignIn() {
 
         {/* Google */}
         <div className="mt-4">
-          <GoogleSignInButton onSuccess={handleSignInSuccess} onError={handleSignInError} />
+          <GoogleSignInButton onSuccess={() => handleSignInSuccess()} onError={handleSignInError} />
         </div>
 
         {/* Divider */}

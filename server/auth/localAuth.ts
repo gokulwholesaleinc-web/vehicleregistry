@@ -86,7 +86,8 @@ router.post("/register", async (req, res) => {
         email: newUser.email, 
         username: newUser.username,
         firstName: newUser.firstName,
-        lastName: newUser.lastName
+        lastName: newUser.lastName,
+        role: newUser.role
       } 
     });
     
@@ -155,7 +156,8 @@ router.post("/login", async (req, res) => {
         email: user.email, 
         username: user.username,
         firstName: user.firstName,
-        lastName: user.lastName
+        lastName: user.lastName,
+        role: user.role
       } 
     });
     
