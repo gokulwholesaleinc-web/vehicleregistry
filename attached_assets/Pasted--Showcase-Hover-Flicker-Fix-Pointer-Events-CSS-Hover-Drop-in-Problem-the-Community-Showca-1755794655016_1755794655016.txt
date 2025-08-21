@@ -1,0 +1,93 @@
+# Showcase Hover Flicker Fix — Pointer‑Events & CSS Hover (Drop‑in)
+
+> Problem: the Community Showcase **flickers when you move the mouse over it**. That happens when a hover overlay (e.g., “Click to view full size”) is conditionally rendered with React state. The overlay then captures the mouse, triggers `onMouseLeave` on the parent, unmounts, and re‑fires — causing a rapid show/hide loop.
+>
+> **Fix:** remove hover state entirely and render the overlay **always**, but make it **CSS‑controlled** with `group-hover` and **`pointer-events-none`** so it never intercepts the cursor. Keep the modal click using the click‑intent hook.
+
+---
+
+## 1) Drop‑in replacement for the Showcase card wrapper
+
+**`client/src/components/ShowcaseCard.tsx`** (replace your current clickable wrapper)
+
+```tsx
+import { useState, useCallback } from 'react';
+import ShowcaseSlide from '@/components/ShowcaseSlide';
+import Modal from '@/components/Modal';
+import useClickIntent from '@/lib/useClickIntent';
+
+export default function ShowcaseCard({ item }:{ item: { id:string; title:string; photoUrl:string } }){
+  const [open, setOpen] = useState(false);
+  const { onPointerDown, onPointerUp } = useClickIntent();
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (onPointerUp(e)) setOpen(true); // open only on true click, not drags
+  }, [onPointerUp]);
+
+  return (
+    <div
+      className="group relative select-none cursor-pointer"
+      onPointerDown={onPointerDown}
+      onPointerUp={handlePointerUp}
+      onClick={(e)=>e.preventDefault()} // block bubbling to carousel nav
+    >
+      {/* Image/slide */}
+      <ShowcaseSlide photoUrl={item.photoUrl} title={item.title} />
+
+      {/* Hover hint rendered ALWAYS; CSS handles visibility; pointer-events disabled */}
+      <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
+        <span className="rounded-full bg-slate-900/70 text-white text-xs px-3 py-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          Click to view full size
+        </span>
+      </div>
+
+      {/* Modal */}
+      <Modal open={open} onClose={()=>setOpen(false)}>
+        <div className="relative">
+          <ShowcaseSlide photoUrl={item.photoUrl} title={item.title} />
+          <button
+            onClick={()=>setOpen(false)}
+            className="absolute top-3 right-3 h-9 w-9 rounded-full bg-white/90 hover:bg-white shadow grid place-items-center"
+            aria-label="Close"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5 text-slate-800"><path fill="currentColor" d="M6.4 4.9L4.9 6.4 10.5 12l-5.6 5.6 1.5 1.5L12 13.5l5.6 5.6 1.5-1.5L13.5 12l5.6-5.6-1.5-1.5L12 10.5 6.4 4.9z"/></svg>
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+```
+
+**Why this stops flicker**
+
+* The overlay **never mounts/unmounts on hover**, so there’s no event tug‑of‑war.
+* `pointer-events-none` means the overlay can’t steal the cursor from the card, so `onPointerLeave` on the parent never fires just because of the hint.
+* `group-hover:opacity-100` handles the animation purely in CSS.
+
+---
+
+## 2) Optional: ensure carousel doesn’t fight the modal
+
+If the carousel auto‑plays or listens to hover, pause it while the modal is open (pseudo‑code):
+
+```ts
+useEffect(()=>{ open ? carouselRef.current?.pause?.() : carouselRef.current?.play?.(); }, [open]);
+```
+
+---
+
+## 3) QA checklist
+
+* [ ] Move mouse across the slide: overlay fades in/out smoothly — **no flicker**.
+* [ ] Click once: modal opens; drag left/right: carousel slides without opening.
+* [ ] ESC/backdrop click closes modal; background doesn’t scroll while open.
+* [ ] No console warnings about nested interactive elements.
+
+---
+
+### Notes for your Replit agent
+
+* Remove any remaining `hover` state (`useState`) logic tied to the showcase card; it’s no longer needed.
+* Ensure Tailwind is available for `group`, `group-hover`, and `pointer-events-none` utilities (default Tailwind setup supports these).
+* If your implementation uses `<Link>` wrapping the slide, remove it on showcase items so the modal is the primary interaction.

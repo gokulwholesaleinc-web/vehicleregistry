@@ -1,0 +1,180 @@
+# VIN Decode CORS + Base URL + Slideshow Click Fix (Drop‑in Pack)
+
+> Your screenshot shows two root errors:
+>
+> 1. **CORS failure** for `POST http://localhost:3000/api/v1/vin/decode` → NetworkError.
+> 2. **ReferenceError**: `handleImageClick is not defined` in `community-slideshow.tsx`.
+>
+> This pack resolves both with copy‑paste changes.
+
+---
+
+## 0) Env sanity (one time)
+
+**`.env.example`**
+
+```env
+# Client
+VITE_API_BASE=
+
+# Server
+FRONTEND_BASE=
+```
+
+* In **local dev**, leave `VITE_API_BASE` blank so the client uses same‑origin (`/api/v1`).
+* In **Replit/cloud**, set:
+
+  * `FRONTEND_BASE=https://<your-frontend-host>` (e.g., `https://c80ec43d...replit.dev`)
+  * Optionally set `VITE_API_BASE=https://<your-api-host>/api/v1` **only if** API is on a different origin.
+
+---
+
+## 1) Server — strict CORS allowlist + OPTIONS handler
+
+Create **`server/http/security.ts`**
+
+```ts
+import type { Express } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+
+function buildAllowlist(){
+  const list = new Set<string>();
+  if (process.env.FRONTEND_BASE) list.add(process.env.FRONTEND_BASE);
+  // Replit preview wildcard (http + https): allow same-origin subdomains if needed
+  if (process.env.REPLIT_HOST) {
+    list.add(`https://${process.env.REPLIT_HOST}`);
+    list.add(`http://${process.env.REPLIT_HOST}`);
+  }
+  // Local dev
+  list.add('http://localhost:5173');
+  list.add('http://127.0.0.1:5173');
+  return Array.from(list);
+}
+
+export function applySecurity(app: Express){
+  const allowlist = buildAllowlist();
+  app.use(helmet({
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  }));
+  app.use(cors({
+    origin(origin, cb){
+      if (!origin) return cb(null, true); // same-origin / curl
+      return cb(null, allowlist.includes(origin));
+    },
+    methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders: ['Content-Type','Authorization'],
+    credentials: false,
+    maxAge: 86400,
+  }));
+  // Preflight for all routes
+  app.options('*', cors());
+}
+```
+
+Mount early in your app (before routers):
+**`server/http/app.ts`** (excerpt)
+
+```ts
+import express from 'express';
+import { applySecurity } from './security';
+
+export function buildApp(){
+  const app = express();
+  applySecurity(app);          // <— BEFORE routes
+  app.use(express.json());
+  // ... mount /api/v1 routes
+  return app;
+}
+```
+
+> This stops the `CORS request did not succeed` error and allows `Authorization` for your JWT.
+
+---
+
+## 2) Client — safe base URL + better network errors
+
+Replace **`client/src/lib/api.ts`**
+
+```ts
+const base = (import.meta.env.VITE_API_BASE?.trim()) || `${location.origin}/api/v1`;
+
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t: string | null){ t?localStorage.setItem('vg.jwt', t):localStorage.removeItem('vg.jwt'); }
+
+export async function api(path: string, init: RequestInit = {}){
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken();
+  if (t) headers.set('Authorization', `Bearer ${t}`);
+  try{
+    const res = await fetch(`${base}${path}`, { ...init, headers, mode: 'cors' });
+    if (res.status === 401){ setToken(null); throw new Error('Your session expired. Please sign in again.'); }
+    const json = await res.json().catch(()=>null);
+    if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+    return json;
+  }catch(err:any){
+    throw new Error(err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
+      ? 'Network error: API not reachable (CORS/base URL).'
+      : (err?.message || 'Request failed'));
+  }
+}
+```
+
+> This avoids hard‑coding `http://localhost:3000` in the client when you’re on Replit.
+
+---
+
+## 3) Fix `handleImageClick is not defined` in the slideshow
+
+If you previously removed a handler during the modal refactor, define it inline using the click‑intent hook to avoid double‑fires.
+
+**`client/src/components/community-slideshow.tsx`** *(patch the clickable wrapper)*
+
+```tsx
+import useClickIntent from '@/lib/useClickIntent';
+import Modal from '@/components/Modal';
+
+export default function CommunitySlideshow({ item /* ... */ }){
+  const { onPointerDown, onPointerUp } = useClickIntent();
+  const [open, setOpen] = useState(false);
+
+  function handlePointerUp(e: React.PointerEvent){
+    if (onPointerUp(e)) setOpen(true); // only open on real click
+  }
+
+  return (
+    <div
+      className="group cursor-pointer select-none"
+      onPointerDown={onPointerDown}
+      onPointerUp={handlePointerUp}
+      onClick={(e)=>e.preventDefault()}
+    >
+      {/* ... your slide content ... */}
+      <Modal open={open} onClose={()=>setOpen(false)}>
+        {/* modal body */}
+      </Modal>
+    </div>
+  );
+}
+```
+
+> Replace any references to the old `handleImageClick` with `handlePointerUp` above.
+
+---
+
+## 4) Quick test plan
+
+1. **Restart server** so CORS picks up `FRONTEND_BASE`.
+2. Open DevTools → **Network** → trigger `POST /api/v1/vin/decode` from the VIN modal.
+
+   * Should show **200** (or a clean 4xx with JSON if invalid). No CORS error.
+3. Try from both **local** and your **Replit** URL — requests should succeed from both allowed origins.
+4. Click showcase items: modal opens smoothly; **no ReferenceError** and **no flicker**.
+
+---
+
+## 5) Notes for your Replit agent
+
+* If the API and frontend are on the **same** Replit instance, you can leave `VITE_API_BASE` blank and route via the server’s SPA fallback at `/api/v1` (best for CORS).
+* If they’re on **different** hosts, set both `FRONTEND_BASE` (server) and `VITE_API_BASE` (client) to the correct HTTPS URLs.

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChevronLeft, ChevronRight, Heart, Eye, User, Calendar, Play, Pause, X, MapPin } from "lucide-react";
 import ShowcaseSlide from "./ShowcaseSlide";
 import Modal from "./Modal";
@@ -175,7 +174,8 @@ export default function CommunitySlideshow() {
   const currentPhoto = samplePhotos[currentIndex];
 
   return (
-    <Card className="card-modern overflow-hidden focus:outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
+    <>
+      <Card className="card-modern overflow-hidden focus:outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
       <CardContent className="p-0">
         <div 
           ref={slideRef}
@@ -337,125 +337,122 @@ export default function CommunitySlideshow() {
           </div>
         </div>
       </CardContent>
+    </Card>
 
-      {/* Full Size Image Modal */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] p-0 overflow-hidden">
-          <DialogHeader className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/80 to-transparent p-4">
-            <div className="flex items-center justify-between text-white">
-              <DialogTitle className="text-xl font-bold">
+    {/* Full Size Image Modal */}
+    <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)}>
+      <div className="relative">
+        {/* Header */}
+        <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/80 to-transparent p-4">
+          <div className="flex items-center justify-between text-white">
+            <h3 className="text-xl font-bold">
+              {currentPhoto.year} {currentPhoto.make} {currentPhoto.model}
+            </h3>
+            <button 
+              onClick={() => setIsModalOpen(false)} 
+              className="h-9 w-9 rounded-full bg-white/90 hover:bg-white shadow grid place-items-center" 
+              aria-label="Close"
+              data-testid="button-close-modal"
+            >
+              <X className="h-5 w-5 text-slate-800" />
+            </button>
+          </div>
+        </div>
+
+        {/* Full Size Image */}
+        <ShowcaseSlide 
+          photoUrl={currentPhoto.imageUrl}
+          title={`${currentPhoto.year} ${currentPhoto.make} ${currentPhoto.model}`}
+        />
+
+        {/* Detailed Info Overlay */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent p-6">
+          <div className="text-white space-y-4">
+            {/* Title and Nickname */}
+            <div>
+              <h3 className="text-2xl font-bold mb-1">
                 {currentPhoto.year} {currentPhoto.make} {currentPhoto.model}
-              </DialogTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsModalOpen(false)}
-                className="text-white hover:bg-white/20 h-8 w-8"
-                data-testid="button-close-modal"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              </h3>
+              <p className="text-lg text-white/90 italic">"{currentPhoto.vehicleName}"</p>
             </div>
-          </DialogHeader>
 
-          <div className="relative">
-            {/* Full Size Image */}
-            <img
-              src={currentPhoto.imageUrl}
-              alt={`${currentPhoto.year} ${currentPhoto.make} ${currentPhoto.model}`}
-              className="w-full h-auto max-h-[70vh] object-contain"
-              data-testid="modal-full-image"
-            />
-
-            {/* Detailed Info Overlay */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent p-6">
-              <div className="text-white space-y-4">
-                {/* Title and Nickname */}
-                <div>
-                  <h3 className="text-2xl font-bold mb-1">
-                    {currentPhoto.year} {currentPhoto.make} {currentPhoto.model}
-                  </h3>
-                  <p className="text-lg text-white/90 italic">"{currentPhoto.vehicleName}"</p>
+            {/* Stats Row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-6">
+                <button className="flex items-center space-x-2 hover:text-red-300 transition-colors">
+                  <Heart className="w-5 h-5" />
+                  <span className="font-medium">{currentPhoto.likes} likes</span>
+                </button>
+                <div className="flex items-center space-x-2">
+                  <Eye className="w-5 h-5" />
+                  <span className="font-medium">{currentPhoto.views} views</span>
                 </div>
+              </div>
+              <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                {currentIndex + 1} of {samplePhotos.length}
+              </Badge>
+            </div>
 
-                {/* Stats Row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-6">
-                    <button className="flex items-center space-x-2 hover:text-red-300 transition-colors">
-                      <Heart className="w-5 h-5" />
-                      <span className="font-medium">{currentPhoto.likes} likes</span>
-                    </button>
-                    <div className="flex items-center space-x-2">
-                      <Eye className="w-5 h-5" />
-                      <span className="font-medium">{currentPhoto.views} views</span>
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                    {currentIndex + 1} of {samplePhotos.length}
-                  </Badge>
+            {/* Owner and Location Info */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4 text-white/90">
+                <div className="flex items-center space-x-2">
+                  <User className="w-4 h-4" />
+                  <span className="font-medium">{currentPhoto.ownerName}</span>
                 </div>
-
-                {/* Owner and Location Info */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4 text-white/90">
-                    <div className="flex items-center space-x-2">
-                      <User className="w-4 h-4" />
-                      <span className="font-medium">{currentPhoto.ownerName}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="w-4 h-4" />
-                      <span>{currentPhoto.location}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>{currentPhoto.uploadDate}</span>
-                    </div>
-                  </div>
+                <div className="flex items-center space-x-2">
+                  <MapPin className="w-4 h-4" />
+                  <span>{currentPhoto.location}</span>
                 </div>
-
-                {/* Tags */}
-                <div className="flex flex-wrap gap-2">
-                  {currentPhoto.tags.map((tag) => (
-                    <Badge 
-                      key={tag} 
-                      variant="secondary" 
-                      className="bg-white/20 text-white border-white/30 hover:bg-white/30 transition-colors"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-
-                {/* Navigation in Modal */}
-                <div className="flex items-center justify-center space-x-4 pt-2">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      prevSlide();
-                    }}
-                    className="text-white hover:bg-white/20"
-                    data-testid="button-modal-prev"
-                  >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      nextSlide();
-                    }}
-                    className="text-white hover:bg-white/20"
-                    data-testid="button-modal-next"
-                  >
-                    Next
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
+                <div className="flex items-center space-x-2">
+                  <Calendar className="w-4 h-4" />
+                  <span>{currentPhoto.uploadDate}</span>
                 </div>
               </div>
             </div>
+
+            {/* Tags */}
+            <div className="flex flex-wrap gap-2">
+              {currentPhoto.tags.map((tag) => (
+                <Badge 
+                  key={tag} 
+                  variant="secondary" 
+                  className="bg-white/20 text-white border-white/30 hover:bg-white/30 transition-colors"
+                >
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+
+            {/* Navigation in Modal */}
+            <div className="flex items-center justify-center space-x-4 pt-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  prevSlide();
+                }}
+                className="text-white hover:bg-white/20"
+                data-testid="button-modal-prev"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Previous
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  nextSlide();
+                }}
+                className="text-white hover:bg-white/20"
+                data-testid="button-modal-next"
+              >
+                Next
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    </Card>
+        </div>
+      </div>
+    </Modal>
+    </>
   );
 }

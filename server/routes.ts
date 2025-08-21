@@ -14,6 +14,7 @@ import { mileageVerificationRouter } from "./routes/mileageVerification";
 import { pdfReportsRouter } from "./routes/pdfReports";
 import { csvImportExportRouter } from "./routes/csvImportExport";
 import vinRouter from "./routes/vin";
+import { applySecurity } from "./http/security";
 import { 
   insertVehicleSchema,
   insertModificationSchema,
@@ -146,6 +147,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Apply security and CORS first
+  applySecurity(app);
+  
   // Auth middleware
   await setupAuth(app);
   

@@ -1,3 +1,5 @@
+const base = (import.meta.env.VITE_API_BASE?.trim()) || `${location.origin}/api`;
+
 export function getToken() { 
   return localStorage.getItem("vg.jwt"); 
 }
@@ -22,21 +24,27 @@ export async function api(path: string, init: RequestInit = {}) {
     headers.set("Authorization", `Bearer ${token}`);
   }
   
-  const baseUrl = import.meta.env.VITE_API_BASE || "";
-  const res = await fetch(baseUrl + path, { 
-    ...init, 
-    headers 
-  });
-  
-  if (res.status === 401) {
-    setToken(null);
-    throw new Error("Your session expired. Please sign in again.");
+  try {
+    const res = await fetch(`${base}${path}`, { 
+      ...init, 
+      headers,
+      mode: 'cors'
+    });
+    
+    if (res.status === 401) {
+      setToken(null);
+      throw new Error("Your session expired. Please sign in again.");
+    }
+    
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(json?.error?.message || json?.message || `HTTP ${res.status}`);
+    }
+    
+    return json;
+  } catch (err: any) {
+    throw new Error(err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
+      ? 'Network error: API not reachable (CORS/base URL).'
+      : (err?.message || 'Request failed'));
   }
-  
-  const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(json?.error?.message || json?.message || `HTTP ${res.status}`);
-  }
-  
-  return json;
 }
