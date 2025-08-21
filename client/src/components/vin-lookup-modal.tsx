@@ -27,7 +27,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Sparkles, Car, PlusCircle } from "lucide-react";
@@ -92,13 +92,14 @@ export function VinLookupModal() {
     mutationFn: async (data: z.infer<typeof vinLookupSchema>) => {
       setIsLookingUp(true);
       try {
-        const response = await apiRequest("POST", "/api/ai/decode-vin", { vin: data.vin });
-        
-        if (!response.ok) {
-          throw new Error("Failed to decode VIN");
-        }
-        
-        return response.json();
+        const result = await api('/v1/vin/decode', { 
+          method: 'POST', 
+          body: JSON.stringify({ 
+            vin: data.vin, 
+            mileage: data.currentMileage 
+          }) 
+        });
+        return result.data;
       } finally {
         setIsLookingUp(false);
       }
@@ -121,14 +122,10 @@ export function VinLookupModal() {
 
   const createFromVinMutation = useMutation({
     mutationFn: async (data: z.infer<typeof vinLookupSchema>) => {
-      const response = await apiRequest("POST", "/api/vehicles/create-from-vin", data);
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create vehicle");
-      }
-      
-      return response.json();
+      return await api('/vehicles/create-from-vin', { 
+        method: 'POST', 
+        body: JSON.stringify(data) 
+      });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
@@ -151,14 +148,10 @@ export function VinLookupModal() {
 
   const createDraftMutation = useMutation({
     mutationFn: async (data: z.infer<typeof draftVehicleSchema>) => {
-      const response = await apiRequest("POST", "/api/vehicles/create-draft", data);
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create draft vehicle");
-      }
-      
-      return response.json();
+      return await api('/vehicles/create-draft', { 
+        method: 'POST', 
+        body: JSON.stringify(data) 
+      });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });

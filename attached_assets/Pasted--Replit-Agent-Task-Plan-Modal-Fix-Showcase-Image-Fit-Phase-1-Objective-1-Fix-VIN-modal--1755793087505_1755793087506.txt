@@ -1,0 +1,175 @@
+# Replit Agent Task Plan — Modal Fix + Showcase Image Fit (Phase 1)
+
+> Objective: (1) Fix VIN modal click/submit so decoding works; (2) Implement **MediaFit** + **ShowcaseSlide** so cars aren’t cropped in the community showcase. Keep backend enhancements for Phase 2.
+
+---
+
+## 0) Branch
+
+* **Branch name:** `feat/modal-and-showcase-phase1`
+
+---
+
+## 1) Tasks & Commit Messages
+
+### Task A — Normalize client API + fix VIN modal (401 + click/submit)
+
+**Files:**
+
+* `client/src/lib/api.ts` (create/replace)
+* `client/src/components/VinDecodeModal.tsx` (update submit handler to use API helper)
+
+**Commit message:**
+
+```
+chore(client): add API helper with auth + wire VIN modal to use it (fixes 401)
+```
+
+**Steps:**
+
+1. Create `client/src/lib/api.ts` with the helper:
+
+```ts
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t:string|null){ t?localStorage.setItem('vg.jwt',t):localStorage.removeItem('vg.jwt'); }
+export async function api(path:string, init:RequestInit={}){
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken();
+  if (t) headers.set('Authorization', `Bearer ${t}`);
+  const r = await fetch(import.meta.env.VITE_API_BASE + path, { ...init, headers });
+  if (r.status === 401){ setToken(null); throw new Error('Your session expired. Please sign in again.'); }
+  const j = await r.json().catch(()=>null);
+  if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
+  return j;
+}
+```
+
+2. In `VinDecodeModal.tsx`, replace raw `fetch` with:
+
+```tsx
+import { api } from '@/lib/api';
+// ... inside onSubmit handler
+const res = await api('/vin/decode', { method:'POST', body: JSON.stringify({ vin, mileage }) });
+// res.data contains normalized vehicle; call the modal success callback
+```
+
+3. Confirm the modal button is a `<button type="submit">` and the form prevents default once.
+
+**Acceptance:** Submitting a valid VIN returns data; invalid VIN shows friendly error. No 401 toast.
+
+---
+
+### Task B — Add MediaFit to avoid cropping, plus ShowcaseSlide wrapper
+
+**Files:**
+
+* `client/src/components/MediaFit.tsx` (new)
+* `client/src/components/ShowcaseSlide.tsx` (new)
+* `client/src/components/ShowcaseCarousel.tsx` (or wherever showcase images render) — swap the `<img>` with `ShowcaseSlide`
+
+**Commit message:**
+
+```
+feat(showcase): add MediaFit + ShowcaseSlide to prevent car image cropping with letterbox backdrop
+```
+
+**Steps:**
+
+1. Create `MediaFit.tsx`:
+
+```tsx
+import { useEffect, useRef, useState } from 'react';
+export default function MediaFit({ src, alt = '', className = '', bg = '#0b1220' }: { src: string; alt?: string; className?: string; bg?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<'contain'|'cover'>('contain');
+  useEffect(() => {
+    const img = new Image(); img.src = src; img.onload = () => {
+      const iw = img.naturalWidth || 1, ih = img.naturalHeight || 1;
+      const cr = (ref.current?.clientWidth || 1) / (ref.current?.clientHeight || 1);
+      const ir = iw/ih; const close = Math.abs(ir - cr) < 0.25; setFit(close ? 'cover' : 'contain'); };
+  }, [src]);
+  return (
+    <div ref={ref} className={`relative h-full w-full overflow-hidden ${className}`} style={{backgroundColor: bg}}>
+      <img src={src} aria-hidden className="absolute inset-0 h-full w-full object-cover blur-sm opacity-30" />
+      <img src={src} alt={alt} className={`relative z-10 h-full w-full object-${fit}`} />
+    </div>
+  );
+}
+```
+
+2. Create `ShowcaseSlide.tsx`:
+
+```tsx
+import MediaFit from './MediaFit';
+export default function ShowcaseSlide({ photoUrl, title }: { photoUrl: string; title: string }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl">
+      <div className="aspect-[16/9] sm:aspect-[16/9] md:aspect-[21/9]">
+        <MediaFit src={photoUrl} alt={title} className="rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+```
+
+3. In the showcase component, replace the `<img>` usage:
+
+```tsx
+// before: <img src={it.url} className="... object-cover ..." />
+// after:
+<ShowcaseSlide key={it.id} photoUrl={it.url} title={it.title} />
+```
+
+**Acceptance:** The vehicle is fully visible (letterboxed if necessary). No important parts (roof/bumper) are cropped.
+
+---
+
+### Task C — Optional styling polish for the slide container
+
+**Commit message:**
+
+```
+style(showcase): soften edges and keep consistent card radius/shadow
+```
+
+**Change:** Ensure slide wrapper has `rounded-2xl overflow-hidden` and parent card retains `shadow-sm` + `border` for consistency.
+
+---
+
+## 2) Env & Config sanity
+
+* Confirm `VITE_API_BASE` points to the server: `http://localhost:3000/api/v1` (or your deployed base).
+* Confirm user has a valid token in `localStorage` (`vg.jwt`) after sign-in.
+
+---
+
+## 3) Test Plan
+
+1. **Auth smoke:** Visit `/api/v1/auth/whoami` in the Network panel after login → should be 200 with user payload.
+2. **VIN modal:** Enter a valid VIN → should return normalized data and close modal / populate vehicle form. No 401.
+3. **Invalid VIN:** Enter an obviously bad VIN → modal shows friendly validation message.
+4. **Showcase images:** Scroll through slides on `/dashboard` → vehicles are fully visible. Resize window (mobile → desktop) to verify fit.
+5. **Regression:** Verify no layout shift/jitter when images load (blur backdrop should avoid harsh edges).
+
+---
+
+## 4) Hand-off Notes
+
+* Keep Sharp/Helmet/Zod from the previous pack for **Phase 2** only; do not add in this branch.
+* If the showcase uses a 3rd-party carousel, ensure slides don’t set their own `object-cover`; override with our component.
+* If any codegen alias is used (e.g., `@/lib/api`), confirm `tsconfig.json` `paths` are configured; otherwise use relative imports.
+
+---
+
+## 5) PR Title & Description
+
+**Title:** `feat: fix VIN modal auth + non-cropping showcase images (phase 1)`
+
+**Description:**
+
+* Adds client API helper that attaches JWT and normalizes error handling.
+* Wires VIN modal submit to the helper to resolve 401 Unauthorized.
+* Introduces `MediaFit` (smart contain/cover + blurred backdrop) and `ShowcaseSlide` with aspect ratios.
+* Replaces raw `<img>` in the community showcase to prevent vehicle cropping.
+* Includes tests/QA checklist in the PR body.

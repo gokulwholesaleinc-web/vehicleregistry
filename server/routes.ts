@@ -13,6 +13,7 @@ import { showcaseRouter } from "./routes/showcase";
 import { mileageVerificationRouter } from "./routes/mileageVerification";
 import { pdfReportsRouter } from "./routes/pdfReports";
 import { csvImportExportRouter } from "./routes/csvImportExport";
+import vinRouter from "./routes/vin";
 import { 
   insertVehicleSchema,
   insertModificationSchema,
@@ -875,17 +876,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // AI-Powered Endpoints
-  app.post('/api/ai/decode-vin', isAuthenticated, async (req, res) => {
-    try {
-      const { vin } = z.object({ vin: z.string().min(17).max(17) }).parse(req.body);
-      const decoded = await decodeVIN(vin);
-      res.json(decoded);
-    } catch (error) {
-      console.error('VIN decode error:', error);
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to decode VIN' });
-    }
-  });
+  // Mount VIN router
+  app.use('/api/v1/vin', vinRouter);
 
   app.post('/api/ai/maintenance-recommendations', isAuthenticated, async (req, res) => {
     try {
