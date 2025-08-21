@@ -28,13 +28,13 @@ export default function RotatingHero() {
   return (
     <section className="relative isolate">
       {/* Rotating vehicle images */}
-      <div className="relative h-[56vh] w-full overflow-hidden">
+      <div className="relative h-[56vh] w-full overflow-hidden bg-slate-900">
         {VEHICLE_IMAGES.map((imageUrl, index) => (
           <img
             key={imageUrl}
             src={imageUrl}
             alt={`Featured community build ${index + 1}`}
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
+            className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-1000 ${
               index === currentImageIndex ? "opacity-100" : "opacity-0"
             }`}
           />
