@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import Header from "@/components/header";
+import AppHeader from "@/components/AppHeader";
 import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 
 interface PlatformStats {
@@ -186,7 +186,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onAddEntry={() => {}} />
+      <AppHeader unread={1} />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
