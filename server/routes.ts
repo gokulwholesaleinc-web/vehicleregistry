@@ -9,7 +9,8 @@ import {
   insertVehicleSchema,
   insertModificationSchema,
   insertMaintenanceRecordSchema,
-  insertUpcomingMaintenanceSchema
+  insertUpcomingMaintenanceSchema,
+  insertVehicleTransferSchema
 } from "@shared/schema";
 import { z } from "zod";
 import path from "path";
@@ -173,10 +174,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         vehicleId: req.params.id,
         fromUserId,
         toUserId,
-        transferCode,
         message,
         expiresAt,
-      });
+      } as any);
       
       res.json(transfer);
     } catch (error) {
@@ -528,7 +528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         case 'modification':
           // Check for similar modification entries by title
-          const vehicles = await storage.getVehiclesByOwner(req.user?.claims?.sub);
+          const vehicles = await storage.getVehiclesByOwner((req.user as any).claims.sub);
           for (const vehicle of vehicles) {
             const modifications = await storage.getModifications(vehicle.id);
             existingRecord = modifications.find(mod => 
@@ -543,12 +543,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         case 'maintenance':
           // Similar check for maintenance records
-          const userVehicles = await storage.getVehiclesByOwner(req.user?.claims?.sub);
+          const userVehicles = await storage.getVehiclesByOwner((req.user as any).claims.sub);
           for (const vehicle of userVehicles) {
             const records = await storage.getMaintenanceRecords(vehicle.id);
             existingRecord = records.find(record => 
-              record.title.toLowerCase().includes(identifier.toLowerCase()) ||
-              identifier.toLowerCase().includes(record.title.toLowerCase())
+              record.serviceType.toLowerCase().includes(identifier.toLowerCase()) ||
+              identifier.toLowerCase().includes(record.serviceType.toLowerCase())
             );
             if (existingRecord) {
               exists = true;

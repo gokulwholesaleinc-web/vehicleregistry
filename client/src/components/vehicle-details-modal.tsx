@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Car, Calendar, Wrench, Camera, DollarSign, MapPin, Fuel, Settings, Edit3, Save, X } from "lucide-react";
+import { Car, Calendar, Wrench, Camera, DollarSign, MapPin, Fuel, Settings, Edit3, Save, X, Share2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { insertVehicleSchema, type Vehicle } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { z } from "zod";
+import VehicleTransferModal from "@/components/vehicle-transfer-modal";
 
 interface VehicleDetailsModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ type UpdateVehicleData = z.infer<typeof updateVehicleSchema>;
 
 export default function VehicleDetailsModal({ isOpen, onClose, vehicleId }: VehicleDetailsModalProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -123,16 +125,28 @@ export default function VehicleDetailsModal({ isOpen, onClose, vehicleId }: Vehi
           <DialogTitle className="mobile-heading">
             {vehicle.year} {vehicle.make} {vehicle.model}
           </DialogTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleEditToggle}
-            className="interactive-scale"
-            data-testid="button-edit-vehicle"
-          >
-            {isEditing ? <X className="h-4 w-4 mr-2" /> : <Edit3 className="h-4 w-4 mr-2" />}
-            {isEditing ? "Cancel" : "Edit"}
-          </Button>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsTransferModalOpen(true)}
+              className="interactive-scale"
+              data-testid="button-transfer-vehicle"
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Transfer
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleEditToggle}
+              className="interactive-scale"
+              data-testid="button-edit-vehicle"
+            >
+              {isEditing ? <X className="h-4 w-4 mr-2" /> : <Edit3 className="h-4 w-4 mr-2" />}
+              {isEditing ? "Cancel" : "Edit"}
+            </Button>
+          </div>
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="w-full">
@@ -407,6 +421,13 @@ export default function VehicleDetailsModal({ isOpen, onClose, vehicleId }: Vehi
           </TabsContent>
         </Tabs>
       </DialogContent>
+      
+      {/* Vehicle Transfer Modal */}
+      <VehicleTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        vehicle={vehicle}
+      />
     </Dialog>
   );
 }

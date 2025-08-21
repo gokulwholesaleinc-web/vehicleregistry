@@ -160,6 +160,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
 });
 
+export const insertVehicleTransferSchema = createInsertSchema(vehicleTransfers).omit({
+  id: true,
+  transferCode: true,
+  createdAt: true,
+});
+
 // Types
 export type Vehicle = typeof vehicles.$inferSelect;
 export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
@@ -181,7 +187,7 @@ export type VehicleOwnership = typeof vehicleOwnership.$inferSelect;
 export type InsertVehicleOwnership = typeof vehicleOwnership.$inferInsert;
 
 export type VehicleTransfer = typeof vehicleTransfers.$inferSelect;
-export type InsertVehicleTransfer = typeof vehicleTransfers.$inferInsert;
+export type InsertVehicleTransfer = z.infer<typeof insertVehicleTransferSchema>;
 
 // Relations for better querying
 export const usersRelations = relations(users, ({ many }) => ({
