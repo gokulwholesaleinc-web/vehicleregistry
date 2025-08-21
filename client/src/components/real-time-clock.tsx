@@ -2,7 +2,7 @@ import { Clock, Globe } from "lucide-react";
 import { useRealTimeClock } from "@/hooks/useRealTimeClock";
 
 interface RealTimeClockProps {
-  variant?: 'header' | 'full';
+  variant?: 'header' | 'full' | 'mobile';
   className?: string;
 }
 
@@ -18,6 +18,25 @@ export default function RealTimeClock({ variant = 'header', className = '' }: Re
             {time}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 leading-none" data-testid="clock-timezone">
+            {timezone}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (variant === 'mobile') {
+    return (
+      <div className={`bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-4 border border-blue-100 dark:border-gray-600 ${className}`}>
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Live Time</span>
+        </div>
+        <div className="text-center">
+          <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent" data-testid="clock-time-mobile">
+            {time}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1" data-testid="clock-timezone-mobile">
             {timezone}
           </div>
         </div>

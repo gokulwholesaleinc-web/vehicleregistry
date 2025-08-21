@@ -19,37 +19,37 @@ export default function Landing() {
         <div className="absolute top-40 right-20 w-32 h-32 bg-purple-400/20 rounded-full blur-xl animate-float" style={{animationDelay: "2s"}}></div>
         <div className="absolute bottom-20 left-1/4 w-16 h-16 bg-pink-400/20 rounded-full blur-xl animate-float" style={{animationDelay: "4s"}}></div>
         
-        <div className="relative container-responsive py-20 sm:py-32">
+        <div className="relative container-responsive py-16 sm:py-24 lg:py-32">
           <div className="text-center animate-slide-up">
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-8">
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-              <span className="text-sm font-medium text-white">Premium Car Registry Platform</span>
+            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-3 py-1.5 sm:px-4 sm:py-2 mb-6 sm:mb-8 interactive-glow">
+              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 animate-bounce-gentle" />
+              <span className="text-xs sm:text-sm font-medium text-white">Premium Car Registry Platform</span>
             </div>
             
-            <h1 className="heading-xl mb-6 animate-pulse-glow">
+            <h1 className="heading-xl mb-4 sm:mb-6 animate-pulse-glow">
               CarTracker Pro
             </h1>
             
-            <p className="text-lg sm:text-xl text-white/90 mb-12 max-w-4xl mx-auto leading-relaxed animate-slide-up" style={{animationDelay: "0.2s"}}>
+            <p className="mobile-text sm:text-lg lg:text-xl text-white/90 mb-8 sm:mb-12 max-w-4xl mx-auto leading-relaxed animate-slide-up px-4" style={{animationDelay: "0.2s"}}>
               The ultimate community-driven platform for automotive enthusiasts. Track modifications, 
               maintenance records, and connect with fellow car lovers who share your passion for precision.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-up" style={{animationDelay: "0.4s"}}>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center animate-slide-up px-4" style={{animationDelay: "0.4s"}}>
               <Button 
                 size="lg" 
-                className="btn-primary text-lg px-8 py-4 group shadow-2xl"
+                className="btn-primary mobile-text sm:text-lg mobile-padding group shadow-2xl w-full sm:w-auto touch-friendly"
                 onClick={() => setIsSignupModalOpen(true)}
                 data-testid="button-login"
               >
-                <Globe className="w-5 h-5 mr-2" />
+                <Globe className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 Sign Up with Email
-                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
               
-              <div className="flex items-center gap-3 text-white/80 text-sm">
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-white/80 text-xs sm:text-sm">
                 <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <div className="status-indicator status-online"></div>
                   <span>Quick signup</span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -64,16 +64,16 @@ export default function Landing() {
             </div>
             
             {/* Quick features highlight */}
-            <div className="mt-8 flex flex-wrap justify-center gap-4 text-white/70 text-sm animate-slide-up" style={{animationDelay: "0.6s"}}>
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1">
+            <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-2 sm:gap-4 text-white/70 text-xs sm:text-sm animate-slide-up px-4" style={{animationDelay: "0.6s"}}>
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-2 py-1 sm:px-3 sm:py-1 interactive-scale">
                 <Zap className="w-3 h-3 text-yellow-400" />
                 <span>30-second setup</span>
               </div>
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1">
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-2 py-1 sm:px-3 sm:py-1 interactive-scale">
                 <Shield className="w-3 h-3 text-green-400" />
                 <span>Secure authentication</span>
               </div>
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1">
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-2 py-1 sm:px-3 sm:py-1 interactive-scale">
                 <Users className="w-3 h-3 text-blue-400" />
                 <span>Join 10,000+ users</span>
               </div>
@@ -83,18 +83,18 @@ export default function Landing() {
       </div>
 
       {/* Features Section */}
-      <div className="py-20 sm:py-32 bg-gray-50 dark:bg-gray-900 relative">
+      <div className="py-16 sm:py-24 lg:py-32 bg-gray-50 dark:bg-gray-900 relative">
         <div className="container-responsive">
-          <div className="text-center mb-16 animate-slide-up">
-            <h2 className="heading-lg mb-6">
+          <div className="text-center mb-12 sm:mb-16 animate-slide-up px-4">
+            <h2 className="heading-lg mb-4 sm:mb-6">
               Built for Enthusiasts, By Enthusiasts
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            <p className="mobile-text sm:text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
               Every feature designed to meet the needs of serious car enthusiasts who value precision and community.
             </p>
           </div>
 
-          <div className="grid-responsive">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
             {[
               {
                 icon: Car,

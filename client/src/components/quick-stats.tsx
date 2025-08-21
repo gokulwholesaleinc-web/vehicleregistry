@@ -21,13 +21,16 @@ export default function QuickStats({ vehicleId }: QuickStatsProps) {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 lg:mb-8">
         {[...Array(4)].map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-6">
-              <div className="animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-20 mb-2"></div>
-                <div className="h-8 bg-gray-200 rounded w-16"></div>
+          <Card key={i} className="card-modern">
+            <CardContent className="p-4 sm:p-6">
+              <div className="animate-pulse space-y-3">
+                <div className="flex justify-between items-center">
+                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16 sm:w-20"></div>
+                  <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                </div>
+                <div className="h-6 sm:h-8 bg-gray-200 dark:bg-gray-700 rounded w-12 sm:w-16"></div>
               </div>
             </CardContent>
           </Card>
@@ -74,19 +77,19 @@ export default function QuickStats({ vehicleId }: QuickStatsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 lg:mb-8">
       {statItems.map((item) => (
-        <Card key={item.label}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-steel-gray-600 text-sm font-medium">{item.label}</p>
-                <p className="text-2xl font-bold text-gray-900" data-testid={item.testId}>
+        <Card key={item.label} className="card-modern card-hover group">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0">
+              <div className="text-center sm:text-left">
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">{item.label}</p>
+                <p className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent" data-testid={item.testId}>
                   {item.value}
                 </p>
               </div>
-              <div className={`${item.bgColor} p-3 rounded-lg`}>
-                <item.icon className={`h-5 w-5 ${item.iconColor}`} />
+              <div className={`${item.bgColor} dark:bg-opacity-20 p-3 rounded-xl shadow-lg group-hover:shadow-xl group-hover:scale-110 transition-all duration-300 mx-auto sm:mx-0`}>
+                <item.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${item.iconColor} dark:opacity-90`} />
               </div>
             </div>
           </CardContent>

@@ -1,9 +1,11 @@
 import { Car, Plus, Bell, Users, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import RealTimeClock from "@/components/real-time-clock";
+import MobileNav from "@/components/mobile-nav";
 
 interface HeaderProps {
   onAddEntry: () => void;
@@ -13,73 +15,110 @@ export default function Header({ onAddEntry }: HeaderProps) {
   const { user, isAuthenticated } = useAuth();
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <header className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 sticky top-0 z-50 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Car className="text-automotive-blue-600 h-8 w-8" data-testid="logo-icon" />
-              <h1 className="text-xl font-bold text-gray-900" data-testid="app-title">
-                CarTracker Pro
-              </h1>
+            {/* Mobile Navigation */}
+            <MobileNav onAddEntry={onAddEntry} />
+            
+            <div className="flex items-center space-x-3">
+              <div className="p-1.5 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
+                <Car className="text-white h-6 w-6 sm:h-7 sm:w-7" data-testid="logo-icon" />
+              </div>
+              <div>
+                <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent" data-testid="app-title">
+                  CarTracker Pro
+                </h1>
+                <div className="hidden sm:block text-xs text-gray-500 dark:text-gray-400 -mt-1">
+                  Automotive Excellence
+                </div>
+              </div>
             </div>
-            <nav className="hidden md:flex space-x-6">
+            <nav className="hidden lg:flex space-x-8">
               <a 
                 href="#" 
-                className="text-automotive-blue-600 font-medium border-b-2 border-automotive-blue-600 pb-4"
+                className="relative text-blue-600 dark:text-blue-400 font-semibold pb-4 group"
                 data-testid="nav-dashboard"
               >
                 Dashboard
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
               </a>
               <a 
                 href="#" 
-                className="text-steel-gray-600 hover:text-automotive-blue-600 pb-4"
+                className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
                 data-testid="nav-vehicles"
               >
                 Vehicles
+                <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
               </a>
               <a 
                 href="#" 
-                className="text-steel-gray-600 hover:text-automotive-blue-600 pb-4"
+                className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
                 data-testid="nav-maintenance"
               >
                 Maintenance
+                <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                <Badge variant="secondary" className="absolute -top-2 -right-3 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                  3
+                </Badge>
               </a>
               <a 
                 href="#" 
-                className="text-steel-gray-600 hover:text-automotive-blue-600 pb-4"
+                className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
                 data-testid="nav-modifications"
               >
                 Modifications
+                <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
               </a>
               <Link 
                 href="/community"
-                className="text-steel-gray-600 hover:text-automotive-blue-600 pb-4"
+                className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
               >
-                <a data-testid="nav-community">Community</a>
+                <a data-testid="nav-community">
+                  Community
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                  <Badge variant="default" className="absolute -top-2 -right-6 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                    New
+                  </Badge>
+                </a>
               </Link>
             </nav>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="hidden lg:block">
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            <div className="hidden xl:block">
               <RealTimeClock variant="header" />
             </div>
+            
             <Button 
               onClick={onAddEntry}
-              className="bg-automotive-blue-600 text-white hover:bg-automotive-blue-700"
+              className="hidden sm:flex btn-primary shadow-lg hover:shadow-xl transition-all duration-300"
               data-testid="button-add-entry"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Add Entry
+              <span className="hidden md:inline">Add Entry</span>
+              <span className="md:hidden">Add</span>
             </Button>
-            <Button variant="ghost" size="icon" data-testid="button-notifications">
-              <Bell className="h-5 w-5 text-steel-gray-600" />
+            
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="relative hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              data-testid="button-notifications"
+            >
+              <Bell className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <Badge 
+                variant="destructive" 
+                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              >
+                3
+              </Badge>
             </Button>
             {isAuthenticated ? (
-              <div className="flex items-center space-x-3">
-                <Avatar className="w-8 h-8">
+              <div className="hidden md:flex items-center space-x-3">
+                <Avatar className="w-9 h-9 ring-2 ring-blue-200 dark:ring-blue-700 transition-all duration-200 hover:ring-4">
                   <AvatarImage src={(user as any)?.profileImageUrl || ''} alt="Profile" />
-                  <AvatarFallback>
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
                     {(user as any)?.firstName?.charAt(0) || (user as any)?.email?.charAt(0) || '?'}
                   </AvatarFallback>
                 </Avatar>
@@ -88,6 +127,7 @@ export default function Header({ onAddEntry }: HeaderProps) {
                   variant="ghost" 
                   size="sm" 
                   onClick={() => window.location.href = '/api/logout'}
+                  className="hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                   data-testid="button-logout"
                 >
                   <LogOut className="w-4 h-4" />
@@ -97,12 +137,13 @@ export default function Header({ onAddEntry }: HeaderProps) {
               <Button 
                 variant="outline" 
                 size="sm"
-                className="btn-secondary bg-white/80 backdrop-blur-sm border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50"
+                className="hidden md:flex bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-2 border-blue-200 dark:border-blue-700 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 shadow-lg"
                 onClick={() => window.location.href = '/api/login'}
                 data-testid="button-login-header"
               >
                 <User className="w-4 h-4 mr-2" />
-                Quick Sign Up
+                <span className="hidden lg:inline">Quick Sign Up</span>
+                <span className="lg:hidden">Sign Up</span>
               </Button>
             )}
           </div>
