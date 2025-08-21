@@ -54,7 +54,7 @@ export default function VehicleDetailsModal({ isOpen, onClose, vehicleId }: Vehi
       model: vehicle?.model || "",
       trim: vehicle?.trim || "",
       color: vehicle?.color || "",
-      currentMileage: vehicle?.currentMileage || 0,
+      currentMileage: vehicle?.currentMileage ?? 0,
     },
   });
 
@@ -305,7 +305,7 @@ export default function VehicleDetailsModal({ isOpen, onClose, vehicleId }: Vehi
                       <MapPin className="h-5 w-5 text-green-600 dark:text-green-400" />
                       <div>
                         <p className="text-sm text-gray-500 dark:text-gray-400">Current Mileage</p>
-                        <p className="font-medium">{vehicle.currentMileage.toLocaleString()} miles</p>
+                        <p className="font-medium">{(vehicle.currentMileage ?? 0).toLocaleString()} miles</p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-3">

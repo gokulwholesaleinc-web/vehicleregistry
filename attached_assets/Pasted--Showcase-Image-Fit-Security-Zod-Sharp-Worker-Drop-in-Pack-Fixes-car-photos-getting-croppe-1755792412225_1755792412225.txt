@@ -1,0 +1,270 @@
+# Showcase Image Fit + Security/Zod + Sharp Worker — Drop‑in Pack
+
+> Fixes car photos getting cropped in the **Community Showcase** (keeps full vehicles visible), and bundles the backend upgrades you asked for: **Helmet+CSP**, **Zod validators** for record routes, and a **sharp‑based image worker** with responsive outputs.
+
+---
+
+## 1) FRONTEND — Make showcase images never crop cars
+
+Use an aspect‑ratio frame and a smart fit component that chooses **`object-contain`** (letterbox) when the image would cut off the subject, and **`object-cover`** only when safe.
+
+### A) Smart fit util
+
+**`client/src/components/MediaFit.tsx`**
+
+```tsx
+import { useEffect, useRef, useState } from "react";
+
+/**
+ * Decides whether to use object-contain (no crop) or object-cover (fill) based on
+ * natural aspect ratio vs container. Defaults to contain to avoid cutting cars.
+ */
+export default function MediaFit({ src, alt = "", className = "", bg = "#0b1220" }: { src: string; alt?: string; className?: string; bg?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<'contain'|'cover'>('contain');
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = src;
+    img.onload = () => {
+      const iw = img.naturalWidth || 1, ih = img.naturalHeight || 1;
+      const cr = (ref.current?.clientWidth || 1) / (ref.current?.clientHeight || 1);
+      const ir = iw/ih;
+      // If image is near container ratio, allow cover; else contain (avoid cropping)
+      const close = Math.abs(ir - cr) < 0.25; // tolerance
+      setFit(close ? 'cover' : 'contain');
+    };
+  }, [src]);
+
+  return (
+    <div ref={ref} className={`relative h-full w-full overflow-hidden ${className}`} style={{backgroundColor: bg}}>
+      {/* subtle blurred backdrop from the same image */}
+      <img src={src} aria-hidden className="absolute inset-0 h-full w-full object-cover blur-sm opacity-30" />
+      <img src={src} alt={alt} className={`relative z-10 h-full w-full object-${fit}`} />
+    </div>
+  );
+}
+```
+
+### B) Aspect‑ratio showcase slide
+
+**`client/src/components/ShowcaseSlide.tsx`**
+
+```tsx
+import MediaFit from "./MediaFit";
+
+export default function ShowcaseSlide({ photoUrl, title }: { photoUrl: string; title: string }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl">
+      {/* Lock the frame to 16:9 on desktop, 4:3 on small */}
+      <div className="aspect-[16/9] sm:aspect-[16/9] md:aspect-[21/9]">
+        <MediaFit src={photoUrl} alt={title} className="rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+```
+
+> **Why this fixes your screenshot:** we default to `contain` (letterbox) so the roof/bumper aren’t cut off. We draw a blurred backdrop behind the contained image to keep the card feeling full‑bleed without hiding the car.
+
+### C) Use in your carousel
+
+Replace the raw `<img>` in your showcase carousel with `ShowcaseSlide`. For example:
+
+```tsx
+// client/src/components/ShowcaseCarousel.tsx (snippet)
+{items.map((it) => (
+  <ShowcaseSlide key={it.id} photoUrl={it.url} title={it.title} />
+))}
+```
+
+If you don’t use a separate carousel file, swap directly where the image renders.
+
+---
+
+## 2) BACKEND — Helmet + CSP + CORS
+
+**`server/http/security.ts`**
+
+```ts
+import helmet from "helmet";
+import cors from "cors";
+import type { Express } from "express";
+
+export function applySecurity(app: Express) {
+  app.use(helmet({
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "img-src": ["'self'", "data:", "blob:", process.env.CDN_BASE || ""].filter(Boolean),
+        "connect-src": ["'self'", process.env.FRONTEND_BASE || ""].filter(Boolean),
+      },
+    },
+  }));
+  app.use(cors({ origin: [process.env.FRONTEND_BASE || "http://localhost:5173"], credentials: false }));
+}
+```
+
+Mount it right after you create your app:
+
+```ts
+import { applySecurity } from "./security";
+const app = express();
+applySecurity(app);
+```
+
+---
+
+## 3) BACKEND — Zod validators for records
+
+**`server/http/validators/recordSchemas.ts`**
+
+```ts
+import { z } from "zod";
+
+export const VIN = z.string().trim().regex(/^[A-HJ-NPR-Z0-9]{17}$/i, "Invalid VIN");
+export const RecordKind = z.enum(["mod","maint","photo","receipt"]);
+
+export const CreateRecord = z.object({
+  vin: VIN,
+  kind: RecordKind,
+  title: z.string().min(1).max(120),
+  description: z.string().max(2000).optional(),
+  mileage: z.number().int().nonnegative().nullable().optional(),
+  costCents: z.number().int().min(0).nullable().optional(),
+  occurredAt: z.string().datetime().optional(),
+  photos: z.array(z.string().url()).max(12).optional(),
+});
+
+export const UpdateRecord = CreateRecord.partial().extend({ id: z.string().min(1) });
+
+export type CreateRecordInput = z.infer<typeof CreateRecord>;
+```
+
+**Use in routes**
+
+```ts
+import { CreateRecord, UpdateRecord } from "../validators/recordSchemas";
+
+router.post("/records", async (req, res) => {
+  const body = CreateRecord.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ ok:false, error: body.error.flatten() });
+  // ... create using body.data
+});
+```
+
+---
+
+## 4) BACKEND — Sharp image worker (responsive + webp)
+
+Generates multiple sizes + WebP/AVIF for fast, high‑quality display. You can run this inline on upload or in a queue worker.
+
+**`server/media/imageWorker.ts`**
+
+```ts
+import fs from "node:fs/promises";
+import path from "node:path";
+import sharp from "sharp";
+
+export type Variant = { width: number; format: "jpg"|"webp"|"avif" };
+const variants: Variant[] = [
+  { width: 640, format: "webp" },
+  { width: 1280, format: "webp" },
+  { width: 1920, format: "webp" },
+  { width: 1280, format: "avif" },
+];
+
+export async function processImage(buffer: Buffer, outDir: string, baseName: string) {
+  await fs.mkdir(outDir, { recursive: true });
+  const meta = await sharp(buffer).metadata();
+  const outputs: { url: string; width: number; type: string }[] = [];
+
+  for (const v of variants) {
+    const file = `${baseName}-${v.width}.${v.format}`;
+    const out = path.join(outDir, file);
+    const img = sharp(buffer).resize({ width: v.width, withoutEnlargement: true, fit: "inside" });
+    if (v.format === "webp") await img.webp({ quality: 80 }).toFile(out);
+    if (v.format === "avif") await img.avif({ quality: 50 }).toFile(out);
+    outputs.push({ url: `${process.env.CDN_BASE || "/uploads"}/${file}`, width: v.width, type: v.format });
+  }
+
+  // Also write a blur placeholder
+  const blurFile = `${baseName}-blur.jpg`;
+  await sharp(buffer).resize({ width: 32 }).jpeg({ quality: 40 }).toFile(path.join(outDir, blurFile));
+
+  return {
+    width: meta.width, height: meta.height,
+    placeholder: `${process.env.CDN_BASE || "/uploads"}/${blurFile}`,
+    sources: outputs,
+  };
+}
+```
+
+**Usage in an upload route** (local disk example; replace with S3/R2 in prod):
+
+**`server/http/routes/uploads.ts`** (excerpt)
+
+```ts
+import { Router } from "express";
+import multer from "multer";
+import path from "node:path";
+import { processImage } from "../../media/imageWorker";
+
+const upload = multer();
+export const uploadsRouter = Router();
+
+uploadsRouter.post("/photo", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ ok:false, error:{message:"file required"} });
+  const base = `img_${Date.now()}`;
+  const out = path.resolve("client/public/uploads");
+  const result = await processImage(req.file.buffer, out, base);
+  res.json({ ok:true, asset: result });
+});
+```
+
+---
+
+## 5) FRONTEND — Use responsive images
+
+**`client/src/components/ResponsiveImg.tsx`**
+
+```tsx
+export default function ResponsiveImg({ asset, alt = "" }: { asset: { sources: { url:string; width:number; type:string }[]; placeholder?: string }, alt?: string }) {
+  const webp = asset.sources.filter(s => s.type === 'webp');
+  const srcset = webp.map(s => `${s.url} ${s.width}w`).join(', ');
+  const src = webp[0]?.url || asset.sources[0]?.url;
+  return (
+    <img
+      src={src}
+      srcSet={srcset}
+      sizes="(max-width: 768px) 100vw, 1024px"
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      className="w-full h-full object-contain"
+    />
+  );
+}
+```
+
+Use it inside `MediaFit` instead of the plain `<img>` if you’re storing assets with the worker.
+
+---
+
+## 6) QA checklist
+
+* [ ] Showcase slides show full vehicles (letterboxed when necessary), no awkward crops.
+* [ ] Helmet/CSP mounted, CORS origin matches your front‑end.
+* [ ] Record POST/PATCH validated by Zod; bad inputs return 400 with details.
+* [ ] Uploading a photo returns responsive URLs and a blur placeholder.
+* [ ] Responsive `<img>` uses `srcset` and lazy‑loads.
+
+---
+
+### Notes for your Replit agent
+
+1. Add the new components and replace the showcase `<img>` with `ShowcaseSlide`.
+2. Put the security middleware right after creating the Express app.
+3. Wire the Zod validators into record routes.
+4. For the image worker, keep local output to `client/public/uploads` in dev; in prod set `CDN_BASE` and store to S3/R2.

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Header from "@/components/header";
+import AppHeader from "@/components/AppHeader";
 import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 import VehicleSelector from "@/components/vehicle-selector";
 import RecentModifications from "@/components/recent-modifications";
@@ -26,9 +26,8 @@ export default function ModificationsPage() {
   if (!selectedVehicleId) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-        <Header 
+        <AppHeader 
           onAddEntry={handleAddEntry}
-          onOpenProfile={() => setIsUserProfileModalOpen(true)}
         />
         
         <div className="container-responsive py-6 lg:py-8">
@@ -80,9 +79,8 @@ export default function ModificationsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-      <Header 
+      <AppHeader 
         onAddEntry={handleAddEntry}
-        onOpenProfile={() => setIsUserProfileModalOpen(true)}
       />
       
       <div className="container-responsive py-6 lg:py-8">

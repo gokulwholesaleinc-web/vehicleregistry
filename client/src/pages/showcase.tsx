@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import AppHeader from "@/components/AppHeader";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +12,16 @@ export default function ShowcasePage() {
     queryKey: ["/api/v1/showcase/vehicles"],
   });
 
+  const handleAddEntry = () => {
+    // Placeholder for add entry functionality
+  };
+
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8">
-        <div className="mb-8">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
+        <AppHeader onAddEntry={handleAddEntry} />
+        <div className="container mx-auto py-8">
+          <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-page-title">
             Community Showcase
           </h1>
@@ -39,13 +46,16 @@ export default function ShowcasePage() {
             </Card>
           ))}
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
+      <AppHeader onAddEntry={handleAddEntry} />
+      <div className="container mx-auto py-8">
+        <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-page-title">
           Community Showcase
         </h1>
@@ -138,6 +148,7 @@ export default function ShowcasePage() {
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }

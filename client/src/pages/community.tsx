@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import AppHeader from "@/components/AppHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,10 @@ export default function Community() {
   const [offset, setOffset] = useState(0);
   const limit = 12;
   const breadcrumbs = useBreadcrumbs();
+
+  const handleAddEntry = () => {
+    // Placeholder for add entry functionality
+  };
 
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
     queryKey: ["/api/community/vehicles", { limit, offset }],
@@ -35,6 +40,7 @@ export default function Community() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
+      <AppHeader onAddEntry={handleAddEntry} />
       <div className="container-responsive py-6 lg:py-8">
         <div className="mb-6">
           <Breadcrumb items={breadcrumbs} />

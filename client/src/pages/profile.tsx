@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Header from "@/components/header";
+import AppHeader from "@/components/AppHeader";
 import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 import UserProfileModal from "@/components/user-profile-modal";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,9 +68,8 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-      <Header 
+      <AppHeader 
         onAddEntry={handleAddEntry}
-        onOpenProfile={() => setIsUserProfileModalOpen(true)}
       />
       
       <div className="container-responsive py-6 lg:py-8">
