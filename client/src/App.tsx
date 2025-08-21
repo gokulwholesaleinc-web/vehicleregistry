@@ -18,6 +18,7 @@ import ModificationsPage from "@/pages/modifications";
 import ProfilePage from "@/pages/profile";
 import ShowcasePage from "@/pages/showcase";
 import Notifications from "@/pages/notifications";
+import ShowcaseManager from "@/pages/admin/ShowcaseManager";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -43,6 +44,7 @@ function Router() {
           <Route path="/profile" component={ProfilePage} />
           <Route path="/notifications" component={Notifications} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/showcase" component={ShowcaseManager} />
           <Route path="/signin" component={SignIn} />
           <Route path="/register" component={Register} />
           <Route path="/privacy-policy" component={PrivacyPolicy} />

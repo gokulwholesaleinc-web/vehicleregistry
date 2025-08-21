@@ -150,6 +150,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mount enhanced VIN routes
   const vinRouter = (await import('./http/routes/vin')).default;
   app.use('/api/v1/vin', vinRouter);
+
+  // Mount notifications and showcase routes
+  const notificationsRouter = (await import('./http/routes/notifications')).default;
+  const showcaseRouter = (await import('./http/routes/showcase')).default;
+  app.use('/api/v1/notifications', notificationsRouter);
+  app.use('/api/v1/showcase', showcaseRouter);
   
   // Auth middleware
   await setupAuth(app);
@@ -598,7 +604,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createNotification({
         userId: toUserId,
         title: "Vehicle Transfer Request",
-        message: `You have received a vehicle transfer request for ${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`,
+        body: `You have received a vehicle transfer request for ${vehicleData?.year} ${vehicleData?.make} ${vehicleData?.model}`,
+        kind: "transfer",
         type: "info",
         relatedEntityId: transfer.id,
         relatedEntityType: "transfer"
@@ -635,7 +642,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createNotification({
         userId: transfer.fromUserId,
         title: "Transfer Accepted",
-        message: `Your transfer request for ${vehicleInfo?.year} ${vehicleInfo?.make} ${vehicleInfo?.model} has been accepted`,
+        body: `Your transfer request for ${vehicleInfo?.year} ${vehicleInfo?.make} ${vehicleInfo?.model} has been accepted`,
+        kind: "transfer",
         type: "success",
         relatedEntityId: req.params.id,
         relatedEntityType: "transfer"
@@ -661,7 +669,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createNotification({
         userId: transfer.fromUserId,
         title: "Transfer Rejected",
-        message: `Your transfer request for ${vehicleDetails?.year} ${vehicleDetails?.make} ${vehicleDetails?.model} has been rejected`,
+        body: `Your transfer request for ${vehicleDetails?.year} ${vehicleDetails?.make} ${vehicleDetails?.model} has been rejected`,
+        kind: "transfer",
         type: "warning",
         relatedEntityId: req.params.id,
         relatedEntityType: "transfer"

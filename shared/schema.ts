@@ -203,19 +203,24 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert;
 
-// Notifications table
+// Notifications table - Enhanced for notifications system
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
-  title: varchar("title").notNull(),
-  message: text("message").notNull(),
-  type: varchar("type", { length: 50 }).notNull().default("info"), // info, success, warning, error
-  isRead: boolean("is_read").default(false),
+  kind: varchar("kind").notNull(), // 'comment','like','system','badge','build_follow', etc
+  title: text("title").notNull(),
+  body: text("body"), // renamed from message for consistency
+  link: text("link"), // deep link to the thing
+  type: varchar("type", { length: 50 }).notNull().default("info"), // keep for backwards compatibility
+  isRead: boolean("is_read").default(false), // keep for backwards compatibility
   relatedEntityId: varchar("related_entity_id"), // vehicle ID, transfer ID, etc.
   relatedEntityType: varchar("related_entity_type"), // vehicle, transfer, maintenance, etc.
-  createdAt: timestamp("created_at").defaultNow(),
   readAt: timestamp("read_at"),
-});
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_notifications_user_created").on(table.userId, table.createdAt.desc()),
+  index("idx_notifications_user_unread").on(table.userId).where(sql`read_at IS NULL`),
+]);
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
@@ -467,6 +472,26 @@ export const mileageProofsRelations = relations(mileageProofs, ({ one }) => ({
   }),
 }));
 
+
+// Admin-curated Community Showcase
+export const showcaseItems = pgTable("showcase_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  photoUrl: text("photo_url").notNull(),
+  credit: text("credit"), // photographer/owner credit
+  isActive: boolean("is_active").default(true).notNull(),
+  sortIndex: integer("sort_index").default(0).notNull(),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_showcase_active_sort").on(table.isActive, table.sortIndex),
+]);
+
+// Create insert schemas for showcase
+export const insertShowcaseItemSchema = createInsertSchema(showcaseItems);
+
 export const vehicleTransfersRelations = relations(vehicleTransfers, ({ one }) => ({
   vehicle: one(vehicles, {
     fields: [vehicleTransfers.vehicleId],
@@ -481,5 +506,13 @@ export const vehicleTransfersRelations = relations(vehicleTransfers, ({ one }) =
     fields: [vehicleTransfers.toUserId],
     references: [users.id],
     relationName: "transferTo",
+  }),
+}));
+
+
+export const showcaseItemsRelations = relations(showcaseItems, ({ one }) => ({
+  creator: one(users, {
+    fields: [showcaseItems.createdBy],
+    references: [users.id],
   }),
 }));

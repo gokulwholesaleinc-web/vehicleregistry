@@ -1,0 +1,400 @@
+# Notifications + Showcase Admin Pack (Drop‑in)
+
+Turn the bell counter into a real notifications system (registry, APIs, UI) and add an **Admin Showcase Manager** to curate images + descriptions for the Community Showcase. This pack is self‑contained and matches the conventions we already used in earlier canvases (Zod, Page components, etc.).
+
+---
+
+## 0) Database — migrations (Drizzle or SQL sketch)
+
+> If you’re using Drizzle, translate these into schema files and a migration. The SQL below shows the intent.
+
+```sql
+-- Notifications registry
+CREATE TABLE notifications (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  kind          TEXT NOT NULL,                -- 'comment','like','system','badge','build_follow', etc
+  title         TEXT NOT NULL,
+  body          TEXT,
+  link          TEXT,                         -- deep link to the thing
+  read_at       TIMESTAMP NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at DESC);
+CREATE INDEX idx_notifications_user_unread ON notifications(user_id) WHERE read_at IS NULL;
+
+-- (Optional) Delivery registry for future Twilio/SendGrid/webhooks
+CREATE TABLE notification_channels (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  channel       TEXT NOT NULL,               -- 'email','sms','push'
+  address       TEXT NOT NULL,               -- email or phone
+  verified_at   TIMESTAMP NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX uniq_channel_user ON notification_channels(user_id, channel, address);
+
+-- Admin‑curated Community Showcase
+CREATE TABLE showcase_items (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  description   TEXT,
+  photo_url     TEXT NOT NULL,
+  credit        TEXT,                        -- photographer/owner credit
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_index    INTEGER NOT NULL DEFAULT 0,
+  created_by    TEXT NOT NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_showcase_active_sort ON showcase_items(is_active, sort_index);
+```
+
+**Drizzle model hint**
+
+```ts
+// server/db/schema.ts (excerpt)
+export const notifications = pgTable('notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  body: text('body'),
+  link: text('link'),
+  readAt: timestamp('read_at', { withTimezone: false }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const showcaseItems = pgTable('showcase_items', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  photoUrl: text('photo_url').notNull(),
+  credit: text('credit'),
+  isActive: boolean('is_active').default(true).notNull(),
+  sortIndex: integer('sort_index').default(0).notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+```
+
+---
+
+## 1) Server — Zod validators
+
+**`server/http/validators/notifications.ts`**
+
+```ts
+import { z } from 'zod';
+export const CreateNotification = z.object({
+  userId: z.string().min(1),
+  kind: z.string().min(1),
+  title: z.string().min(1).max(140),
+  body: z.string().max(2000).optional(),
+  link: z.string().url().optional(),
+});
+export const ListInput = z.object({ cursor: z.string().optional(), limit: z.number().int().min(1).max(50).default(20) });
+export const MarkReadInput = z.object({ ids: z.array(z.string().min(1)).min(1) });
+
+export const CreateShowcaseItem = z.object({
+  title: z.string().min(1).max(120),
+  description: z.string().max(2000).optional(),
+  photoUrl: z.string().url(),
+  credit: z.string().max(120).optional(),
+  isActive: z.boolean().optional(),
+  sortIndex: z.number().int().min(0).optional(),
+});
+export const UpdateShowcaseItem = CreateShowcaseItem.partial();
+```
+
+---
+
+## 2) Server — Notifications API
+
+**`server/http/routes/notifications.ts`**
+
+```ts
+import { Router } from 'express';
+import { z } from 'zod';
+import { ListInput, MarkReadInput, CreateNotification } from '../validators/notifications';
+import { db } from '../../db';
+import { notifications } from '../../db/schema';
+import { eq, and, lt } from 'drizzle-orm';
+
+const router = Router();
+
+// List current user's notifications (cursor pagination by created_at)
+router.get('/', async (req: any, res) => {
+  const userId = req.user?.id; // requireAuth middleware should set this
+  if (!userId) return res.status(401).json({ ok:false, error:{ message:'unauthorized' } });
+  const q = ListInput.safeParse(req.query);
+  if (!q.success) return res.status(400).json({ ok:false, error:q.error.flatten() });
+
+  const limit = q.data.limit;
+  const cursor = q.data.cursor ? new Date(Number(q.data.cursor)) : new Date();
+  const rows = await db.select().from(notifications)
+    .where(and(eq(notifications.userId, userId), lt(notifications.createdAt, cursor)))
+    .orderBy(notifications.createdAt.desc())
+    .limit(limit + 1);
+
+  const nextCursor = rows.length > limit ? String(rows[limit-1]?.createdAt?.getTime() ?? '') : undefined;
+  res.json({ ok:true, data: rows.slice(0, limit), nextCursor });
+});
+
+// Count unread
+router.get('/unread/count', async (req: any, res) => {
+  const userId = req.user?.id; if (!userId) return res.status(401).json({ ok:false });
+  const [{ count }] = await db.execute(`SELECT COUNT(*)::int as count FROM notifications WHERE user_id=$1 AND read_at IS NULL`, [userId]) as any;
+  res.json({ ok:true, count });
+});
+
+// Mark selected notifications as read
+router.post('/read', async (req:any, res) => {
+  const userId = req.user?.id; if (!userId) return res.status(401).json({ ok:false });
+  const body = MarkReadInput.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ ok:false, error: body.error.flatten() });
+  await db.execute(`UPDATE notifications SET read_at = NOW() WHERE user_id=$1 AND id = ANY($2::text[])`, [userId, body.data.ids]);
+  res.json({ ok:true });
+});
+
+// Admin/system: create notification (use later for SendGrid/Twilio as well)
+router.post('/create', async (req:any, res) => {
+  // TODO: guard with admin middleware
+  const body = CreateNotification.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ ok:false, error: body.error.flatten() });
+  const id = crypto.randomUUID();
+  await db.insert(notifications).values({ id, ...body.data });
+  res.json({ ok:true, id });
+});
+
+export default router;
+```
+
+Mount under `/api/v1/notifications`.
+
+---
+
+## 3) Server — Showcase Admin API (CRUD)
+
+**`server/http/routes/showcase.ts`**
+
+```ts
+import { Router } from 'express';
+import { CreateShowcaseItem, UpdateShowcaseItem } from '../validators/notifications';
+import { db } from '../../db';
+import { showcaseItems } from '../../db/schema';
+import { eq } from 'drizzle-orm';
+
+const router = Router();
+
+// Public feed
+router.get('/', async (_req, res) => {
+  const rows = await db.select().from(showcaseItems).where(eq(showcaseItems.isActive, true)).orderBy(showcaseItems.sortIndex);
+  res.json({ ok:true, data: rows });
+});
+
+// Admin list (all)
+router.get('/admin', async (_req, res) => {
+  // TODO: admin check
+  const rows = await db.select().from(showcaseItems).orderBy(showcaseItems.sortIndex);
+  res.json({ ok:true, data: rows });
+});
+
+router.post('/', async (req:any, res) => {
+  // TODO: admin check
+  const b = CreateShowcaseItem.safeParse(req.body);
+  if (!b.success) return res.status(400).json({ ok:false, error:b.error.flatten() });
+  const id = crypto.randomUUID();
+  const by = req.user?.id || 'admin';
+  await db.insert(showcaseItems).values({ id, createdBy: by, ...b.data });
+  res.json({ ok:true, id });
+});
+
+router.patch('/:id', async (req:any, res) => {
+  const { id } = req.params; const b = UpdateShowcaseItem.safeParse(req.body);
+  if (!b.success) return res.status(400).json({ ok:false, error:b.error.flatten() });
+  await db.update(showcaseItems).set({ ...b.data, updatedAt: new Date() }).where(eq(showcaseItems.id, id));
+  res.json({ ok:true });
+});
+
+router.delete('/:id', async (req:any, res) => {
+  const { id } = req.params; await db.delete(showcaseItems).where(eq(showcaseItems.id, id));
+  res.json({ ok:true });
+});
+
+export default router;
+```
+
+Mount under `/api/v1/showcase`.
+
+---
+
+## 4) Client — Notifications UI
+
+### A) Fetch helpers
+
+**`client/src/features/notifications/api.ts`**
+
+```ts
+import { api } from '@/lib/api';
+export async function listNotifications(cursor?:string){
+  const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  return api(`/notifications${q}`, { method:'GET' });
+}
+export async function unreadCount(){ return api('/notifications/unread/count', { method:'GET' }); }
+export async function markRead(ids:string[]){ return api('/notifications/read', { method:'POST', body: JSON.stringify({ ids }) }); }
+```
+
+### B) Bell dropdown + page
+
+**`client/src/features/notifications/BellDropdown.tsx`**
+
+```tsx
+import { useEffect, useState } from 'react';
+import { listNotifications, markRead, unreadCount } from './api';
+
+export default function BellDropdown(){
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<any[]>([]);
+  const [next, setNext] = useState<string|undefined>();
+  const [count, setCount] = useState<number>(0);
+
+  useEffect(()=>{ unreadCount().then(r=>setCount(r.count||0)).catch(()=>{}); },[]);
+  useEffect(()=>{ if(!open || items.length) return; listNotifications().then(r=>{ setItems(r.data||[]); setNext(r.nextCursor); }); },[open]);
+
+  async function loadMore(){ if(!next) return; const r = await listNotifications(next); setItems(prev=>[...prev, ...(r.data||[])]); setNext(r.nextCursor); }
+  async function markAll(){ const ids = items.filter(i=>!i.readAt).map(i=>i.id); if(ids.length){ await markRead(ids); setItems(prev=>prev.map(i=>({ ...i, readAt: i.readAt || new Date().toISOString() }))); setCount(0); } }
+
+  return (
+    <div className="relative">
+      <button onClick={()=>setOpen(v=>!v)} className="relative inline-grid place-items-center h-9 w-9 rounded-xl border border-slate-300 bg-white hover:bg-slate-50">
+        <svg className="h-4 w-4 text-slate-700" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 00-7 7v3.586l-1.707 1.707A1 1 0 004 16h16a1 1 0 00.707-1.707L19 12.586V9a7 7 0 00-7-7zm0 20a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
+        {count>0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] leading-[18px] text-center">{count>99?'99+':count}</span>}
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-[360px] max-h-[420px] overflow-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200">
+            <div className="text-sm font-semibold">Notifications</div>
+            <button onClick={markAll} className="text-xs text-slate-600 hover:text-slate-900">Mark all read</button>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {items.map(n=> (
+              <li key={n.id} className={`px-3 py-3 ${n.readAt? 'bg-white' : 'bg-slate-50'}`}>
+                <a href={n.link||'#'} className="block">
+                  <div className="text-sm font-medium text-slate-900">{n.title}</div>
+                  {n.body && <div className="text-xs text-slate-600 mt-0.5">{n.body}</div>}
+                  <div className="text-[11px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleString()}</div>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <div className="p-2 grid">
+            {next ? <button onClick={loadMore} className="text-sm rounded-xl border border-slate-300 py-1.5 hover:bg-slate-50">Load more</button> : <span className="text-xs text-slate-400 text-center">No more</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+> Integrate by swapping the bell button in your header with `<BellDropdown />`.
+
+**`client/src/pages/Notifications.tsx`** remains your full page list (optional; can reuse the same API).
+
+---
+
+## 5) Client — Admin Showcase Manager UI
+
+**`client/src/pages/admin/ShowcaseManager.tsx`**
+
+```tsx
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { PageContainer, PageHeader } from '@/components/Page';
+
+export default function ShowcaseManager(){
+  const [items, setItems] = useState<any[]>([]);
+  const [draft, setDraft] = useState({ title:'', description:'', photoUrl:'', credit:'', sortIndex:0, isActive:true });
+
+  async function load(){ const r = await api('/showcase/admin', { method:'GET' }); setItems(r.data||[]); }
+  useEffect(()=>{ load(); },[]);
+
+  async function create(){ await api('/showcase', { method:'POST', body: JSON.stringify(draft) }); setDraft({ title:'', description:'', photoUrl:'', credit:'', sortIndex:0, isActive:true }); await load(); }
+  async function update(id:string, patch:any){ await api(`/showcase/${id}`, { method:'PATCH', body: JSON.stringify(patch) }); await load(); }
+  async function remove(id:string){ await api(`/showcase/${id}`, { method:'DELETE' }); await load(); }
+
+  return (
+    <PageContainer>
+      <PageHeader title="Community Showcase — Admin" subtitle="Add, edit, reorder and (de)activate items." />
+
+      {/* Create form */}
+      <div className="grid gap-3 p-4 rounded-2xl border border-slate-200 bg-white mb-6">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <input value={draft.title} onChange={e=>setDraft({...draft, title:e.target.value})} className="rounded-xl border border-slate-300 px-3 py-2" placeholder="Title" />
+          <input value={draft.photoUrl} onChange={e=>setDraft({...draft, photoUrl:e.target.value})} className="rounded-xl border border-slate-300 px-3 py-2" placeholder="Photo URL" />
+        </div>
+        <textarea value={draft.description} onChange={e=>setDraft({...draft, description:e.target.value})} className="rounded-xl border border-slate-300 px-3 py-2" placeholder="Description (optional)" />
+        <div className="grid gap-2 sm:grid-cols-3">
+          <input value={draft.credit} onChange={e=>setDraft({...draft, credit:e.target.value})} className="rounded-xl border border-slate-300 px-3 py-2" placeholder="Credit (optional)" />
+          <input type="number" value={draft.sortIndex} onChange={e=>setDraft({...draft, sortIndex:Number(e.target.value)})} className="rounded-xl border border-slate-300 px-3 py-2" placeholder="Sort Index" />
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={draft.isActive} onChange={e=>setDraft({...draft, isActive:e.target.checked})}/> Active</label>
+        </div>
+        <div><button onClick={create} className="px-4 py-2 rounded-xl bg-slate-900 text-white">Add Item</button></div>
+      </div>
+
+      {/* List */}
+      <div className="grid gap-3">
+        {items.map((it:any)=> (
+          <div key={it.id} className="rounded-2xl border border-slate-200 bg-white p-3 grid gap-3 sm:grid-cols-[160px_1fr_auto] items-center">
+            <img src={it.photoUrl} className="h-28 w-40 object-cover rounded-lg"/>
+            <div>
+              <div className="font-medium">{it.title} <span className="text-slate-400">#{it.sortIndex}</span></div>
+              {it.description && <div className="text-sm text-slate-600">{it.description}</div>}
+              <div className="text-xs text-slate-400 mt-1">{it.isActive? 'Active' : 'Hidden'} {it.credit? `• ${it.credit}`:''}</div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={()=>update(it.id, { isActive: !it.isActive })} className="px-3 py-1.5 rounded-xl border border-slate-300">{it.isActive? 'Hide' : 'Show'}</button>
+              <button onClick={()=>update(it.id, { sortIndex: (it.sortIndex||0)+1 })} className="px-3 py-1.5 rounded-xl border border-slate-300">Down</button>
+              <button onClick={()=>update(it.id, { sortIndex: Math.max(0,(it.sortIndex||0)-1) })} className="px-3 py-1.5 rounded-xl border border-slate-300">Up</button>
+              <button onClick={()=>remove(it.id)} className="px-3 py-1.5 rounded-xl border border-rose-300 text-rose-600">Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </PageContainer>
+  );
+}
+```
+
+Add a route to your authed admin area: `/admin/showcase` → `<ShowcaseManager />`.
+
+---
+
+## 6) Surfacing notifications from server events (where to call it)
+
+Call the **create** endpoint when events happen, e.g.:
+
+```ts
+// after a comment is added to a build
+await api.post('/notifications/create', {
+  userId: buildOwnerId,
+  kind: 'comment',
+  title: 'New comment on your build',
+  body: `${actorName}: "${snippet}"`,
+  link: `/build/${buildId}#comment-${commentId}`,
+});
+```
+
+Later, wire SendGrid/Twilio by reading from `notification_channels` (email/SMS) and enqueueing a job.
+
+---
+
+## 7) QA checklist
+
+* [ ] Bell opens a dropdown list, shows real notifications, supports **Mark all read**, and paginates.
+* [ ] `/notifications/unread/count` updates the red badge.
+* [ ] Admin can **create/edit/reorder/hide** Community Showcase items at `/admin/showcase`.
+* [ ] Public `/api/v1/showcase` feeds the dashboard carousel with active, sorted items.
+* [ ] Design matches the rest of the app (rounded corners, soft borders, clean spacing).

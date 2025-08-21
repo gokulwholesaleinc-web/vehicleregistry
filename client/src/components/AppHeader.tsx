@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import BellDropdown from "@/features/notifications/BellDropdown";
 
 function NavLink({ href, label }: { href: string; label: string }) {
   return (
@@ -11,7 +12,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-export default function AppHeader({ unread = 0 }: { unread?: number }) {
+export default function AppHeader() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const onResize = () => { if (window.innerWidth >= 1024) setOpen(false); };
@@ -63,12 +64,7 @@ export default function AppHeader({ unread = 0 }: { unread?: number }) {
               Add Entry
             </a>
 
-            <a href="/notifications" aria-label="Notifications" className="relative inline-grid place-items-center h-9 w-9 rounded-xl border border-slate-300 bg-white hover:bg-slate-50">
-              <svg className="h-4 w-4 text-slate-700" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 00-7 7v3.586l-1.707 1.707A1 1 0 004 16h16a1 1 0 00.707-1.707L19 12.586V9a7 7 0 00-7-7zm0 20a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
-              {unread > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] leading-[18px] text-center">{unread>99?'99+':unread}</span>
-              )}
-            </a>
+            <BellDropdown />
 
             {/* The ONLY Admin button */}
             <a href="/admin" className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50 whitespace-nowrap">
