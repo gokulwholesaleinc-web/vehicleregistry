@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import Hero from "@/components/Hero";
+import RotatingHero from "@/components/RotatingHero";
 import HowItWorks from "@/components/HowItWorks";
 import { Link } from "wouter";
 import QuickSignupModal from "@/components/quick-signup-modal";
@@ -10,8 +10,8 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      {/* Hero Section with Real Photo and Logo Watermark */}
-      <Hero coverUrl="/hero.jpg" />
+      {/* Hero Section with Rotating Vehicle Images */}
+      <RotatingHero />
 
       {/* How It Works Section */}
       <HowItWorks />
