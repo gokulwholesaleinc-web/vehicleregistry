@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChevronLeft, ChevronRight, Heart, Eye, User, Calendar, Play, Pause, X, MapPin } from "lucide-react";
+import ShowcaseSlide from "./ShowcaseSlide";
 import bmwImage1 from "@assets/FB_IMG_1751951510231_1755750547262.jpg";
 import bmwImage2 from "@assets/FB_IMG_1751951504094_1755750547274.jpg";
 import bmwMeetImage from "@assets/DSC_1899_1755751395846.jpg";
@@ -202,14 +203,16 @@ export default function CommunitySlideshow() {
 
           {/* Main Image */}
           <div className="relative h-64 sm:h-80 lg:h-96">
-            <img
-              src={currentPhoto.imageUrl}
-              alt={`${currentPhoto.year} ${currentPhoto.make} ${currentPhoto.model}`}
-              className="w-full h-full object-cover select-none cursor-pointer transition-transform duration-200 hover:scale-105"
-              draggable={false}
+            <div 
+              className="w-full h-full cursor-pointer transition-transform duration-200 hover:scale-105"
               onClick={handleImageClick}
               data-testid="community-showcase-image"
-            />
+            >
+              <ShowcaseSlide 
+                photoUrl={currentPhoto.imageUrl}
+                title={`${currentPhoto.year} ${currentPhoto.make} ${currentPhoto.model}`}
+              />
+            </div>
             
             {/* Click hint overlay */}
             <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-all duration-200 cursor-pointer flex items-center justify-center opacity-0 hover:opacity-100">
