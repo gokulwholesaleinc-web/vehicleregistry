@@ -56,7 +56,7 @@ export const isAdmin: RequestHandler = async (req: any, res, next) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const userId = req.user.claims.sub;
+    const userId = req.user.id;
     const user = await storage.getUser(userId);
     
     if (!user || user.role !== "admin") {
@@ -284,7 +284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: z.enum(['all', 'vehicles', 'modifications', 'maintenance']).default('all')
       }).parse(req.query);
       
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const results: any = {};
       
       if (type === 'all' || type === 'vehicles') {
@@ -337,7 +337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notifications
   app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const unreadOnly = req.query.unread === 'true';
       const notifications = await storage.getNotifications(userId, unreadOnly);
       res.json(notifications);
@@ -363,7 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/notifications/read-all', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const success = await storage.markAllNotificationsRead(userId);
       res.json({ success });
     } catch (error) {
@@ -385,9 +385,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vehicles (protected)
-  app.get('/api/vehicles', isAuthenticated, async (req: any, res) => {
+  app.get('/api/vehicles', requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const vehicles = await storage.getVehiclesByOwner(userId);
       res.json(vehicles);
     } catch (error) {
@@ -419,7 +419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced VIN-based vehicle creation
   app.post('/api/vehicles/create-from-vin', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { vin, currentMileage } = z.object({ 
         vin: z.string().min(17).max(17),
         currentMileage: z.number().optional()
@@ -467,7 +467,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create draft vehicle (without VIN)
   app.post('/api/vehicles/create-draft', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const vehicleData = insertVehicleSchema.parse({
         ...req.body,
         currentOwnerId: userId,
@@ -487,7 +487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Convert draft to full vehicle (add VIN later)
   app.post('/api/vehicles/:id/add-vin', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { vin } = z.object({ vin: z.string().min(17).max(17) }).parse(req.body);
 
       // Check if VIN already exists
@@ -532,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/vehicles', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const vehicleData = insertVehicleSchema.parse(req.body);
       
       // Check if VIN already exists
@@ -550,7 +550,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/vehicles/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const vehicle = await storage.getVehicle(req.params.id);
       
       if (!vehicle || vehicle.currentOwnerId !== userId) {
@@ -568,7 +568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Vehicle Transfer routes
   app.post('/api/vehicles/:id/transfer', isAuthenticated, async (req: any, res) => {
     try {
-      const fromUserId = req.user.claims.sub;
+      const fromUserId = req.user.id;
       const { toUserId, message } = req.body;
       
       const vehicle = await storage.getVehicle(req.params.id);
@@ -606,7 +606,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/transfers', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const transfers = await storage.getTransfersByUser(userId);
       res.json(transfers);
     } catch (error) {
@@ -616,7 +616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/transfers/:id/accept', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const [transfer] = await db.select().from(vehicleTransfers).where(eq(vehicleTransfers.id, req.params.id));
       const success = await storage.processTransfer(req.params.id, true);
       
@@ -682,7 +682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     { name: 'documents', maxCount: 5 }
   ]), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const modificationData = insertModificationSchema.parse({
         ...req.body,
         vehicleId: req.params.vehicleId,
@@ -752,7 +752,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     { name: 'documents', maxCount: 5 }
   ]), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const recordData = insertMaintenanceRecordSchema.parse({
         ...req.body,
         vehicleId: req.params.vehicleId,
@@ -941,7 +941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Cache Management Endpoints
   app.post('/api/cache/invalidate', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       // Simple cache invalidation by setting cache headers
       res.set({
         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -972,7 +972,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         case 'modification':
           // Check for similar modification entries by title
-          const vehicles = await storage.getVehiclesByOwner((req.user as any).claims.sub);
+          const vehicles = await storage.getVehiclesByOwner((req.user as any).id);
           for (const vehicle of vehicles) {
             const modifications = await storage.getModifications(vehicle.id);
             existingRecord = modifications.find(mod => 
@@ -987,7 +987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         case 'maintenance':
           // Similar check for maintenance records
-          const userVehicles = await storage.getVehiclesByOwner((req.user as any).claims.sub);
+          const userVehicles = await storage.getVehiclesByOwner((req.user as any).id);
           for (const vehicle of userVehicles) {
             const records = await storage.getMaintenanceRecords(vehicle.id);
             existingRecord = records.find(record => 

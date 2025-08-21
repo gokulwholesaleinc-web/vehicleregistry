@@ -12,7 +12,12 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-export default function AppHeader({ unread = 0 }: { unread?: number }) {
+interface AppHeaderProps {
+  unread?: number;
+  onAddEntry?: () => void;
+}
+
+export default function AppHeader({ unread = 0, onAddEntry }: AppHeaderProps) {
   const [open, setOpen] = useState(false);
   const { user, isAuthenticated } = useAuth();
   
@@ -66,7 +71,10 @@ export default function AppHeader({ unread = 0 }: { unread?: number }) {
 
           {/* Actions: Add, Notifications, Profile */}
           <div className="flex items-center gap-2 ml-2">
-            <button className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-sm font-semibold shadow-sm hover:bg-slate-800">
+            <button 
+              onClick={onAddEntry}
+              className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-sm font-semibold shadow-sm hover:bg-slate-800"
+            >
               <span className="-ml-1 inline-block h-5 w-5 rounded-full bg-white/10 grid place-items-center">+</span>
               Add Entry
             </button>
@@ -114,7 +122,10 @@ export default function AppHeader({ unread = 0 }: { unread?: number }) {
               <NavLink href="/modifications" label="Modifications" />
               <NavLink href="/community" label="Community" />
               {user?.role === 'admin' && <NavLink href="/admin" label="Admin" />}
-              <button className="mt-1 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold text-left">
+              <button 
+                onClick={onAddEntry}
+                className="mt-1 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold text-left"
+              >
                 Add Entry
               </button>
             </nav>

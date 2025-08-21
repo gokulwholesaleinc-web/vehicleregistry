@@ -37,7 +37,7 @@ export default function Dashboard() {
   if (!selectedVehicleId) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-        <AppHeader unread={3} />
+        <AppHeader unread={3} onAddEntry={() => handleAddEntry("modification")} />
         
         {/* Community Showcase - Hero Section */}
         <div className="py-6 lg:py-8">
@@ -85,7 +85,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 font-inter">
-      <AppHeader unread={3} />
+      <AppHeader unread={3} onAddEntry={() => handleAddEntry("modification")} />
       
       {/* Community Showcase - Hero Section */}
       <div className="py-6 lg:py-8">
