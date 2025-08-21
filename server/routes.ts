@@ -142,15 +142,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Try JWT first (local auth)
       const authHeader = req.headers.authorization;
+      console.log("Auth header:", authHeader ? "present" : "missing");
+      
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.slice(7);
+        console.log("Extracted token:", token.substring(0, 50) + "...");
         try {
           const jwt = require('jsonwebtoken');
-          const claims = jwt.verify(token, process.env.JWT_SECRET || process.env.SESSION_SECRET!) as any;
+          const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET!;
+          console.log("Using JWT secret:", secret ? "present" : "missing");
+          const claims = jwt.verify(token, secret) as any;
           userId = claims.id;
           console.log("JWT auth successful for user:", userId);
+          console.log("JWT claims:", claims);
         } catch (err) {
           console.log("JWT verification failed:", err.message);
+          console.log("Error details:", err);
         }
       }
       
