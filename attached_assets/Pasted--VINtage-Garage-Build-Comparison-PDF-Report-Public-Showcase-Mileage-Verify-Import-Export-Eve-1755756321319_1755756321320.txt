@@ -1,0 +1,554 @@
+# VINtage Garage — Build Comparison, PDF Report, Public Showcase, Mileage Verify, Import/Export, Event Mode (Drop‑in Pack)
+
+> Copy‑paste pack with DB schema additions, API routes, and React/Tailwind components. Keep naming consistent with your project. Adjust import paths as needed.
+
+---
+
+## 0) Install deps (client & server)
+
+```bash
+# client
+pnpm add papaparse
+
+# server
+pnpm add pdfkit exifr
+```
+
+---
+
+## 1) DB Schema Additions (Drizzle)
+
+**`/server/db/schema.extra.ts`**
+
+```ts
+import { pgTable, serial, integer, varchar, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { vehicles, users, records } from "./schema";
+
+export const specs = pgTable("specs", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  title: varchar("title", { length: 80 }).default("Current Build").notNull(),
+  // generic fields; extend as needed
+  wheels: varchar("wheels", { length: 160 }),
+  tires: varchar("tires", { length: 160 }),
+  suspension: varchar("suspension", { length: 160 }),
+  power: varchar("power", { length: 160 }),
+  brakes: varchar("brakes", { length: 160 }),
+  aero: varchar("aero", { length: 160 }),
+  weight: varchar("weight", { length: 60 }),
+  notes: text("notes"),
+  isStockBaseline: boolean("is_stock_baseline").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const likes = pgTable("likes", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const follows = pgTable("follows", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const comments = pgTable("comments", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  recordId: integer("record_id").references(() => records.id),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const events = pgTable("events", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  title: varchar("title", { length: 120 }).notNull(),
+  kind: varchar("kind", { length: 40 }).default("meet").notNull(), // meet | show | trackday | dyno
+  occurredAt: timestamp("occurred_at").notNull(),
+  location: varchar("location", { length: 160 }),
+  description: text("description"),
+  createdBy: integer("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const eventAssets = pgTable("event_assets", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").references(() => events.id).notNull(),
+  storageKey: varchar("storage_key", { length: 255 }).notNull(),
+  caption: varchar("caption", { length: 160 }),
+  photographer: varchar("photographer", { length: 120 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const mileageProofs = pgTable("mileage_proofs", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  storageKey: varchar("storage_key", { length: 255 }).notNull(),
+  mileage: integer("mileage").notNull(),
+  exifDatetime: timestamp("exif_datetime"),
+  verified: boolean("verified").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+```
+
+> Run a migration after adding tables.
+
+---
+
+## 2) Public Showcase + Social Routes (Express)
+
+**`/server/http/showcase.routes.ts`**
+
+```ts
+import { Router } from "express";
+import { db } from "../db/client";
+import { likes, follows, comments } from "../db/schema.extra";
+import { requireAuth } from "./middleware.auth";
+import { and, eq, desc } from "drizzle-orm";
+
+export const showcaseRouter = Router();
+
+// Like a public car
+showcaseRouter.post(":vin/like", requireAuth, async (req, res) => {
+  const { vin } = req.params;
+  const userId = (req as any).user.id;
+  try {
+    await db.insert(likes).values({ vin, userId });
+  } catch {}
+  res.json({ ok: true });
+});
+
+// Follow a car
+showcaseRouter.post(":vin/follow", requireAuth, async (req, res) => {
+  const { vin } = req.params;
+  const userId = (req as any).user.id;
+  try {
+    await db.insert(follows).values({ vin, userId });
+  } catch {}
+  res.json({ ok: true });
+});
+
+// Comments (optionally tied to a record)
+showcaseRouter.post(":vin/comments", requireAuth, async (req, res) => {
+  const { vin } = req.params;
+  const { body, recordId } = req.body as { body: string; recordId?: number };
+  const userId = (req as any).user.id;
+  const row = await db.insert(comments).values({ vin, userId, body, recordId }).returning();
+  res.json({ ok: true, data: row[0] });
+});
+
+showcaseRouter.get(":vin/comments", async (req, res) => {
+  const { vin } = req.params;
+  const rows = await db.query.comments.findMany({
+    where: (c, { eq }) => eq(c.vin, vin),
+    orderBy: (c, { desc }) => desc(c.createdAt),
+  });
+  res.json({ ok: true, data: rows });
+});
+```
+
+Mount: `app.use("/api/v1/showcase/", showcaseRouter);`
+
+---
+
+## 3) Mileage Verification (EXIF)
+
+**Server route** `/api/v1/verify/mileage`
+
+```ts
+import { Router } from "express";
+import exifr from "exifr";
+import { db } from "../db/client";
+import { mileageProofs } from "../db/schema.extra";
+import { requireAuth } from "./middleware.auth";
+
+export const verifyRouter = Router();
+
+verifyRouter.post("/mileage", requireAuth, async (req, res) => {
+  const { vin, storageKey, mileage } = req.body as { vin: string; storageKey: string; mileage: number };
+  // Download the image from your S3/R2 via a private URL or direct buffer fetch
+  // For brevity, assume you can read Buffer `buf` for the storageKey
+  const buf = await fetchBufferForStorageKey(storageKey); // implement accordingly
+  const exif = await exifr.parse(buf, { tiff: true, exif: true });
+  const exifDate = exif?.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : null;
+
+  const row = await db.insert(mileageProofs).values({ vin, userId: (req as any).user.id, storageKey, mileage, exifDatetime: exifDate ?? null, verified: !!exifDate }).returning();
+  res.json({ ok: true, data: row[0] });
+});
+```
+
+**Badge logic**: a VIN gets a **Verified Mileage** badge if it has ≥2 proofs with EXIF dates spaced ≥30 days.
+
+---
+
+## 4) Build Comparison — Before/After Slider (React)
+
+**`/client/src/components/BeforeAfter.tsx`**
+
+```tsx
+import { useState } from "react";
+
+export default function BeforeAfter({ beforeUrl, afterUrl, alt = "" }: { beforeUrl: string; afterUrl: string; alt?: string }) {
+  const [x, setX] = useState(50);
+  return (
+    <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200">
+      <img src={beforeUrl} alt={alt} className="block w-full select-none" />
+      <div className="absolute inset-0" style={{ width: `${x}%`, overflow: "hidden" }}>
+        <img src={afterUrl} alt={alt} className="block w-full select-none" />
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={x}
+        onChange={(e) => setX(Number(e.target.value))}
+        className="absolute inset-x-0 bottom-3 mx-4 w-auto accent-slate-900"
+      />
+      <div className="absolute top-3 left-3 text-xs font-semibold bg-black/70 text-white px-2 py-1 rounded">Before</div>
+      <div className="absolute top-3 right-3 text-xs font-semibold bg-black/70 text-white px-2 py-1 rounded">After</div>
+    </div>
+  );
+}
+```
+
+**Usage**
+
+```tsx
+<BeforeAfter beforeUrl={mod.beforeUrl} afterUrl={mod.afterUrl} alt="Coilover install" />
+```
+
+---
+
+## 5) Side‑by‑Side Spec Sheets (React)
+
+**`/client/src/components/SpecCompare.tsx`**
+
+```tsx
+export function SpecTable({ title, s }: any) {
+  const row = (k: string, v?: string) => (
+    <div className="grid grid-cols-[160px,1fr] gap-3 py-2 border-b last:border-none">
+      <div className="text-slate-500 text-sm">{k}</div>
+      <div className="text-slate-900 font-medium">{v || "—"}</div>
+    </div>
+  );
+  return (
+    <section className="bg-white rounded-2xl p-4 shadow-sm border">
+      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+      {row("Wheels", s.wheels)}
+      {row("Tires", s.tires)}
+      {row("Suspension", s.suspension)}
+      {row("Power", s.power)}
+      {row("Brakes", s.brakes)}
+      {row("Aero", s.aero)}
+      {row("Weight", s.weight)}
+      {row("Notes", s.notes)}
+    </section>
+  );
+}
+
+export default function SpecCompare({ stock, current }: any) {
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      <SpecTable title="Stock Baseline" s={stock} />
+      <SpecTable title="Current Build" s={current} />
+    </div>
+  );
+}
+```
+
+---
+
+## 6) Buyer/Seller PDF Report (PDFKit)
+
+**Server route** `/api/v1/report/:vin.pdf`
+
+```ts
+import PDFDocument from "pdfkit";
+import { Router } from "express";
+import { db } from "../db/client";
+
+export const reportRouter = Router();
+
+reportRouter.get("/:vin.pdf", async (req, res) => {
+  const { vin } = req.params;
+  // Fetch public vehicle, owner summary, last 10 records, badges, costs, etc.
+  const view = await getPublicVinReportView(vin); // implement query
+  if (!view) return res.status(404).send("Not found");
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename=VIN_${vin}.pdf`);
+
+  const doc = new PDFDocument({ size: "LETTER", margin: 36 });
+  doc.pipe(res);
+
+  doc.fontSize(18).text(`${view.year} ${view.make} ${view.model} — ${vin}`, { continued: false });
+  doc.moveDown(0.5);
+  doc.fontSize(10).text(`Owners: ${view.owners}  |  Public: ${view.isPublic ? "Yes" : "No"}`);
+
+  // Badges
+  if (view.badges?.length) {
+    doc.moveDown(0.5);
+    doc.fontSize(10).text(`Badges: ${view.badges.join(", ")}`);
+  }
+
+  // Cost summary
+  if (view.costs) {
+    doc.moveDown(0.5);
+    doc.fontSize(11).text(`Lifetime Spend: $${(view.costs.total/100).toFixed(2)}  (Mods: $${(view.costs.mods/100).toFixed(2)}, Maint: $${(view.costs.maint/100).toFixed(2)})`);
+  }
+
+  doc.moveDown();
+  doc.fontSize(14).text("Recent Timeline", { underline: true });
+  doc.moveDown(0.5);
+  view.records.slice(0, 10).forEach((r: any) => {
+    doc.fontSize(11).text(`${new Date(r.performedAt).toLocaleDateString()} • ${r.mileage?.toLocaleString() || "—"} mi • ${r.kind.toUpperCase()} — ${r.title}`);
+    if (r.costCents) doc.fontSize(10).fillColor("#475569").text(`$${(r.costCents/100).toFixed(2)}`);
+    if (r.description) doc.fontSize(10).fillColor("#334155").text(r.description);
+    doc.fillColor("black");
+    doc.moveDown(0.4);
+  });
+
+  doc.end();
+});
+```
+
+---
+
+## 7) CSV Export / Import
+
+**Export** `/api/v1/vehicles/:vin/records.csv`
+
+```ts
+import { Router } from "express";
+import { db } from "../db/client";
+export const csvRouter = Router();
+
+csvRouter.get("/vehicles/:vin/records.csv", async (req, res) => {
+  const { vin } = req.params;
+  const rows = await db.query.records.findMany({ where: (r, { eq }) => eq(r.vin, vin) });
+  const header = ["kind","title","description","mileage","costCents","currency","performedAt"];
+  const lines = [header.join(",")].concat(rows.map(r => [r.kind, r.title, escapeCSV(r.description||""), r.mileage||"", r.costCents||0, r.currency||"USD", r.performedAt?.toISOString()||""].join(",")));
+  res.setHeader("Content-Type","text/csv");
+  res.send(lines.join("\n"));
+});
+
+function escapeCSV(s: string){
+  return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+```
+
+**Import (client)**
+
+```tsx
+// /client/src/components/ImportCSV.tsx
+import Papa from "papaparse";
+
+export default function ImportCSV({ onRecords }: { onRecords: (rows: any[]) => void }) {
+  return (
+    <label className="inline-flex items-center gap-2 cursor-pointer">
+      <input type="file" accept=".csv" className="hidden" onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        Papa.parse(f, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (res) => onRecords(res.data as any[]),
+        });
+      }} />
+      <span className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm">Import CSV</span>
+    </label>
+  );
+}
+```
+
+Then POST parsed rows to your `/records` endpoint in batches.
+
+---
+
+## 8) Public Build Thread Page (React)
+
+**`/client/src/pages/VinPublic.tsx`**
+
+```tsx
+import { useQuery } from "@tanstack/react-query";
+import BeforeAfter from "../components/BeforeAfter";
+import SpecCompare from "../components/SpecCompare";
+
+export default function VinPublic({ vin }: { vin: string }) {
+  const { data } = useQuery({ queryKey: ["vin", vin], queryFn: () => fetch(`/api/v1/vehicles/${vin}`).then(r=>r.json()) });
+  const v = data?.data;
+  if (!v) return null;
+  return (
+    <main className="max-w-6xl mx-auto p-4 space-y-8">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">{v.year} {v.make} {v.model} • {vin}</h1>
+        <div className="flex items-center gap-2">
+          <button className="px-3 py-1 rounded bg-slate-900 text-white" onClick={() => like(vin)}>Like</button>
+          <button className="px-3 py-1 rounded border" onClick={() => follow(vin)}>Follow</button>
+        </div>
+      </header>
+
+      {/* Spec Compare */}
+      {v.stock && v.current && <SpecCompare stock={v.stock} current={v.current} />}
+
+      {/* Timeline with optional Before/After in mod records */}
+      <section className="space-y-6">
+        <h2 className="text-xl font-semibold">Timeline</h2>
+        {v.records.map((r: any) => (
+          <article key={r.id} className="bg-white border rounded-2xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">{r.title}</div>
+              <div className="text-sm text-slate-500">{new Date(r.performedAt).toLocaleDateString()} • {r.mileage?.toLocaleString() || "—"} mi</div>
+            </div>
+            {r.beforeUrl && r.afterUrl ? (
+              <div className="mt-3"><BeforeAfter beforeUrl={r.beforeUrl} afterUrl={r.afterUrl} /></div>
+            ) : null}
+            {r.description && <p className="mt-2 text-slate-700 text-sm">{r.description}</p>}
+          </article>
+        ))}
+      </section>
+
+      {/* Comments */}
+      <section>
+        <h2 className="text-xl font-semibold mb-2">Comments</h2>
+        <CommentList vin={vin} />
+        <CommentForm vin={vin} />
+      </section>
+    </main>
+  );
+}
+
+async function like(vin: string){ await fetch(`/api/v1/showcase/${vin}/like`, { method: "POST" }); }
+async function follow(vin: string){ await fetch(`/api/v1/showcase/${vin}/follow`, { method: "POST" }); }
+
+function CommentList({ vin }: { vin: string }){
+  const { data } = useQuery({ queryKey: ["comments", vin], queryFn: () => fetch(`/api/v1/showcase/${vin}/comments`).then(r=>r.json()) });
+  const items = data?.data || [];
+  return (
+    <ul className="space-y-3">
+      {items.map((c: any) => (
+        <li key={c.id} className="bg-white border rounded-xl p-3">
+          <div className="text-sm text-slate-500">{new Date(c.createdAt).toLocaleString()}</div>
+          <div>{c.body}</div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CommentForm({ vin }: { vin: string }){
+  return (
+    <form className="mt-3 flex gap-2" onSubmit={async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.currentTarget as HTMLFormElement);
+      const body = fd.get("body") as string;
+      await fetch(`/api/v1/showcase/${vin}/comments`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ body }) });
+      (e.currentTarget as HTMLFormElement).reset();
+    }}>
+      <input name="body" placeholder="Add a comment" className="flex-1 border rounded-lg px-3 py-2" />
+      <button className="px-3 py-2 rounded bg-slate-900 text-white">Post</button>
+    </form>
+  );
+}
+```
+
+---
+
+## 9) Event Mode — Tagging and Gallery
+
+**Routes** `/api/v1/events/*`
+
+```ts
+import { Router } from "express";
+import { db } from "../db/client";
+import { events, eventAssets } from "../db/schema.extra";
+import { requireAuth } from "./middleware.auth";
+import { eq, desc } from "drizzle-orm";
+
+export const eventRouter = Router();
+
+eventRouter.post("/", requireAuth, async (req, res) => {
+  const { vin, title, kind, occurredAt, location, description, assets } = req.body;
+  const created = await db.insert(events).values({ vin, title, kind, occurredAt: new Date(occurredAt), location, description, createdBy: (req as any).user.id }).returning();
+  const e = created[0];
+  if (Array.isArray(assets) && assets.length) {
+    await db.insert(eventAssets).values(assets.map((a: any) => ({ eventId: e.id, storageKey: a.storageKey, caption: a.caption, photographer: a.photographer })));
+  }
+  res.json({ ok: true, data: e });
+});
+
+eventRouter.get(":vin", async (req, res) => {
+  const { vin } = req.params;
+  const rows = await db.query.events.findMany({ where: (t, { eq }) => eq(t.vin, vin), orderBy: (t, { desc }) => desc(t.occurredAt) });
+  res.json({ ok: true, data: rows });
+});
+```
+
+**Client event strip**
+
+```tsx
+export function EventStrip({ items }: { items: any[] }){
+  return (
+    <div className="overflow-x-auto whitespace-nowrap py-2">
+      {items.map((e) => (
+        <div key={e.id} className="inline-block align-top mr-3 w-64 bg-white border rounded-xl p-3">
+          <div className="text-sm text-slate-500">{new Date(e.occurredAt).toLocaleDateString()} • {e.kind}</div>
+          <div className="font-semibold">{e.title}</div>
+          {e.location && <div className="text-xs text-slate-600">{e.location}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+---
+
+## 10) Badges Logic (server service stub)
+
+```ts
+export async function computeBadges(vin: string) {
+  // Example rules; call in your VIN GET view builder
+  const badges: string[] = [];
+  if (await hasVerifiedMileage(vin)) badges.push("Verified Mileage");
+  if (await isSingleOwner(vin)) badges.push("Single-Owner");
+  return badges;
+}
+```
+
+---
+
+## 11) UI Hooks (React Query invalidations)
+
+* Invalidate `['vin', vin]` after: record create/edit/delete, like/follow, comment post, event create.
+
+---
+
+## 12) Security/Abuse Notes
+
+* Rate-limit likes, follows, comments.
+* Strip HTML in comments; max length 1,000 chars.
+* Only allow comments on **public** VINs.
+* On import, server-side validate each row with Zod before inserting.
+
+---
+
+## 13) QA Checklist
+
+* [ ] PDF endpoint returns a valid file for public VINs.
+* [ ] Before/After works on mobile (range input large enough to drag).
+* [ ] Spec compare renders “—” for missing fields.
+* [ ] Mileage verify stores EXIF time (if present) and sets badge after rule.
+* [ ] CSV export/import round-trips a small sample accurately.
+* [ ] Showcase page hides like/follow buttons when unauthenticated (optional).
+* [ ] Event strip scrolls horizontally with trackpad/swipe.
+
+---
+
+**Ship it.** This pack gives you the core UX and endpoints for comparison, reports, social, verification, data portability, and events. Hook up your existing auth + storage and you’re live.

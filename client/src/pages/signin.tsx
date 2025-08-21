@@ -16,9 +16,11 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
+    username: "",
     password: "",
     firstName: "",
     lastName: "",
+    usernameOrEmail: "",
   });
 
   const handleSignInSuccess = () => {
@@ -45,8 +47,14 @@ export default function SignIn() {
     try {
       const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
       const payload = isLogin 
-        ? { email: formData.email, password: formData.password }
-        : formData;
+        ? { usernameOrEmail: formData.usernameOrEmail, password: formData.password }
+        : { 
+            username: formData.username,
+            email: formData.email, 
+            password: formData.password,
+            firstName: formData.firstName,
+            lastName: formData.lastName
+          };
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -93,7 +101,7 @@ export default function SignIn() {
             <div className="flex justify-center">
               <div className="flex items-center space-x-3">
                 <img 
-                  src="@assets/file_00000000a83861fd87d61a9ade71888e_1755754560399.png" 
+                  src="@assets/Untitled_1755756007840.png" 
                   alt="VINtage Garage Registry Logo" 
                   className="h-12 w-auto"
                 />
@@ -127,46 +135,76 @@ export default function SignIn() {
             {/* Username/Password Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
-                <div className="grid grid-cols-2 gap-4">
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        name="firstName"
+                        type="text"
+                        required={!isLogin}
+                        value={formData.firstName}
+                        onChange={handleInputChange}
+                        placeholder="John"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        name="lastName"
+                        type="text"
+                        required={!isLogin}
+                        value={formData.lastName}
+                        onChange={handleInputChange}
+                        placeholder="Doe"
+                      />
+                    </div>
+                  </div>
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
+                    <Label htmlFor="username">Username</Label>
                     <Input
-                      id="firstName"
-                      name="firstName"
+                      id="username"
+                      name="username"
                       type="text"
                       required={!isLogin}
-                      value={formData.firstName}
+                      value={formData.username}
                       onChange={handleInputChange}
-                      placeholder="John"
+                      placeholder="johndoe"
                     />
                   </div>
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
+                    <Label htmlFor="email">Email</Label>
                     <Input
-                      id="lastName"
-                      name="lastName"
-                      type="text"
+                      id="email"
+                      name="email"
+                      type="email"
                       required={!isLogin}
-                      value={formData.lastName}
+                      value={formData.email}
                       onChange={handleInputChange}
-                      placeholder="Doe"
+                      placeholder="john@example.com"
                     />
                   </div>
-                </div>
+                </>
               )}
               
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  placeholder="john@example.com"
-                />
-              </div>
+              {isLogin && (
+                <div className="space-y-2">
+                  <Label htmlFor="usernameOrEmail">Username or Email</Label>
+                  <Input
+                    id="usernameOrEmail"
+                    name="usernameOrEmail"
+                    type="text"
+                    required={isLogin}
+                    value={formData.usernameOrEmail}
+                    onChange={handleInputChange}
+                    placeholder="johndoe or john@example.com"
+                  />
+                </div>
+              )}
               
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
@@ -179,7 +217,7 @@ export default function SignIn() {
                     value={formData.password}
                     onChange={handleInputChange}
                     placeholder="••••••••"
-                    minLength={8}
+                    minLength={6}
                   />
                   <Button
                     type="button"

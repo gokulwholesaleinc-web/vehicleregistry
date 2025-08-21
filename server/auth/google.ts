@@ -229,3 +229,106 @@ async function ensureUniqueUsername(base: string) {
   }
   return `${base}${Date.now().toString().slice(-4)}`;
 }
+
+// Traditional username/password registration
+googleAuthRouter.post("/auth/register", async (req, res) => {
+  try {
+    const { username, email, password, firstName, lastName } = z.object({
+      username: z.string().min(3).max(50),
+      email: z.string().email(),
+      password: z.string().min(6),
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+    }).parse(req.body);
+
+    // Check if user already exists
+    const existingUser = await db.query.users.findFirst({
+      where: (u, { or, eq }) => or(eq(u.email, email.toLowerCase()), eq(u.username, username))
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: "Username or email already exists" });
+    }
+
+    const hashedPassword = await hashPassword(password);
+    
+    const inserted = await db.insert(users).values({
+      email: email.toLowerCase(),
+      username,
+      firstName,
+      lastName,
+      password: hashedPassword,
+      isPublic: true,
+      role: "user",
+      isActive: true,
+      lastLoginAt: new Date(),
+    }).returning();
+
+    const user = inserted[0];
+    const token = signAccess({ id: user.id, email: user.email });
+    
+    return res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
+    });
+  } catch (e) {
+    console.error("/auth/register error", e);
+    return res.status(400).json({ error: "Registration failed" });
+  }
+});
+
+// Traditional username/password login
+googleAuthRouter.post("/auth/login", async (req, res) => {
+  try {
+    const { usernameOrEmail, password } = z.object({
+      usernameOrEmail: z.string().min(1),
+      password: z.string().min(1),
+    }).parse(req.body);
+
+    // Find user by username or email
+    const user = await db.query.users.findFirst({
+      where: (u, { or, eq }) => or(
+        eq(u.email, usernameOrEmail.toLowerCase()),
+        eq(u.username, usernameOrEmail)
+      )
+    });
+
+    if (!user || !user.password) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const isValidPassword = await comparePasswords(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Update last login
+    await db.update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    const token = signAccess({ id: user.id, email: user.email });
+    
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
+    });
+  } catch (e) {
+    console.error("/auth/login error", e);
+    return res.status(400).json({ error: "Login failed" });
+  }
+});
