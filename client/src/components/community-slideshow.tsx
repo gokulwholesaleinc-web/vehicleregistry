@@ -223,45 +223,52 @@ export default function CommunitySlideshow() {
             </Button>
 
             {/* Bottom Info Overlay */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 sm:p-4">
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-3 sm:p-4">
               <div className="text-white">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 space-y-2 sm:space-y-0">
-                  <div>
-                    <h4 className="font-bold text-lg sm:text-xl">
-                      {currentPhoto.year} {currentPhoto.make} {currentPhoto.model}
-                    </h4>
-                    <p className="text-white/80 text-sm sm:text-base">"{currentPhoto.vehicleName}"</p>
-                  </div>
-                  <div className="flex space-x-3">
-                    <button className="flex items-center space-x-1 touch-friendly hover:text-red-300 transition-colors">
-                      <Heart className="w-4 h-4" />
-                      <span className="text-sm">{currentPhoto.likes}</span>
-                    </button>
-                    <div className="flex items-center space-x-1">
-                      <Eye className="w-4 h-4" />
-                      <span className="text-sm">{currentPhoto.views}</span>
+                {/* Title and Stats Row */}
+                <div className="mb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-base sm:text-lg lg:text-xl leading-tight truncate">
+                        {currentPhoto.year} {currentPhoto.make} {currentPhoto.model}
+                      </h4>
+                      <p className="text-white/80 text-xs sm:text-sm mt-0.5 truncate">"{currentPhoto.vehicleName}"</p>
+                    </div>
+                    <div className="flex shrink-0 space-x-3">
+                      <button className="flex items-center space-x-1 touch-friendly hover:text-red-300 transition-colors">
+                        <Heart className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span className="text-xs sm:text-sm font-medium">{currentPhoto.likes}</span>
+                      </button>
+                      <div className="flex items-center space-x-1">
+                        <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span className="text-xs sm:text-sm font-medium">{currentPhoto.views}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
                 
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-2 lg:space-y-0">
-                  <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-white/80">
+                {/* Meta Info and Tags */}
+                <div className="space-y-2">
+                  {/* User Info Row */}
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-white/80">
                     <div className="flex items-center space-x-1">
-                      <User className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span>{currentPhoto.ownerName}</span>
+                      <User className="w-3 h-3" />
+                      <span className="font-medium">{currentPhoto.ownerName}</span>
                     </div>
                     <div className="flex items-center space-x-1">
-                      <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
+                      <Calendar className="w-3 h-3" />
                       <span>{currentPhoto.uploadDate}</span>
                     </div>
-                    <span>📍 {currentPhoto.location}</span>
+                    <span className="flex items-center">📍 {currentPhoto.location}</span>
                   </div>
+                  
+                  {/* Tags Row */}
                   <div className="flex flex-wrap gap-1">
                     {currentPhoto.tags.map((tag) => (
                       <Badge 
                         key={tag} 
                         variant="secondary" 
-                        className="text-xs bg-white/20 text-white border-white/30"
+                        className="text-xs h-5 px-2 bg-white/20 text-white border-white/30 hover:bg-white/30 transition-colors"
                       >
                         {tag}
                       </Badge>
