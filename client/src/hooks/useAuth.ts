@@ -9,8 +9,11 @@ export function useAuth() {
     queryFn: async () => {
       if (!token) return null;
       try {
-        return await api("/api/jwt/user");
+        const result = await api("/api/jwt/user");
+        console.log("Auth query result:", result);
+        return result;
       } catch (err) {
+        console.log("Auth query error:", err);
         // Token might be expired, remove it
         if (err instanceof Error && err.message.includes("401")) {
           localStorage.removeItem("vg.jwt");
@@ -22,10 +25,21 @@ export function useAuth() {
     enabled: !!token,
   });
 
+  const isAuthenticated = !!user && !!token;
+  const authLoading = !!token && isLoading;
+  
+  console.log("useAuth state:", { 
+    token: token ? "present" : "missing", 
+    user: user ? "present" : "missing", 
+    isLoading: authLoading, 
+    isAuthenticated,
+    error 
+  });
+
   return {
     user,
-    isLoading: !!token && isLoading,
-    isAuthenticated: !!user && !!token,
+    isLoading: authLoading,
+    isAuthenticated,
     error,
   };
 }
