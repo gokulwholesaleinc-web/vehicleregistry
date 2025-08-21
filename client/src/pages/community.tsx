@@ -32,27 +32,27 @@ export default function Community() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
+      <div className="container-responsive py-6 lg:py-8">
+        <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between mb-6 lg:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
             <Link href="/dashboard">
-              <Button variant="ghost" size="sm" data-testid="button-back-dashboard">
+              <Button variant="ghost" size="sm" className="interactive-scale w-full sm:w-auto" data-testid="button-back-dashboard">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Dashboard
               </Button>
             </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            <div className="text-center sm:text-left">
+              <h1 className="heading-lg sm:text-2xl lg:text-3xl text-gray-900 dark:text-white">
                 Community Builds
               </h1>
-              <p className="text-gray-600 dark:text-gray-300">
+              <p className="mobile-text text-gray-600 dark:text-gray-300">
                 Discover amazing builds from fellow enthusiasts
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <div className="flex items-center justify-center sm:justify-end gap-2">
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
             <span className="text-sm text-gray-600 dark:text-gray-300">
               {vehicles.length} public vehicles
             </span>
@@ -60,10 +60,10 @@ export default function Community() {
         </div>
 
         {isLoading ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="animate-pulse">
-                <Card>
+                <Card className="card-modern">
                   <CardHeader>
                     <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
                     <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
@@ -90,30 +90,32 @@ export default function Community() {
           </div>
         ) : (
           <>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 lg:mb-8">
               {vehicles.map((vehicle) => (
-                <Card key={vehicle.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <span data-testid={`text-vehicle-${vehicle.id}`}>
+                <Card key={vehicle.id} className="card-modern card-hover cursor-pointer group">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center justify-between text-sm sm:text-base">
+                      <span className="truncate mr-2" data-testid={`text-vehicle-${vehicle.id}`}>
                         {vehicle.year} {vehicle.make} {vehicle.model}
                       </span>
-                      <Badge variant="secondary">Public</Badge>
+                      <Badge variant="secondary" className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                        Public
+                      </Badge>
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-xs sm:text-sm">
                       VIN: {vehicle.vin.slice(-6)}
                       {vehicle.trim && ` • ${vehicle.trim}`}
                       {vehicle.color && ` • ${vehicle.color}`}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
                       <div className="flex items-center gap-1">
-                        <Car className="w-4 h-4" />
+                        <Car className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400" />
                         <span>{vehicle.currentMileage.toLocaleString()} miles</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
+                        <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-purple-600 dark:text-purple-400" />
                         <span>{new Date(vehicle.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
@@ -122,11 +124,12 @@ export default function Community() {
               ))}
             </div>
 
-            <div className="flex justify-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
               <Button
                 variant="outline"
                 onClick={() => setOffset(Math.max(0, offset - limit))}
                 disabled={offset === 0}
+                className="w-full sm:w-auto touch-friendly"
                 data-testid="button-previous-page"
               >
                 Previous
@@ -135,6 +138,7 @@ export default function Community() {
                 variant="outline"
                 onClick={() => setOffset(offset + limit)}
                 disabled={vehicles.length < limit}
+                className="w-full sm:w-auto touch-friendly"
                 data-testid="button-next-page"
               >
                 Next

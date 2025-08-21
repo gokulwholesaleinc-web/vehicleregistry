@@ -191,16 +191,16 @@ export default function AddEntryModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-add-entry">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-add-entry">
         <DialogHeader>
-          <DialogTitle>Add New Entry</DialogTitle>
+          <DialogTitle className="mobile-heading">Add New Entry</DialogTitle>
         </DialogHeader>
         
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6">
           <Button
             variant={entryType === "modification" ? "default" : "outline"}
             onClick={() => onEntryTypeChange("modification")}
-            className={entryType === "modification" ? "bg-automotive-blue-600 hover:bg-automotive-blue-700" : ""}
+            className={`touch-friendly ${entryType === "modification" ? "btn-primary" : ""}`}
             data-testid="button-type-modification"
           >
             Modification
@@ -208,7 +208,7 @@ export default function AddEntryModal({
           <Button
             variant={entryType === "maintenance" ? "default" : "outline"}
             onClick={() => onEntryTypeChange("maintenance")}
-            className={entryType === "maintenance" ? "bg-automotive-blue-600 hover:bg-automotive-blue-700" : ""}
+            className={`touch-friendly ${entryType === "maintenance" ? "btn-primary" : ""}`}
             data-testid="button-type-maintenance"
           >
             Maintenance
@@ -217,8 +217,8 @@ export default function AddEntryModal({
 
         {entryType === "modification" ? (
           <Form {...modificationForm}>
-            <form onSubmit={modificationForm.handleSubmit(onModificationSubmit)} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={modificationForm.handleSubmit(onModificationSubmit)} className="space-y-4 sm:space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <FormField
                   control={modificationForm.control}
                   name="category"
@@ -227,7 +227,7 @@ export default function AddEntryModal({
                       <FormLabel>Category</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger data-testid="select-modification-category">
+                          <SelectTrigger className="touch-friendly" data-testid="select-modification-category">
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                         </FormControl>
@@ -250,7 +250,7 @@ export default function AddEntryModal({
                     <FormItem>
                       <FormLabel>Install Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} data-testid="input-install-date" />
+                        <Input type="date" {...field} className="touch-friendly" data-testid="input-install-date" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -265,7 +265,7 @@ export default function AddEntryModal({
                   <FormItem>
                     <FormLabel>Title</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g., Cold Air Intake Installation" data-testid="input-modification-title" />
+                      <Input {...field} placeholder="e.g., Cold Air Intake Installation" className="touch-friendly" data-testid="input-modification-title" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -286,7 +286,7 @@ export default function AddEntryModal({
                 )}
               />
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <FormField
                   control={modificationForm.control}
                   name="cost"
@@ -294,7 +294,7 @@ export default function AddEntryModal({
                     <FormItem>
                       <FormLabel>Cost</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" {...field} placeholder="0.00" data-testid="input-modification-cost" />
+                        <Input type="number" step="0.01" {...field} placeholder="0.00" className="touch-friendly" data-testid="input-modification-cost" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -384,14 +384,14 @@ export default function AddEntryModal({
                 )}
               </div>
 
-              <div className="flex justify-end space-x-4 pt-4">
-                <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
+              <div className="flex flex-col sm:flex-row sm:justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-4">
+                <Button type="button" variant="outline" onClick={onClose} className="touch-friendly" data-testid="button-cancel">
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={createModificationMutation.isPending}
-                  className="bg-automotive-blue-600 hover:bg-automotive-blue-700"
+                  className="btn-primary touch-friendly"
                   data-testid="button-save-modification"
                 >
                   {createModificationMutation.isPending ? "Saving..." : "Save Entry"}
@@ -402,7 +402,7 @@ export default function AddEntryModal({
         ) : (
           <Form {...maintenanceForm}>
             <form onSubmit={maintenanceForm.handleSubmit(onMaintenanceSubmit)} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <FormField
                   control={maintenanceForm.control}
                   name="serviceType"
@@ -445,7 +445,7 @@ export default function AddEntryModal({
                 )}
               />
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 <FormField
                   control={maintenanceForm.control}
                   name="cost"
@@ -556,14 +556,14 @@ export default function AddEntryModal({
                 )}
               </div>
 
-              <div className="flex justify-end space-x-4 pt-4">
-                <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
+              <div className="flex flex-col sm:flex-row sm:justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-4">
+                <Button type="button" variant="outline" onClick={onClose} className="touch-friendly" data-testid="button-cancel">
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={createMaintenanceMutation.isPending}
-                  className="bg-automotive-blue-600 hover:bg-automotive-blue-700"
+                  className="btn-primary touch-friendly"
                   data-testid="button-save-maintenance"
                 >
                   {createMaintenanceMutation.isPending ? "Saving..." : "Save Entry"}

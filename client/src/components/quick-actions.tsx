@@ -39,29 +39,27 @@ export default function QuickActions({ onAddEntry }: QuickActionsProps) {
   ];
 
   return (
-    <Card data-testid="card-quick-actions">
-      <CardHeader>
-        <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
+    <Card className="card-modern" data-testid="card-quick-actions">
+      <CardHeader className="pb-3">
+        <h3 className="mobile-heading text-gray-900 dark:text-white">Quick Actions</h3>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {actions.map((action) => (
-            <Button
-              key={action.label}
-              onClick={action.onClick}
-              variant={action.variant}
-              className={`w-full justify-start ${
-                action.variant === "default" 
-                  ? "bg-automotive-blue-600 text-white hover:bg-automotive-blue-700" 
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-              data-testid={action.testId}
-            >
-              <action.icon className="h-4 w-4 mr-3" />
-              {action.label}
-            </Button>
-          ))}
-        </div>
+      <CardContent className="space-y-3">
+        {actions.map((action) => (
+          <Button
+            key={action.label}
+            onClick={action.onClick}
+            variant={action.variant}
+            className={`w-full justify-start touch-friendly group transition-all duration-300 ${
+              action.variant === "default" 
+                ? "btn-primary" 
+                : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600"
+            }`}
+            data-testid={action.testId}
+          >
+            <action.icon className="h-4 w-4 mr-3 group-hover:scale-110 transition-transform duration-200" />
+            <span className="mobile-text">{action.label}</span>
+          </Button>
+        ))}
       </CardContent>
     </Card>
   );

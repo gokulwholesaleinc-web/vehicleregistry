@@ -84,31 +84,31 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
   }
 
   return (
-    <Card className="mb-8" data-testid="card-vehicle-selector">
-      <CardContent className="p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center space-x-6 mb-4 lg:mb-0">
+    <Card className="card-modern mb-6 lg:mb-8" data-testid="card-vehicle-selector">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col space-y-4 lg:space-y-0 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
             {selectedVehicle && (
               <>
-                <div className="w-20 h-14 bg-gray-200 rounded-lg flex items-center justify-center">
-                  <span className="text-xs text-gray-500">No Image</span>
+                <div className="w-16 h-12 sm:w-20 sm:h-14 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-xl flex items-center justify-center shadow-lg mx-auto sm:mx-0">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">No Image</span>
                 </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900" data-testid="text-vehicle-name">
+                <div className="text-center sm:text-left">
+                  <h2 className="mobile-heading sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white" data-testid="text-vehicle-name">
                     {selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}
                   </h2>
-                  <p className="text-steel-gray-600" data-testid="text-vehicle-vin">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate" data-testid="text-vehicle-vin">
                     VIN: {selectedVehicle.vin}
                   </p>
-                  <div className="flex items-center space-x-4 mt-2">
-                    <span className="text-sm text-steel-gray-500">
-                      Mileage: <span className="font-medium" data-testid="text-current-mileage">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-2 space-y-1 sm:space-y-0">
+                    <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                      Mileage: <span className="font-medium text-blue-600 dark:text-blue-400" data-testid="text-current-mileage">
                         {selectedVehicle.currentMileage.toLocaleString()}
                       </span>
                     </span>
                     {selectedVehicle.lastServiceDate && (
-                      <span className="text-sm text-steel-gray-500">
-                        Last Service: <span className="font-medium" data-testid="text-last-service">
+                      <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                        Last Service: <span className="font-medium text-green-600 dark:text-green-400" data-testid="text-last-service">
                           {selectedVehicle.lastServiceDate}
                         </span>
                       </span>
@@ -118,9 +118,9 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
               </>
             )}
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
             <Select value={selectedVehicleId} onValueChange={onVehicleSelect}>
-              <SelectTrigger className="w-[200px]" data-testid="select-vehicle">
+              <SelectTrigger className="w-full sm:w-[200px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700" data-testid="select-vehicle">
                 <SelectValue placeholder="Select a vehicle" />
               </SelectTrigger>
               <SelectContent>
@@ -135,20 +135,21 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button 
-                  className="bg-automotive-blue-600 text-white hover:bg-automotive-blue-700"
+                  className="btn-primary w-full sm:w-auto touch-friendly"
                   data-testid="button-add-vehicle"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Vehicle
+                  <span className="hidden sm:inline">Add Vehicle</span>
+                  <span className="sm:hidden">Add</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="w-[95vw] max-w-[425px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Add New Vehicle</DialogTitle>
+                  <DialogTitle className="mobile-heading">Add New Vehicle</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <FormField
                         control={form.control}
                         name="year"
@@ -161,6 +162,7 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
                                 {...field} 
                                 onChange={(e) => field.onChange(parseInt(e.target.value))}
                                 data-testid="input-year"
+                                className="touch-friendly"
                               />
                             </FormControl>
                             <FormMessage />
@@ -174,7 +176,7 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
                           <FormItem>
                             <FormLabel>Make</FormLabel>
                             <FormControl>
-                              <Input {...field} data-testid="input-make" />
+                              <Input {...field} data-testid="input-make" className="touch-friendly" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -216,7 +218,7 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
                           <FormItem>
                             <FormLabel>Trim (Optional)</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="e.g., EX-L, Sport" data-testid="input-trim" />
+                              <Input {...field} value={field.value || ''} placeholder="e.g., EX-L, Sport" data-testid="input-trim" className="touch-friendly" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -230,7 +232,7 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect }: 
                           <FormItem>
                             <FormLabel>Color (Optional)</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="e.g., Red, Blue" data-testid="input-color" />
+                              <Input {...field} value={field.value || ''} placeholder="e.g., Red, Blue" data-testid="input-color" className="touch-friendly" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
