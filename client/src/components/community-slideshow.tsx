@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Heart, Eye, User, Calendar, Play, Pause } from "lucide-react";
 import bmwImage1 from "@assets/FB_IMG_1751951510231_1755750547262.jpg";
 import bmwImage2 from "@assets/FB_IMG_1751951504094_1755750547274.jpg";
+import bmwMeetImage from "@assets/DSC_1899_1755751395846.jpg";
+import evoImage from "@assets/DSC_1850_1755751434966.jpg";
 
 interface VehiclePhoto {
   id: string;
@@ -49,6 +51,34 @@ const samplePhotos: VehiclePhoto[] = [
     views: 1456,
     uploadDate: "3 days ago",
     tags: ["Showroom", "Clean", "Stock"]
+  },
+  {
+    id: "3",
+    imageUrl: bmwMeetImage,
+    vehicleName: "M Power Lineup",
+    year: 2022,
+    make: "BMW",
+    model: "M4 Competition",
+    ownerName: "BMWCrew",
+    location: "Texas",
+    likes: 312,
+    views: 2156,
+    uploadDate: "1 day ago",
+    tags: ["Meet", "Community", "M4"]
+  },
+  {
+    id: "4",
+    imageUrl: evoImage,
+    vehicleName: "Forest Runner",
+    year: 2006,
+    make: "Mitsubishi",
+    model: "Lancer Evolution IX",
+    ownerName: "EvoDriver",
+    location: "Virginia",
+    likes: 198,
+    views: 1687,
+    uploadDate: "4 days ago",
+    tags: ["Rally", "AWD", "Tuned"]
   }
 ];
 
