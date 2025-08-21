@@ -18,7 +18,8 @@ import {
   Bell,
   Clock,
   Sparkles,
-  Globe
+  Globe,
+  Shield
 } from "lucide-react";
 import RealTimeClock from "@/components/real-time-clock";
 
@@ -38,6 +39,9 @@ export default function MobileNav({ onAddEntry }: MobileNavProps) {
     { icon: Wrench, label: "Maintenance", href: "/maintenance", badge: "3" },
     { icon: Settings, label: "Modifications", href: "/modifications", badge: null },
     { icon: Users, label: "Community", href: "/community", badge: "New" },
+    ...(isAuthenticated && (user as any)?.role === "admin" ? [
+      { icon: Shield, label: "Admin", href: "/admin", badge: "Admin" }
+    ] : []),
   ];
 
   return (

@@ -17,6 +17,27 @@ import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
 import { vehicleTransfers } from "@shared/schema";
+
+// Admin middleware
+export const isAdmin: RequestHandler = async (req: any, res, next) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const userId = req.user.claims.sub;
+    const user = await storage.getUser(userId);
+    
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    req.adminUser = user;
+    next();
+  } catch (error) {
+    res.status(500).json({ message: "Admin verification failed" });
+  }
+};
 import { 
   decodeVIN, 
   generateMaintenanceRecommendations, 
@@ -742,6 +763,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Duplicate check error:', error);
       res.status(500).json({ message: 'Failed to check for duplicates' });
+    }
+  });
+
+  // Admin Routes
+  app.get('/api/admin/stats', isAdmin, async (req, res) => {
+    try {
+      const stats = await storage.getPlatformStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching admin stats:", error);
+      res.status(500).json({ message: "Failed to fetch platform statistics" });
+    }
+  });
+
+  app.get('/api/admin/users', isAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const users = await storage.getAllUsers(limit, offset);
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.post('/api/admin/users/:id/suspend', isAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.adminUser.id;
+      const { reason } = req.body;
+      const success = await storage.suspendUser(req.params.id, adminId, reason);
+      
+      if (success) {
+        res.json({ message: "User suspended successfully" });
+      } else {
+        res.status(400).json({ message: "Failed to suspend user" });
+      }
+    } catch (error) {
+      console.error("Error suspending user:", error);
+      res.status(500).json({ message: "Failed to suspend user" });
+    }
+  });
+
+  app.post('/api/admin/users/:id/reactivate', isAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.adminUser.id;
+      const { reason } = req.body;
+      const success = await storage.reactivateUser(req.params.id, adminId, reason);
+      
+      if (success) {
+        res.json({ message: "User reactivated successfully" });
+      } else {
+        res.status(400).json({ message: "Failed to reactivate user" });
+      }
+    } catch (error) {
+      console.error("Error reactivating user:", error);
+      res.status(500).json({ message: "Failed to reactivate user" });
+    }
+  });
+
+  app.post('/api/admin/users/:id/promote', isAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.adminUser.id;
+      const success = await storage.promoteUserToAdmin(req.params.id, adminId);
+      
+      if (success) {
+        res.json({ message: "User promoted to admin successfully" });
+      } else {
+        res.status(400).json({ message: "Failed to promote user" });
+      }
+    } catch (error) {
+      console.error("Error promoting user:", error);
+      res.status(500).json({ message: "Failed to promote user" });
+    }
+  });
+
+  app.get('/api/admin/vehicles', isAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const vehicles = await storage.getAllVehicles(limit, offset);
+      res.json(vehicles);
+    } catch (error) {
+      console.error("Error fetching vehicles:", error);
+      res.status(500).json({ message: "Failed to fetch vehicles" });
+    }
+  });
+
+  app.delete('/api/admin/vehicles/:id', isAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.adminUser.id;
+      const { reason } = req.body;
+      const success = await storage.deleteVehicle(req.params.id, adminId, reason);
+      
+      if (success) {
+        res.json({ message: "Vehicle deleted successfully" });
+      } else {
+        res.status(400).json({ message: "Failed to delete vehicle" });
+      }
+    } catch (error) {
+      console.error("Error deleting vehicle:", error);
+      res.status(500).json({ message: "Failed to delete vehicle" });
+    }
+  });
+
+  app.get('/api/admin/action-logs', isAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const logs = await storage.getAdminActionLogs(limit, offset);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching action logs:", error);
+      res.status(500).json({ message: "Failed to fetch action logs" });
     }
   });
 

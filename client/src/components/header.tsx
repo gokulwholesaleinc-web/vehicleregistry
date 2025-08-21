@@ -84,6 +84,20 @@ export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
                   </Badge>
                 </a>
               </Link>
+              {isAuthenticated && (user as any)?.role === "admin" && (
+                <Link 
+                  href="/admin"
+                  className="text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 pb-4 transition-colors duration-200 relative group"
+                >
+                  <a data-testid="nav-admin">
+                    Admin
+                    <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-red-500 to-pink-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                    <Badge variant="destructive" className="absolute -top-2 -right-3 text-xs">
+                      Admin
+                    </Badge>
+                  </a>
+                </Link>
+              )}
             </nav>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-4">

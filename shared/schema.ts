@@ -26,6 +26,9 @@ export const users = pgTable("users", {
   bio: text("bio"),
   location: varchar("location"),
   isPublic: boolean("is_public").default(true).notNull(),
+  role: varchar("role").default("user").notNull(), // user, admin, moderator
+  isActive: boolean("is_active").default(true).notNull(),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -199,6 +202,21 @@ export const notifications = pgTable("notifications", {
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+// Admin action logs for audit trail
+export const adminActionLogs = pgTable("admin_action_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id").notNull().references(() => users.id),
+  action: varchar("action").notNull(), // suspend_user, delete_vehicle, etc.
+  targetType: varchar("target_type").notNull(), // user, vehicle, modification, etc.
+  targetId: varchar("target_id").notNull(),
+  details: jsonb("details"),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AdminActionLog = typeof adminActionLogs.$inferSelect;
+export type InsertAdminActionLog = typeof adminActionLogs.$inferInsert;
 
 export type VehicleOwnership = typeof vehicleOwnership.$inferSelect;
 export type InsertVehicleOwnership = typeof vehicleOwnership.$inferInsert;

@@ -7,6 +7,7 @@ import {
   vehicleOwnership,
   vehicleTransfers,
   notifications,
+  adminActionLogs,
   type User,
   type UpsertUser,
   type Vehicle,
@@ -23,9 +24,11 @@ import {
   type InsertVehicleTransfer,
   type Notification,
   type InsertNotification,
+  type AdminActionLog,
+  type InsertAdminActionLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc } from "drizzle-orm";
+import { eq, and, or, desc, asc, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users (for Replit Auth)
@@ -69,6 +72,17 @@ export interface IStorage {
   getNotifications(userId: string, unreadOnly?: boolean): Promise<Notification[]>;
   markNotificationRead(notificationId: string): Promise<boolean>;
   markAllNotificationsRead(userId: string): Promise<boolean>;
+
+  // Admin Functions
+  getAllUsers(limit?: number, offset?: number): Promise<User[]>;
+  suspendUser(userId: string, adminId: string, reason: string): Promise<boolean>;
+  reactivateUser(userId: string, adminId: string, reason: string): Promise<boolean>;
+  promoteUserToAdmin(userId: string, adminId: string): Promise<boolean>;
+  getAllVehicles(limit?: number, offset?: number): Promise<Vehicle[]>;
+  deleteVehicle(vehicleId: string, adminId: string, reason: string): Promise<boolean>;
+  getPlatformStats(): Promise<any>;
+  getAdminActionLogs(limit?: number, offset?: number): Promise<AdminActionLog[]>;
+  logAdminAction(action: InsertAdminActionLog): Promise<AdminActionLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -351,6 +365,165 @@ export class DatabaseStorage implements IStorage {
       .set({ isRead: true, readAt: new Date() })
       .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
     return result.rowCount > 0;
+  }
+
+  // Admin Functions
+  async getAllUsers(limit = 50, offset = 0): Promise<User[]> {
+    return await db
+      .select()
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async suspendUser(userId: string, adminId: string, reason: string): Promise<boolean> {
+    try {
+      await db
+        .update(users)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+
+      await this.logAdminAction({
+        adminUserId: adminId,
+        action: "suspend_user",
+        targetType: "user",
+        targetId: userId,
+        reason,
+        details: { suspended: true }
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Failed to suspend user:", error);
+      return false;
+    }
+  }
+
+  async reactivateUser(userId: string, adminId: string, reason: string): Promise<boolean> {
+    try {
+      await db
+        .update(users)
+        .set({ isActive: true, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+
+      await this.logAdminAction({
+        adminUserId: adminId,
+        action: "reactivate_user",
+        targetType: "user",
+        targetId: userId,
+        reason,
+        details: { reactivated: true }
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Failed to reactivate user:", error);
+      return false;
+    }
+  }
+
+  async promoteUserToAdmin(userId: string, adminId: string): Promise<boolean> {
+    try {
+      await db
+        .update(users)
+        .set({ role: "admin", updatedAt: new Date() })
+        .where(eq(users.id, userId));
+
+      await this.logAdminAction({
+        adminUserId: adminId,
+        action: "promote_to_admin",
+        targetType: "user",
+        targetId: userId,
+        reason: "Promoted to admin role",
+        details: { newRole: "admin" }
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Failed to promote user:", error);
+      return false;
+    }
+  }
+
+  async getAllVehicles(limit = 50, offset = 0): Promise<Vehicle[]> {
+    return await db
+      .select()
+      .from(vehicles)
+      .orderBy(desc(vehicles.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async deleteVehicle(vehicleId: string, adminId: string, reason: string): Promise<boolean> {
+    try {
+      // Delete related records first
+      await db.delete(modifications).where(eq(modifications.vehicleId, vehicleId));
+      await db.delete(maintenanceRecords).where(eq(maintenanceRecords.vehicleId, vehicleId));
+      await db.delete(upcomingMaintenance).where(eq(upcomingMaintenance.vehicleId, vehicleId));
+      await db.delete(vehicleOwnership).where(eq(vehicleOwnership.vehicleId, vehicleId));
+      await db.delete(vehicleTransfers).where(eq(vehicleTransfers.vehicleId, vehicleId));
+      
+      // Delete the vehicle
+      await db.delete(vehicles).where(eq(vehicles.id, vehicleId));
+
+      await this.logAdminAction({
+        adminUserId: adminId,
+        action: "delete_vehicle",
+        targetType: "vehicle",
+        targetId: vehicleId,
+        reason,
+        details: { deleted: true }
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Failed to delete vehicle:", error);
+      return false;
+    }
+  }
+
+  async getPlatformStats(): Promise<any> {
+    try {
+      const [userCount] = await db.select({ count: sql`COUNT(*)` }).from(users);
+      const [vehicleCount] = await db.select({ count: sql`COUNT(*)` }).from(vehicles);
+      const [modificationCount] = await db.select({ count: sql`COUNT(*)` }).from(modifications);
+      const [maintenanceCount] = await db.select({ count: sql`COUNT(*)` }).from(maintenanceRecords);
+      const [transferCount] = await db.select({ count: sql`COUNT(*)` }).from(vehicleTransfers);
+      const [activeUsers] = await db.select({ count: sql`COUNT(*)` }).from(users).where(eq(users.isActive, true));
+      const [publicVehicles] = await db.select({ count: sql`COUNT(*)` }).from(vehicles).where(eq(vehicles.isPublic, true));
+      
+      return {
+        totalUsers: Number(userCount.count),
+        activeUsers: Number(activeUsers.count),
+        totalVehicles: Number(vehicleCount.count),
+        publicVehicles: Number(publicVehicles.count),
+        totalModifications: Number(modificationCount.count),
+        totalMaintenanceRecords: Number(maintenanceCount.count),
+        totalTransfers: Number(transferCount.count),
+        lastUpdated: new Date()
+      };
+    } catch (error) {
+      console.error("Failed to get platform stats:", error);
+      return {};
+    }
+  }
+
+  async getAdminActionLogs(limit = 100, offset = 0): Promise<AdminActionLog[]> {
+    return await db
+      .select()
+      .from(adminActionLogs)
+      .orderBy(desc(adminActionLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async logAdminAction(actionData: InsertAdminActionLog): Promise<AdminActionLog> {
+    const [action] = await db
+      .insert(adminActionLogs)
+      .values(actionData)
+      .returning();
+    return action;
   }
 }
 
