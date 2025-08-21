@@ -211,7 +211,7 @@ export default function CommunitySlideshow() {
           {/* Main Image */}
           <div className="relative h-64 sm:h-80 lg:h-96">
             <div 
-              className="w-full h-full cursor-pointer transition-transform duration-200 hover:scale-105 select-none"
+              className="group w-full h-full cursor-pointer transition-transform duration-200 hover:scale-105 select-none"
               onPointerDown={onPointerDown}
               onPointerUp={handlePointerUp}
               onClick={(e) => e.preventDefault()} // Prevent bubbling to carousel
@@ -223,12 +223,12 @@ export default function CommunitySlideshow() {
                 photoUrl={currentPhoto.imageUrl}
                 title={`${currentPhoto.year} ${currentPhoto.make} ${currentPhoto.model}`}
               />
-            </div>
-            
-            {/* Click hint overlay */}
-            <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-all duration-200 cursor-pointer flex items-center justify-center opacity-0 hover:opacity-100">
-              <div className="bg-white/90 text-gray-900 px-3 py-1 rounded-full text-sm font-medium">
-                Click to view full size
+              
+              {/* CSS-only hover hint - always rendered, pointer-events disabled */}
+              <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+                <span className="rounded-full bg-slate-900/70 text-white text-sm px-3 py-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                  Click to view full size
+                </span>
               </div>
             </div>
             
