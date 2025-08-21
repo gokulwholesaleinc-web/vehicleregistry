@@ -22,14 +22,20 @@ export default function Landing() {
         
         <div className="relative container-responsive py-16 sm:py-24 lg:py-32">
           <div className="text-center animate-slide-up">
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-3 py-1.5 sm:px-4 sm:py-2 mb-6 sm:mb-8 interactive-glow">
-              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400 animate-bounce-gentle" />
-              <span className="text-xs sm:text-sm font-medium text-white">Premium Car Registry Platform</span>
+            <div className="flex justify-center mb-6 sm:mb-8">
+              <div className="flex items-center space-x-4">
+                <div className="text-left">
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-1">
+                    <span className="text-blue-100">VIN</span>
+                    <span className="text-orange-400">tage</span>
+                    <span className="text-orange-400">Garage</span>
+                  </h1>
+                  <div className="text-sm sm:text-base text-white/80 tracking-wider font-medium">
+                    REGISTRY
+                  </div>
+                </div>
+              </div>
             </div>
-            
-            <h1 className="heading-xl mb-4 sm:mb-6 animate-pulse-glow">
-              VINtage Garage Registry
-            </h1>
             
             <p className="text-base sm:text-lg text-white/90 mb-6 sm:mb-8 max-w-3xl mx-auto leading-relaxed animate-slide-up px-4" style={{animationDelay: "0.2s"}}>
               Track your modifications, maintenance records, and connect with fellow car enthusiasts.

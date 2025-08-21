@@ -2,12 +2,24 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
-import { Car, ArrowLeft } from "lucide-react";
+import { Car, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
 
 export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
+  const [isLogin, setIsLogin] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+  });
 
   const handleSignInSuccess = () => {
     // Redirect to dashboard after successful sign in
@@ -16,6 +28,50 @@ export default function SignIn() {
 
   const handleSignInError = (errorMsg: string) => {
     setError(errorMsg);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
+      const payload = isLogin 
+        ? { email: formData.email, password: formData.password }
+        : formData;
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Authentication failed");
+      }
+
+      // Store token and user data
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      
+      handleSignInSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -61,27 +117,127 @@ export default function SignIn() {
             </div>
           </CardHeader>
           
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
             
-            <div className="space-y-4">
-              <GoogleSignInButton 
-                onSuccess={handleSignInSuccess}
-                onError={handleSignInError}
-              />
+            {/* Username/Password Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLogin && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName">First Name</Label>
+                    <Input
+                      id="firstName"
+                      name="firstName"
+                      type="text"
+                      required={!isLogin}
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                      placeholder="John"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName">Last Name</Label>
+                    <Input
+                      id="lastName"
+                      name="lastName"
+                      type="text"
+                      required={!isLogin}
+                      value={formData.lastName}
+                      onChange={handleInputChange}
+                      placeholder="Doe"
+                    />
+                  </div>
+                </div>
+              )}
               
-              <div className="text-center text-sm text-gray-600 dark:text-gray-400">
-                New to VINtage Garage Registry?{" "}
-                <span className="font-medium">Sign in with Google to get started!</span>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="john@example.com"
+                />
               </div>
               
-              <div className="text-center text-xs text-gray-500 dark:text-gray-500">
-                By signing in, you agree to our Terms of Service and Privacy Policy
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    placeholder="••••••••"
+                    minLength={8}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={loading}
+              >
+                {loading ? "Please wait..." : (isLogin ? "Sign In" : "Create Account")}
+              </Button>
+            </form>
+            
+            <div className="text-center">
+              <Button
+                type="button"
+                variant="link"
+                onClick={() => setIsLogin(!isLogin)}
+                className="text-sm"
+              >
+                {isLogin 
+                  ? "Don't have an account? Sign up" 
+                  : "Already have an account? Sign in"
+                }
+              </Button>
+            </div>
+            
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator className="w-full" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with
+                </span>
+              </div>
+            </div>
+            
+            <GoogleSignInButton 
+              onSuccess={handleSignInSuccess}
+              onError={handleSignInError}
+            />
+            
+            <div className="text-center text-xs text-gray-500 dark:text-gray-500">
+              By signing in, you agree to our Terms of Service and Privacy Policy
             </div>
           </CardContent>
         </Card>
