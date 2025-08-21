@@ -1,0 +1,201 @@
+# VIN Decode 401 Fix + API Integration Pack
+
+> Symptom: **“VIN Decode Failed — 401 Unauthorized”** from the modal. Root cause is almost always that the VIN modal calls `fetch()` **without** your auth header (Bearer token) or the route is mounted under `/api` and protected by `requireAuth`. This pack:
+>
+> 1. Normalizes a **client API helper** and updates the VIN modal to use it.
+> 2. Adds a robust **/api/v1/vin/decode** route (auth‑aware) with rate limiting.
+> 3. Integrates the **NHTSA VIN Decode API** and optional **OpenAI enrichment** (if `OPENAI_API_KEY` is set).
+> 4. Provides clean errors so the UI shows helpful messages instead of raw 401.
+
+---
+
+## 0) Env
+
+Add these to **`.env.example`** and your Replit Secrets:
+
+```env
+# Client
+VITE_API_BASE=http://localhost:3000/api/v1
+
+# Server
+JWT_SECRET=replace_me_with_long_random
+FRONTEND_BASE=http://localhost:5173
+VIN_API_BASE=https://vpic.nhtsa.dot.gov/api/vehicles
+OPENAI_API_KEY= # optional, for enrichment only
+```
+
+---
+
+## 1) Client — single API helper + 401 handling
+
+**`client/src/lib/api.ts`** (drop in / replace)
+
+```ts
+export function getToken(){ return localStorage.getItem("vg.jwt"); }
+export function setToken(t:string|null){ t?localStorage.setItem("vg.jwt",t):localStorage.removeItem("vg.jwt"); }
+
+export async function api(path:string, init:RequestInit={}){
+  const headers = new Headers(init.headers);
+  if (!headers.has("Content-Type") && init.body) headers.set("Content-Type","application/json");
+  const t = getToken();
+  if (t) headers.set("Authorization", `Bearer ${t}`);
+  const res = await fetch(import.meta.env.VITE_API_BASE + path, { ...init, headers });
+  if (res.status === 401){
+    setToken(null);
+    throw new Error("Your session expired. Please sign in again.");
+  }
+  const json = await res.json().catch(()=>null);
+  if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+  return json;
+}
+```
+
+### Update your VIN modal to use the helper
+
+**`client/src/components/VinDecodeModal.tsx`** (core submit handler)
+
+```tsx
+import { api } from "../lib/api";
+
+async function onDecode(e: React.FormEvent<HTMLFormElement>){
+  e.preventDefault();
+  const fd = new FormData(e.currentTarget);
+  const vin = String(fd.get("vin")||"").trim();
+  const mileage = Number(fd.get("mileage")||0)||undefined;
+  try{
+    const r = await api('/vin/decode', { method:'POST', body: JSON.stringify({ vin, mileage }) });
+    // r.data => normalized vehicle object
+    onDecoded?.(r.data); // call your success callback
+  }catch(err:any){
+    setError(err.message || 'Decode failed');
+  }
+}
+```
+
+> If your modal was using `fetch('/api/...')` directly, this fixes the missing Authorization header (source of the 401).
+
+---
+
+## 2) Server — route + controller
+
+Install deps:
+
+```bash
+pnpm add express-rate-limit openai
+```
+
+**`server/http/routes/vin.ts`**
+
+```ts
+import { Router } from "express";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
+import fetch from "node-fetch";
+import { requireAuth } from "../middleware.auth"; // or your guard
+
+const Base = process.env.VIN_API_BASE || "https://vpic.nhtsa.dot.gov/api/vehicles";
+const limiter = rateLimit({ windowMs: 60_000, max: 20 });
+const router = Router();
+
+const DecodeInput = z.object({ vin: z.string().trim().regex(/^[A-HJ-NPR-Z0-9]{11,17}$/i, "Invalid VIN"), mileage: z.number().int().nonnegative().optional() });
+
+router.post('/decode', requireAuth, limiter, async (req, res) => {
+  const body = DecodeInput.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ ok:false, error: body.error.flatten() });
+  const vin = body.data.vin.toUpperCase();
+
+  // NHTSA decode
+  const url = `${Base}/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
+  const r = await fetch(url);
+  if (!r.ok) return res.status(502).json({ ok:false, error:{ message: 'VIN service unavailable' } });
+  const j:any = await r.json();
+  const row = j?.Results?.[0] || {};
+
+  // Normalize fields
+  const vehicle = {
+    vin,
+    make: row.Make || null,
+    model: row.Model || null,
+    modelYear: row.ModelYear ? Number(row.ModelYear) : null,
+    trim: row.Trim || null,
+    bodyClass: row.BodyClass || null,
+    engine: [row.EngineManufacturer, row.EngineModel].filter(Boolean).join(' '),
+    cylinders: row.EngineCylinders ? Number(row.EngineCylinders) : null,
+    displacement: row.DisplacementL ? Number(row.DisplacementL) : null,
+    transmission: row.TransmissionStyle || null,
+    driveType: row.DriveType || null,
+    plantCountry: row.PlantCountry || null,
+  };
+
+  // Optional enrichment via OpenAI
+  try {
+    if (process.env.OPENAI_API_KEY){
+      const { OpenAI } = await import('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const prompt = `Given this decoded VIN data: ${JSON.stringify(vehicle)}\nReturn a concise title (max 60 chars) like "${vehicle.modelYear||''} ${vehicle.make||''} ${vehicle.model||''} ${vehicle.trim||''}" and up to 5 tags.`;
+      const resp = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role:'user', content: prompt }],
+        temperature: 0.2,
+      });
+      const text = resp.choices?.[0]?.message?.content?.trim();
+      if (text) (vehicle as any).enriched = text;
+    }
+  } catch(_) {/* enrichment is best-effort */}
+
+  res.json({ ok:true, data: vehicle });
+});
+
+export default router;
+```
+
+**Mount the router** in your app registry (once):
+
+```ts
+import vinRouter from './routes/vin';
+app.use('/api/v1/vin', vinRouter);
+```
+
+> If you want VIN decode to be usable before sign‑in, remove `requireAuth` from the route. Otherwise, the client **must** send `Authorization: Bearer <token>` — which the API helper now does.
+
+---
+
+## 3) Helpful error surface (server)
+
+Ensure your global 401 returns JSON so the UI shows a friendly message, not a hard 404.
+
+```ts
+app.use((err:any, _req:any, res:any, _next:any) => {
+  console.error('[error]', err);
+  res.status(err.status || 500).json({ ok:false, error:{ message: err.message || 'Server error' } });
+});
+```
+
+---
+
+## 4) Quick verification
+
+1. Confirm `JWT_SECRET` is set and you can call `GET /api/v1/auth/whoami` with your token.
+2. Open the VIN modal → decode → should return a normalized vehicle object.
+3. Temporarily remove token (localStorage) and try again → you should get a clear **“Your session expired…”** message (not raw 401 toast).
+
+---
+
+## 5) Common gotchas that create this 401
+
+* VIN modal used `fetch()` directly without the Authorization header.
+* Two servers with **different** `JWT_SECRET`s (tokens signed by one, verified by the other).
+* CORS blocked the auth header (now allowed via our security middleware).
+* Route not mounted under `/api/v1/vin` or path mismatch between client and server.
+
+---
+
+## 6) (Optional) Allow public VIN decode
+
+If you want to allow decoding without login:
+
+```ts
+router.post('/decode', limiter, async (req,res)=>{ /* same handler, no requireAuth */ })
+```
+
+Be sure to keep the rate limiter on.
