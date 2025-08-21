@@ -1,10 +1,17 @@
 import { useState, useEffect } from "react";
 import BrandStripes from "./BrandStripes";
+import bmwImage1 from "@assets/FB_IMG_1751951510231_1755750547262.jpg";
+import bmwImage2 from "@assets/FB_IMG_1751951504094_1755750547274.jpg";
+import bmwMeetImage from "@assets/DSC_1899_1755751395846.jpg";
+import evoImage from "@assets/DSC_1850_1755751434966.jpg";
 
 const VEHICLE_IMAGES = [
-  "/vehicle-1.jpg", // Black BMW E36 in parking lot
-  "/vehicle-2.jpg", // Green BMW M3/M4 in forest
-  "/hero.jpg", // Original hero image (fallback)
+  "/vehicle-1.jpg", // Black BMW E36 in parking lot (your upload)
+  "/vehicle-2.jpg", // Green BMW M3/M4 in forest (your upload)  
+  bmwImage1, // BMW M2 Competition Track Beast
+  bmwImage2, // BMW M2 Competition Blue Thunder
+  bmwMeetImage, // BMW M4 Competition Meet
+  evoImage, // Mitsubishi Lancer Evolution IX
 ];
 
 export default function RotatingHero() {
