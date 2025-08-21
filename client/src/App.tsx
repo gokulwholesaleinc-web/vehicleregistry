@@ -9,6 +9,10 @@ import Dashboard from "@/pages/dashboard";
 import Landing from "@/pages/landing";
 import Community from "@/pages/community";
 import AdminDashboard from "@/pages/admin";
+import VehiclesPage from "@/pages/vehicles";
+import MaintenancePage from "@/pages/maintenance";
+import ModificationsPage from "@/pages/modifications";
+import ProfilePage from "@/pages/profile";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -21,7 +25,11 @@ function Router() {
         <>
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/vehicles" component={VehiclesPage} />
+          <Route path="/maintenance" component={MaintenancePage} />
+          <Route path="/modifications" component={ModificationsPage} />
           <Route path="/community" component={Community} />
+          <Route path="/profile" component={ProfilePage} />
           <Route path="/admin" component={AdminDashboard} />
         </>
       )}

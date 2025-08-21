@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Car, Users, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
+import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 import type { Vehicle } from "@shared/schema";
 
 export default function Community() {
   const { isAuthenticated } = useAuth();
   const [offset, setOffset] = useState(0);
   const limit = 12;
+  const breadcrumbs = useBreadcrumbs();
 
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
     queryKey: ["/api/community/vehicles", { limit, offset }],
@@ -34,6 +36,10 @@ export default function Community() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
       <div className="container-responsive py-6 lg:py-8">
+        <div className="mb-6">
+          <Breadcrumb items={breadcrumbs} />
+        </div>
+        
         <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between mb-6 lg:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
             <Link href="/dashboard">

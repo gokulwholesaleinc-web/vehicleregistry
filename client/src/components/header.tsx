@@ -37,41 +37,45 @@ export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
               </div>
             </div>
             <nav className="hidden lg:flex space-x-8">
-              <a 
-                href="#" 
-                className="relative text-blue-600 dark:text-blue-400 font-semibold pb-4 group"
-                data-testid="nav-dashboard"
-              >
-                Dashboard
-                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
-              </a>
-              <a 
-                href="#" 
+              <Link 
+                href="/dashboard"
                 className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
-                data-testid="nav-vehicles"
               >
-                Vehicles
-                <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
-              </a>
-              <a 
-                href="#" 
+                <a data-testid="nav-dashboard">
+                  Dashboard
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                </a>
+              </Link>
+              <Link 
+                href="/vehicles"
                 className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
-                data-testid="nav-maintenance"
               >
-                Maintenance
-                <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
-                <Badge variant="secondary" className="absolute -top-2 -right-3 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
-                  3
-                </Badge>
-              </a>
-              <a 
-                href="#" 
+                <a data-testid="nav-vehicles">
+                  Vehicles
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                </a>
+              </Link>
+              <Link 
+                href="/maintenance"
                 className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
-                data-testid="nav-modifications"
               >
-                Modifications
-                <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
-              </a>
+                <a data-testid="nav-maintenance">
+                  Maintenance
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                  <Badge variant="secondary" className="absolute -top-2 -right-3 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                    3
+                  </Badge>
+                </a>
+              </Link>
+              <Link 
+                href="/modifications"
+                className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
+              >
+                <a data-testid="nav-modifications">
+                  Modifications
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                </a>
+              </Link>
               <Link 
                 href="/community"
                 className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
@@ -98,6 +102,15 @@ export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
                   </a>
                 </Link>
               )}
+              <Link 
+                href="/profile"
+                className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 pb-4 transition-colors duration-200 relative group"
+              >
+                <a data-testid="nav-profile">
+                  Profile
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200 group-hover:w-full"></div>
+                </a>
+              </Link>
             </nav>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-4">

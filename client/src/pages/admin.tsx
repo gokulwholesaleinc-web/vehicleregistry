@@ -28,6 +28,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import Header from "@/components/header";
+import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 
 interface PlatformStats {
   totalUsers: number;
@@ -79,6 +80,7 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<AdminVehicle | null>(null);
   const [actionReason, setActionReason] = useState("");
+  const breadcrumbs = useBreadcrumbs();
 
   // Check if user is admin
   if (!user || (user as any).role !== "admin") {
@@ -187,6 +189,10 @@ export default function AdminDashboard() {
       <Header onAddEntry={() => {}} />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6">
+          <Breadcrumb items={breadcrumbs} />
+        </div>
+        
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl">

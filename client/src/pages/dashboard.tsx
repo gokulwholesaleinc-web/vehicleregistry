@@ -15,6 +15,7 @@ import VehicleDetailsModal from "@/components/vehicle-details-modal";
 import UserProfileModal from "@/components/user-profile-modal";
 import CommunitySlideshow from "@/components/community-slideshow";
 import { VinLookupModal } from "@/components/vin-lookup-modal";
+import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 
 export default function Dashboard() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -22,6 +23,7 @@ export default function Dashboard() {
   const [entryType, setEntryType] = useState<"modification" | "maintenance">("modification");
   const [isVehicleDetailsModalOpen, setIsVehicleDetailsModalOpen] = useState(false);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
+  const breadcrumbs = useBreadcrumbs();
 
   const handleAddEntry = (type: "modification" | "maintenance") => {
     setEntryType(type);
@@ -37,6 +39,10 @@ export default function Dashboard() {
         />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col gap-6">
+            <div className="mb-6">
+              <Breadcrumb items={breadcrumbs} />
+            </div>
+            
             <div className="flex justify-between items-center">
               <h1 className="text-2xl font-bold text-gray-900">Your Vehicle Registry</h1>
               <VinLookupModal />
