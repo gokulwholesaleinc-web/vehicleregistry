@@ -13,7 +13,7 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   // Get JWT token from localStorage
-  const token = localStorage.getItem('authToken');
+  const token = localStorage.getItem('vg.jwt');
   
   const headers: Record<string, string> = {};
   if (data) {
@@ -41,7 +41,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     // Get JWT token from localStorage
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem('vg.jwt');
     
     const headers: Record<string, string> = {};
     if (token) {
