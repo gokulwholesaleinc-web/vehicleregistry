@@ -32,32 +32,50 @@ export default function Dashboard() {
 
   if (!selectedVehicleId) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
         <Header 
           onAddEntry={() => handleAddEntry("modification")} 
           onOpenProfile={() => setIsUserProfileModalOpen(true)}
         />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col gap-6">
-            <div className="mb-6">
-              <Breadcrumb items={breadcrumbs} />
+        
+        {/* Community Showcase - Hero Section */}
+        <div className="py-6 lg:py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-6">
+              <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                Featured Community Builds
+              </h1>
+              <p className="text-lg text-gray-600 dark:text-gray-300">
+                Discover incredible builds from automotive enthusiasts worldwide
+              </p>
             </div>
             
-            <div className="flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Your Vehicle Registry</h1>
-              <VinLookupModal />
+            <CommunitySlideshow />
+          </div>
+        </div>
+
+        {/* Secondary Content */}
+        <div className="bg-white/50 dark:bg-gray-900/50 py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Start Your Registry</h2>
+                  <p className="text-gray-600 dark:text-gray-300 mt-1">Add your first vehicle to begin tracking</p>
+                </div>
+                <VinLookupModal />
+              </div>
+              
+              <VehicleSelector 
+                selectedVehicleId={selectedVehicleId}
+                onVehicleSelect={setSelectedVehicleId}
+                onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
+              />
+
+              <div className="mt-4">
+                <Breadcrumb items={breadcrumbs} />
+              </div>
             </div>
-            
-            {/* Community Slideshow - Featured prominently */}
-            <div className="mb-6">
-              <CommunitySlideshow />
-            </div>
-            
-            <VehicleSelector 
-              selectedVehicleId={selectedVehicleId}
-              onVehicleSelect={setSelectedVehicleId}
-              onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
-            />
           </div>
         </div>
       </div>
@@ -71,23 +89,36 @@ export default function Dashboard() {
         onOpenProfile={() => setIsUserProfileModalOpen(true)}
       />
       
-      <div className="container-responsive py-6 lg:py-8">
-        <div className="mb-6">
-          <Breadcrumb items={breadcrumbs} />
-        </div>
-        
-        {/* Community Slideshow - Featured prominently at the top */}
-        <div className="mb-6 lg:mb-8">
+      {/* Community Showcase - Hero Section */}
+      <div className="py-6 lg:py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-6">
+            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-2">
+              Community Showcase
+            </h1>
+            <p className="text-lg text-gray-600 dark:text-gray-300">
+              Explore amazing builds and get inspired for your next project
+            </p>
+          </div>
+          
           <CommunitySlideshow />
         </div>
-        
-        <VehicleSelector 
-          selectedVehicleId={selectedVehicleId}
-          onVehicleSelect={setSelectedVehicleId}
-          onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
-        />
-        
-        <QuickStats vehicleId={selectedVehicleId} />
+      </div>
+
+      {/* Vehicle Dashboard Content */}
+      <div className="bg-white/30 dark:bg-gray-900/30 py-8">
+        <div className="container-responsive">
+          <div className="mb-6">
+            <Breadcrumb items={breadcrumbs} />
+          </div>
+          
+          <VehicleSelector 
+            selectedVehicleId={selectedVehicleId}
+            onVehicleSelect={setSelectedVehicleId}
+            onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
+          />
+          
+          <QuickStats vehicleId={selectedVehicleId} />
         
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 lg:gap-8">
           {/* Main Content Area */}
@@ -113,6 +144,7 @@ export default function Dashboard() {
             <CostSummary vehicleId={selectedVehicleId} />
           </div>
         </div>
+      </div>
       </div>
 
       <AddEntryModal
