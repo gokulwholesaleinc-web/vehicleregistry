@@ -113,11 +113,11 @@ router.post("/login", async (req, res) => {
 
     const { email, password } = body.data;
     
-    // Find user by email or username  
+    // Find user by email or username (case-insensitive)
     let user = await storage.getUserByEmail(email.toLowerCase());
     if (!user) {
-      // Try to find by username if email lookup failed
-      user = await storage.getUserByUsername(email);
+      // Try to find by username if email lookup failed (case-insensitive)
+      user = await storage.getUserByUsername(email.toLowerCase());
     }
     if (!user || !user.password) {
       return res.status(401).json({ 

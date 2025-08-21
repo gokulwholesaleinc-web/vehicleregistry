@@ -24,9 +24,14 @@ export default function SignIn() {
 
   const handleSignInSuccess = (user?: any) => {
     // Redirect based on user role - admin users go to admin dashboard
+    console.log("Redirecting user:", user);
+    console.log("Is admin?", user?.role === "admin");
+    
     if (user?.role === "admin") {
+      console.log("Redirecting to admin dashboard");
       window.location.href = "/admin";
     } else {
+      console.log("Redirecting to user dashboard");
       window.location.href = "/";
     }
   };
@@ -68,15 +73,21 @@ export default function SignIn() {
       });
 
       const data = await response.json();
+      console.log("Login response:", data);
 
       if (!response.ok || !data.ok) {
+        console.error("Login failed:", data);
         throw new Error(data.error?.message || "Authentication failed");
       }
 
       // Store token using proper auth system
       if (data.token) {
         setAuthToken(data.token);
+        console.log("Token stored successfully");
       }
+
+      console.log("User data:", data.user);
+      console.log("User role:", data.user?.role);
       
       handleSignInSuccess(data.user);
     } catch (err) {

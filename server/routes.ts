@@ -135,11 +135,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   }, express.static(uploadsDir));
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Auth routes - supports both JWT and Replit auth
+  app.get('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      let userId: string | undefined;
+      
+      // Try JWT first (local auth)
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        try {
+          const jwt = require('jsonwebtoken');
+          const claims = jwt.verify(token, process.env.JWT_SECRET || process.env.SESSION_SECRET!) as any;
+          userId = claims.id;
+          console.log("JWT auth successful for user:", userId);
+        } catch (err) {
+          console.log("JWT verification failed:", err.message);
+        }
+      }
+      
+      // Fallback to Replit auth
+      if (!userId && req.isAuthenticated && req.isAuthenticated()) {
+        userId = req.user.claims?.sub;
+        console.log("Replit auth successful for user:", userId);
+      }
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
       const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      console.log("Returning user:", { id: user.id, email: user.email, role: user.role });
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -147,10 +177,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User profile update
-  app.patch('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // User profile update - supports both JWT and Replit auth  
+  app.patch('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      let userId: string | undefined;
+      
+      // Try JWT first (local auth)
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        try {
+          const jwt = require('jsonwebtoken');
+          const claims = jwt.verify(token, process.env.JWT_SECRET || process.env.SESSION_SECRET!) as any;
+          userId = claims.id;
+        } catch (err) {
+          // JWT verification failed, try Replit auth
+        }
+      }
+      
+      // Fallback to Replit auth
+      if (!userId && req.isAuthenticated && req.isAuthenticated()) {
+        userId = req.user.claims?.sub;
+      }
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
       const updateData = z.object({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
