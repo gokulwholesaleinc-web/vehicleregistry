@@ -24,15 +24,20 @@ export default function Header({ onAddEntry, onOpenProfile }: HeaderProps) {
             <MobileNav onAddEntry={onAddEntry} />
             
             <div className="flex items-center space-x-3">
-              <div className="p-1.5 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
-                <Car className="text-white h-6 w-6 sm:h-7 sm:w-7" data-testid="logo-icon" />
+              <div className="flex items-center">
+                <img 
+                  src="@assets/file_00000000f4c061fbb2a25c83e5238651_1755753784694.png" 
+                  alt="VINtage Garage Registry Logo" 
+                  className="h-10 sm:h-12 w-auto"
+                  data-testid="logo-image"
+                />
               </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent" data-testid="app-title">
-                  CarTracker Pro
+              <div className="hidden sm:block">
+                <h1 className="text-lg sm:text-xl font-bold" data-testid="app-title">
+                  <span className="text-blue-900 dark:text-blue-100">VIN</span><span className="text-orange-500">tage</span><span className="text-orange-500">Garage</span>
                 </h1>
-                <div className="hidden sm:block text-xs text-gray-500 dark:text-gray-400 -mt-1">
-                  Automotive Excellence
+                <div className="text-xs text-gray-600 dark:text-gray-400 -mt-1 tracking-wider font-medium">
+                  REGISTRY
                 </div>
               </div>
             </div>

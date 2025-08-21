@@ -63,15 +63,19 @@ export default function MobileNav({ onAddEntry }: MobileNavProps) {
       >
         <SheetHeader className="flex-shrink-0 p-6 pb-4 border-b border-blue-100 dark:border-blue-800">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
-              <Car className="h-6 w-6 text-white" />
+            <div className="flex items-center">
+              <img 
+                src="@assets/file_00000000f4c061fbb2a25c83e5238651_1755753784694.png" 
+                alt="VINtage Garage Registry Logo" 
+                className="h-12 w-auto"
+              />
             </div>
             <div>
-              <SheetTitle className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                CarTracker Pro
+              <SheetTitle className="text-xl font-bold">
+                <span className="text-blue-900 dark:text-blue-100">VIN</span><span className="text-orange-500">tage</span><span className="text-orange-500">Garage</span>
               </SheetTitle>
-              <SheetDescription className="text-sm text-gray-600 dark:text-gray-400">
-                Your automotive companion
+              <SheetDescription className="text-sm text-gray-600 dark:text-gray-400 tracking-wider font-medium">
+                REGISTRY
               </SheetDescription>
             </div>
           </div>

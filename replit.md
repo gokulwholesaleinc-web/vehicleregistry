@@ -1,6 +1,6 @@
 # Overview
 
-CarTracker Pro is a full-stack web application for automotive enthusiasts to track vehicle modifications, maintenance records, and costs. The system allows users to manage multiple vehicles, upload photos and documents, and monitor upcoming maintenance schedules. Built with modern web technologies, it provides a comprehensive dashboard for vehicle management with file upload capabilities and detailed cost tracking.
+VINtage Garage Registry is a full-stack web application for automotive enthusiasts to track vehicle modifications, maintenance records, and costs. The system allows users to manage multiple vehicles, upload photos and documents, and monitor upcoming maintenance schedules. Built with modern web technologies, it provides a comprehensive dashboard for vehicle management with file upload capabilities, detailed cost tracking, and a vibrant community showcase featuring member vehicles.
 
 # User Preferences
 
