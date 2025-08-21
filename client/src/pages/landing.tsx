@@ -39,11 +39,11 @@ export default function Landing() {
               <Button 
                 size="lg" 
                 className="btn-primary mobile-text sm:text-lg mobile-padding group shadow-2xl w-full sm:w-auto touch-friendly"
-                onClick={() => setIsSignupModalOpen(true)}
+                onClick={() => window.location.href = '/signin'}
                 data-testid="button-login"
               >
                 <Globe className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                Sign Up with Email
+                Sign Up with Google
                 <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
             </div>
@@ -70,7 +70,7 @@ export default function Landing() {
           <div className="text-center mt-6 sm:mt-8">
             <Button 
               size="lg"
-              onClick={() => setIsSignupModalOpen(true)}
+              onClick={() => window.location.href = '/signin'}
               className="btn-primary group"
               data-testid="button-explore-community"
             >

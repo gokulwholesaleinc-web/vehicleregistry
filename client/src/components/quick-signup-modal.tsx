@@ -1,11 +1,8 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Mail, 
   Globe, 
   Zap, 
   CheckCircle, 
@@ -13,8 +10,12 @@ import {
   Shield, 
   Clock, 
   Users,
-  Star
+  Star,
+  AlertCircle,
+  Mail
 } from "lucide-react";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
+import { useToast } from "@/hooks/use-toast";
 
 interface QuickSignupModalProps {
   isOpen: boolean;
@@ -22,24 +23,27 @@ interface QuickSignupModalProps {
 }
 
 export default function QuickSignupModal({ isOpen, onClose }: QuickSignupModalProps) {
-  const [email, setEmail] = useState("");
-  const [isValidEmail, setIsValidEmail] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+  const handleSignInSuccess = () => {
+    toast({
+      title: "Welcome to VINtage Garage Registry! 🎉",
+      description: "Your account has been created. You can now start tracking your vehicles.",
+    });
+    
+    onClose();
+    // Redirect to dashboard
+    window.location.href = '/';
   };
 
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newEmail = e.target.value;
-    setEmail(newEmail);
-    setIsValidEmail(validateEmail(newEmail));
-  };
-
-  const handleSignup = () => {
-    // Redirect to Replit Auth with the email pre-filled
-    const loginUrl = `/api/login${email ? `?email=${encodeURIComponent(email)}` : ''}`;
-    window.location.href = loginUrl;
+  const handleSignInError = (errorMsg: string) => {
+    setError(errorMsg);
+    toast({
+      title: "Signup Failed",
+      description: errorMsg,
+      variant: "destructive",
+    });
   };
 
   return (
@@ -77,27 +81,24 @@ export default function QuickSignupModal({ isOpen, onClose }: QuickSignupModalPr
             </div>
           </div>
 
-          {/* Email Input */}
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Email Address
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <Input
-                type="email"
-                placeholder="your.email@gmail.com"
-                value={email}
-                onChange={handleEmailChange}
-                className="pl-10 h-12 text-lg bg-white/80 dark:bg-gray-800/80 border-2 border-gray-200 dark:border-gray-700 focus:border-blue-500 dark:focus:border-blue-400 rounded-xl"
-                data-testid="input-signup-email"
-              />
-              {isValidEmail && (
-                <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-500" />
-              )}
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+              </div>
             </div>
+          )}
+
+          {/* Google Sign-In */}
+          <div className="space-y-4">
+            <GoogleSignInButton 
+              onSuccess={handleSignInSuccess}
+              onError={handleSignInError}
+            />
             
-            {/* Email provider badges */}
+            {/* Provider badges */}
             <div className="flex flex-wrap gap-2 justify-center">
               <Badge variant="secondary" className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300">
                 <Globe className="w-3 h-3 mr-1" />
@@ -113,7 +114,7 @@ export default function QuickSignupModal({ isOpen, onClose }: QuickSignupModalPr
               </Badge>
               <Badge variant="secondary" className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
                 <Globe className="w-3 h-3 mr-1" />
-                Any Email
+                Any Google Account
               </Badge>
             </div>
           </div>
@@ -146,16 +147,18 @@ export default function QuickSignupModal({ isOpen, onClose }: QuickSignupModalPr
             </CardContent>
           </Card>
 
-          {/* Signup Button */}
-          <Button
-            onClick={handleSignup}
-            className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-            data-testid="button-create-account"
-          >
-            <Zap className="w-5 h-5 mr-2" />
-            Create Account Now
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
+          {/* Alternative signup link */}
+          <div className="text-center">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+              Already have an account?{" "}
+              <button 
+                onClick={() => window.location.href = '/signin'}
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+              >
+                Sign in here
+              </button>
+            </p>
+          </div>
 
           {/* Trust indicators */}
           <div className="text-center space-y-2">

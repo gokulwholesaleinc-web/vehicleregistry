@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Landing from "@/pages/landing";
+import SignIn from "@/pages/signin";
 import Community from "@/pages/community";
 import AdminDashboard from "@/pages/admin";
 import VehiclesPage from "@/pages/vehicles";
@@ -20,7 +21,10 @@ function Router() {
   return (
     <Switch>
       {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
+        <>
+          <Route path="/" component={Landing} />
+          <Route path="/signin" component={SignIn} />
+        </>
       ) : (
         <>
           <Route path="/" component={Dashboard} />
@@ -31,6 +35,7 @@ function Router() {
           <Route path="/community" component={Community} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/signin" component={SignIn} />
         </>
       )}
       <Route component={NotFound} />

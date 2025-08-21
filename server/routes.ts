@@ -1,10 +1,12 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { googleAuthRouter } from "./auth/google";
+import { requireAuth, optionalAuth } from "./auth/middleware";
 import { 
   insertVehicleSchema,
   insertModificationSchema,
@@ -17,8 +19,31 @@ import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
 import { vehicleTransfers } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
-// Admin middleware
+// Admin middleware for JWT auth
+export const isAdminJWT: RequestHandler = async (req: any, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const userId = req.user.id;
+    const user = await storage.getUser(userId);
+    
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    req.adminUser = user;
+    next();
+  } catch (error) {
+    res.status(500).json({ message: "Admin verification failed" });
+  }
+};
+
+// Admin middleware for Replit auth (legacy)
 export const isAdmin: RequestHandler = async (req: any, res, next) => {
   try {
     if (!req.isAuthenticated()) {
@@ -80,6 +105,9 @@ if (!fs.existsSync(uploadsDir)) {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
+  
+  // Google OAuth routes
+  app.use(googleAuthRouter);
 
   // Serve uploaded files
   app.use('/uploads', (req, res, next) => {
