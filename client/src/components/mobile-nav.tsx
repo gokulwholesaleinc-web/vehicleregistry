@@ -65,7 +65,7 @@ export default function MobileNav({ onAddEntry }: MobileNavProps) {
           <div className="flex items-center space-x-3">
             <div className="flex items-center">
               <img 
-                src="@assets/file_00000000f4c061fbb2a25c83e5238651_1755753784694.png" 
+                src="@assets/file_00000000a83861fd87d61a9ade71888e_1755754560399.png" 
                 alt="VINtage Garage Registry Logo" 
                 className="h-12 w-auto"
               />

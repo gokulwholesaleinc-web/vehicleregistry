@@ -1,0 +1,327 @@
+# Drop‑in Google OAuth for VINtage Garage (Server + Client)
+
+> Copy sections into your repo as noted. This adds **“Continue with Google”** using Google Identity Services (GIS). Flow: client obtains **ID token** from Google → posts to your API → server verifies → creates/fetches user → issues your **JWT** → client stores JWT and uses it on subsequent API calls.
+
+---
+
+## 0) Prereqs
+
+1. In **Google Cloud Console** → Credentials → **Create OAuth client ID** (Web).
+
+* Authorized JavaScript origins: `http://localhost:5173` (Vite)
+* Authorized redirect URIs: *(not needed for One‑Tap/Popup mode)*
+* Note the **Client ID**.
+
+2. Add to **`.env.example`**:
+
+```env
+# Google OAuth
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+
+# JWT
+JWT_SECRET=replace_me
+JWT_REFRESH_SECRET=replace_me
+
+# (existing env keys…)
+```
+
+3. Install deps (server):
+
+```bash
+pnpm add google-auth-library jsonwebtoken
+```
+
+---
+
+## 1) Server: JWT helpers
+
+**`/server/auth/jwt.ts`**
+
+```ts
+import jwt from "jsonwebtoken";
+
+type Claims = { id: number; email: string };
+
+export function signAccess(claims: Claims) {
+  return jwt.sign(claims, process.env.JWT_SECRET!, { expiresIn: "1h" });
+}
+
+export function verifyAccess(token: string): Claims | null {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET!) as Claims;
+  } catch {
+    return null;
+  }
+}
+```
+
+---
+
+## 2) Server: Google auth route
+
+**`/server/http/auth.google.ts`**
+
+```ts
+import { Router } from "express";
+import { OAuth2Client } from "google-auth-library";
+import { db } from "../db/client"; // adjust path
+import { users } from "../db/schema"; // adjust path
+import { eq } from "drizzle-orm";
+import { signAccess } from "../auth/jwt";
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+export const googleAuthRouter = Router();
+
+// Client posts { idToken }
+googleAuthRouter.post("/auth/google", async (req, res) => {
+  const { idToken } = req.body as { idToken?: string };
+  if (!idToken) return res.status(400).json({ error: "Missing idToken" });
+
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken, audience: process.env.GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload();
+    if (!payload?.email) return res.status(401).json({ error: "Invalid Google token" });
+
+    const email = payload.email.toLowerCase();
+    let user = await db.query.users.findFirst({ where: (u, { eq }) => eq(u.email, email) });
+
+    if (!user) {
+      const handleBase = email.split("@")[0].replace(/[^a-z0-9_]/gi, "").slice(0, 20) || "user";
+      const handle = await ensureUniqueHandle(handleBase);
+      const inserted = await db.insert(users).values({ email, handle, hash: "google-oauth" }).returning();
+      user = inserted[0];
+    }
+
+    const token = signAccess({ id: user.id, email: user.email });
+    return res.json({ token, user: { id: user.id, email: user.email, handle: user.handle } });
+  } catch (e) {
+    console.error("/auth/google error", e);
+    return res.status(401).json({ error: "Google verification failed" });
+  }
+});
+
+async function ensureUniqueHandle(base: string) {
+  let h = base;
+  for (let i = 0; i < 50; i++) {
+    const found = await db.query.users.findFirst({ where: (u, { eq }) => eq(u.handle, h) });
+    if (!found) return h;
+    h = `${base}${Math.floor(Math.random() * 1000)}`;
+  }
+  return `${base}${Date.now().toString().slice(-4)}`;
+}
+```
+
+**Mount the router** (e.g., in `/server/http/index.ts`):
+
+```ts
+import express from "express";
+import cors from "cors";
+import { googleAuthRouter } from "./auth.google";
+
+const app = express();
+app.use(cors({ origin: ["http://localhost:5173"], credentials: false }));
+app.use(express.json());
+app.use(googleAuthRouter);
+
+// …other routes
+export default app;
+```
+
+---
+
+## 3) Client: Load Google Identity Services
+
+Add the script to **`client/index.html`** (Vite):
+
+```html
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+```
+
+Create **`/client/src/lib/auth.ts`**:
+
+```ts
+export function setAuthToken(token: string | null) {
+  if (token) localStorage.setItem("vg.jwt", token);
+  else localStorage.removeItem("vg.jwt");
+}
+
+export function getAuthToken() {
+  return localStorage.getItem("vg.jwt");
+}
+
+export async function api(path: string, init: RequestInit = {}) {
+  const token = getAuthToken();
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(import.meta.env.VITE_API_BASE + path, { ...init, headers });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+```
+
+Add **`VITE_API_BASE`** to `client/.env.example`:
+
+```env
+VITE_API_BASE=http://localhost:3000
+```
+
+---
+
+## 4) Client: Google Sign‑In Button (React)
+
+**`/client/src/components/GoogleSignInButton.tsx`**
+
+```tsx
+import { useEffect, useRef } from "react";
+import { setAuthToken, api } from "../lib/auth";
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
+export default function GoogleSignInButton({ onSuccess }: { onSuccess?: () => void }) {
+  const divRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!window.google || !divRef.current) return;
+
+    window.google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      callback: async (response: any) => {
+        try {
+          const { token, user } = await api("/auth/google", {
+            method: "POST",
+            body: JSON.stringify({ idToken: response.credential }),
+          });
+          setAuthToken(token);
+          onSuccess?.();
+        } catch (e) {
+          console.error(e);
+          alert("Google sign‑in failed");
+        }
+      },
+      auto_select: false,
+      ux_mode: "popup",
+    });
+
+    window.google.accounts.id.renderButton(divRef.current, {
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      shape: "pill",
+    });
+  }, []);
+
+  return <div ref={divRef} />;
+}
+```
+
+Add to **`client/.env.example`**:
+
+```env
+VITE_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+```
+
+Use the button in your signin page:
+
+```tsx
+// /client/src/pages/SignIn.tsx
+import GoogleSignInButton from "../components/GoogleSignInButton";
+
+export default function SignIn() {
+  return (
+    <main className="min-h-screen grid place-items-center bg-slate-50 p-6">
+      <div className="w-full max-w-sm bg-white border rounded-2xl p-6 shadow-sm">
+        <h1 className="text-xl font-semibold text-slate-900 mb-4">Sign in</h1>
+        <GoogleSignInButton onSuccess={() => (window.location.href = "/")} />
+      </div>
+    </main>
+  );
+}
+```
+
+---
+
+## 5) Attach token on API calls
+
+You already did via `api()` above. For your existing API hooks, replace `fetch` with `api`.
+
+---
+
+## 6) Protect routes (client)
+
+Simple guard HOC:
+
+```tsx
+// /client/src/components/RequireAuth.tsx
+import { getAuthToken } from "../lib/auth";
+
+export function RequireAuth({ children }: { children: JSX.Element }) {
+  if (!getAuthToken()) {
+    window.location.href = "/signin";
+    return null;
+  }
+  return children;
+}
+```
+
+Wrap protected pages:
+
+```tsx
+<RequireAuth>
+  <Dashboard />
+</RequireAuth>
+```
+
+---
+
+## 7) Server: auth middleware (optional quick guard)
+
+**`/server/http/middleware.auth.ts`**
+
+```ts
+import { Request, Response, NextFunction } from "express";
+import { verifyAccess } from "../auth/jwt";
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const hdr = req.headers.authorization || "";
+  const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : undefined;
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  const claims = verifyAccess(token);
+  if (!claims) return res.status(401).json({ error: "Invalid token" });
+  (req as any).user = claims;
+  next();
+}
+```
+
+Use on any protected endpoints:
+
+```ts
+app.post("/vehicles", requireAuth, (req,res)=>{/*...*/});
+```
+
+---
+
+## 8) Notes & Options
+
+* **Privacy**: This approach stores JWT in `localStorage`. For higher security, use **httpOnly cookies** (sameSite=strict) and a CSRF token.
+* **One‑Tap vs Button**: The code above renders a Google button. You can also call `google.accounts.id.prompt()` to show One‑Tap.
+* **User profile**: Save `name` and `picture` from Google payload if desired.
+* **Logout**: `setAuthToken(null)`; optionally call `google.accounts.id.disableAutoSelect()` on the client.
+
+---
+
+## 9) Quick Test Plan
+
+* Add keys to `.env` files, run `pnpm dev` for server and client.
+* In the browser, open `/signin` → click **Continue with Google**.
+* Confirm server logs “/auth/google” and you receive `{ token, user }`.
+* Hard refresh → navigate to a protected route → your `Authorization: Bearer` header should be present in requests.
+
+---
+
+That’s it — you now have Google sign‑in issuing your own JWT for API auth. Plug it into your existing routes and guards to lock down record creation, uploads, and transfers.

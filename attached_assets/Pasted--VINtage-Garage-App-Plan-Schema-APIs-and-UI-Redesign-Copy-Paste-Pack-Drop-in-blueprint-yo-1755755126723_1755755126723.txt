@@ -1,0 +1,525 @@
+# VINtage Garage — App Plan, Schema, APIs, and UI Redesign (Copy‑Paste Pack)
+
+> Drop‑in blueprint you can paste into Replit as a reference. Includes DB schema (Drizzle), Zod types, API contracts, uploads, ownership transfer flow, CI, and a concrete homepage redesign with Tailwind component patterns.
+
+---
+
+## 0) Goals
+
+* VIN‑centric, transferable vehicle history with photos, receipts, and mods.
+* Public/Private profiles per VIN.
+* Clean, authentic enthusiast vibe (motorsports‑inspired, not corporate stock art).
+
+---
+
+## 1) Environment & Project Scaffolding
+
+**`.env.example`**
+
+```
+# Auth
+JWT_SECRET=replace_me
+JWT_REFRESH_SECRET=replace_me
+
+# Database
+DATABASE_URL=postgres://user:pass@host:5432/vehicleregistry
+
+# Object Storage (S3/R2 compatible)
+S3_ENDPOINT=https://<endpoint>
+S3_REGION=auto
+S3_BUCKET=vin-garage
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+PUBLIC_CDN_BASE=https://cdn.example.com
+
+# OCR (optional)
+OCR_PROVIDER=tesseract
+
+# VIN Decoder
+VIN_DECODER_BASE=https://vpic.nhtsa.dot.gov/api/vehicles
+```
+
+**Scripts**
+
+* `pnpm dev` – start client/server.
+* `pnpm typecheck` – tsc on client + server.
+* `pnpm lint` – eslint.
+* `pnpm db:migrate` – drizzle-kit migrations.
+
+---
+
+## 2) Database (Drizzle) — Types & Tables
+
+`/server/db/schema.ts`
+
+```ts
+import { pgTable, serial, varchar, text, boolean, integer, timestamp, pgEnum, primaryKey } from "drizzle-orm/pg-core";
+
+export const recordKind = pgEnum("record_kind", ["maintenance","mod","incident","detail"]);
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  handle: varchar("handle", { length: 50 }).notNull().unique(),
+  hash: text("hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vehicles = pgTable("vehicles", {
+  vin: varchar("vin", { length: 17 }).primaryKey(),
+  make: varchar("make", { length: 60 }),
+  model: varchar("model", { length: 60 }),
+  year: integer("year"),
+  trim: varchar("trim", { length: 80 }),
+  color: varchar("color", { length: 60 }),
+  isPublic: boolean("is_public").default(false).notNull(),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const ownerships = pgTable("ownerships", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  startDate: timestamp("start_date").defaultNow().notNull(),
+  endDate: timestamp("end_date"),
+  isCurrent: boolean("is_current").default(true).notNull(),
+  transferToken: varchar("transfer_token", { length: 120 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const records = pgTable("records", {
+  id: serial("id").primaryKey(),
+  vin: varchar("vin", { length: 17 }).references(() => vehicles.vin).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  kind: recordKind("kind").notNull(),
+  title: varchar("title", { length: 140 }).notNull(),
+  description: text("description"),
+  mileage: integer("mileage"),
+  costCents: integer("cost_cents").default(0),
+  currency: varchar("currency", { length: 8 }).default("USD").notNull(),
+  performedAt: timestamp("performed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const assets = pgTable("assets", {
+  id: serial("id").primaryKey(),
+  recordId: integer("record_id").references(() => records.id).notNull(),
+  kind: varchar("kind", { length: 16 }).notNull(), // photo | receipt | doc
+  storageKey: varchar("storage_key", { length: 255 }).notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const tags = pgTable("tags", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 40 }).notNull().unique(),
+});
+
+export const recordTags = pgTable("record_tags", {
+  recordId: integer("record_id").references(() => records.id).notNull(),
+  tagId: integer("tag_id").references(() => tags.id).notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.recordId, t.tagId] }) }));
+```
+
+---
+
+## 3) Shared Zod Schemas (strict inputs)
+
+`/shared/schemas.ts`
+
+```ts
+import { z } from "zod";
+
+export const Vin = z.string().length(17);
+
+export const VehicleCreate = z.object({
+  vin: Vin,
+  isPublic: z.boolean().optional(),
+});
+
+export const RecordCreate = z.object({
+  vin: Vin,
+  kind: z.enum(["maintenance","mod","incident","detail"]),
+  title: z.string().min(2).max(140),
+  description: z.string().max(4000).optional(),
+  mileage: z.number().int().nonnegative().optional(),
+  costCents: z.number().int().nonnegative().default(0),
+  currency: z.string().default("USD"),
+  performedAt: z.string().datetime().optional(),
+  assets: z.array(z.object({
+    kind: z.enum(["photo","receipt","doc"]),
+    storageKey: z.string(),
+    width: z.number().int().optional(),
+    height: z.number().int().optional(),
+  })).optional(),
+});
+
+export const PresignRequest = z.object({
+  contentType: z.string(),
+  ext: z.string().optional(),
+});
+```
+
+---
+
+## 4) Auth & RBAC Middleware (Express style)
+
+`/server/http/middleware.ts`
+
+```ts
+import jwt from "jsonwebtoken";
+import { Request, Response, NextFunction } from "express";
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const hdr = req.headers.authorization || "";
+  const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : undefined;
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    (req as any).user = jwt.verify(token, process.env.JWT_SECRET!);
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+export function canEditVin(getOwnerUserId: (vin: string) => Promise<number | null>) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const userId = (req as any).user?.id as number | undefined;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const vin = req.params.vin;
+    const ownerId = await getOwnerUserId(vin);
+    if (ownerId && ownerId === userId) return next();
+    return res.status(403).json({ error: "Forbidden" });
+  };
+}
+```
+
+---
+
+## 5) Uploads — Presigned URL Endpoint
+
+`/server/http/uploads.ts`
+
+```ts
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { randomUUID } from "crypto";
+import { Router } from "express";
+import { PresignRequest } from "../../shared/schemas";
+
+const s3 = new S3Client({
+  region: process.env.S3_REGION!,
+  endpoint: process.env.S3_ENDPOINT!,
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+  },
+});
+
+export const uploadRouter = Router();
+
+uploadRouter.post("/presign", async (req, res) => {
+  const { contentType, ext } = PresignRequest.parse(req.body);
+  const key = `assets/${Date.now()}-${randomUUID()}${ext ? `.${ext}` : ""}`;
+  const cmd = new PutObjectCommand({
+    Bucket: process.env.S3_BUCKET!,
+    Key: key,
+    ContentType: contentType,
+    ACL: "private",
+  });
+  const url = await getSignedUrl(s3, cmd, { expiresIn: 60 });
+  res.json({ url, storageKey: key, publicUrl: `${process.env.PUBLIC_CDN_BASE}/${key}` });
+});
+```
+
+---
+
+## 6) Ownership Transfer Flow
+
+**Initiate**
+`POST /vehicles/:vin/transfer/init` → returns `transferToken`
+
+```ts
+import { Router } from "express";
+import { ownerships } from "../db/schema";
+import { db } from "../db/client";
+import crypto from "crypto";
+
+export const transferRouter = Router();
+
+transferRouter.post("/:vin/transfer/init", requireAuth, async (req, res) => {
+  const vin = req.params.vin;
+  const token = crypto.randomBytes(24).toString("base64url");
+  await db.update(ownerships).set({ transferToken: token }).where(ownerships.vin.eq(vin).and(ownerships.isCurrent.eq(true)));
+  res.json({ transferToken: token });
+});
+```
+
+**Accept**
+`POST /vehicles/transfer/accept` → body `{ token }`
+
+```ts
+transferRouter.post("/transfer/accept", requireAuth, async (req, res) => {
+  const { token } = req.body as { token: string };
+  const row = await db.query.ownerships.findFirst({ where: (o, { eq }) => eq(o.transferToken, token) });
+  if (!row) return res.status(400).json({ error: "Invalid token" });
+
+  // close previous
+  await db.update(ownerships).set({ isCurrent: false, endDate: new Date(), transferToken: null }).where(ownerships.id.eq(row.id));
+  // create new
+  await db.insert(ownerships).values({ vin: row.vin, userId: (req as any).user.id, isCurrent: true });
+  res.json({ ok: true });
+});
+```
+
+---
+
+## 7) Public/Private Access Rules
+
+* `/vehicles/:vin` GET
+
+  * If `isPublic=true` → anyone can view.
+  * Else → only current owner (from `ownerships.isCurrent`) or admin.
+* Record creation/edit/delete → only current owner.
+* Comments/likes on public VINs → any signed‑in user (optional, rate‑limited).
+
+---
+
+## 8) API Contract (summary)
+
+```
+POST   /auth/register | /auth/login | /auth/refresh
+POST   /upload/presign
+POST   /vehicles                (VehicleCreate)
+GET    /vehicles/:vin          (respect privacy)
+PATCH  /vehicles/:vin/privacy  ({ isPublic: boolean })
+GET    /vehicles/:vin/records?kind=&q=&after=&before=
+POST   /vehicles/:vin/records  (RecordCreate)
+POST   /vehicles/:vin/transfer/init
+POST   /vehicles/transfer/accept  ({ token })
+```
+
+---
+
+## 9) Homepage & Layout Redesign (Authentic Enthusiast Look)
+
+**Principles**
+
+* Real builds > stock photos. Lead with user cars (yours!) and timelines.
+* Dark ink on light paper; sparse color pops (red/green/gold stripes).
+* Big, readable type; strong spacing; utility‑first Tailwind, no glossy gradients.
+
+**Palette**
+
+* Base: `#0F172A` (slate‑900) text on `#F8FAFC` (slate‑50) background.
+* Accents: Red `#EF4444`, Gold `#EAB308`, Green `#22C55E` used as small stripes/badges.
+
+**Typography**
+
+* Headings: a condensed motorsport sans (e.g., *Oswald*, *Inter Tight*).
+* Body: *Inter* / *System UI*.
+
+**Homepage Wireframe**
+
+1. **Header**: Logo left (badge), Search bar center (VIN/Make/Model), CTA right (Sign in / Add Vehicle).
+2. **Hero (no stock art)**: Carousel of real build cards (M2, Evo, G80) with their timelines sliding; headline: “Trust Every Mile.” Sub: “A living logbook for every VIN. Transfer on sale.” CTA: *Create VIN Profile*.
+3. **How it Works (3 steps)**: Create → Log → Transfer (with tiny UI screenshots, not illustrations).
+4. **Recently Updated Builds**: masonry of public VIN cards (photo, tags, last update, badges: Verified Mileage / Single‑Owner).
+5. **Why It Matters**: two columns — Sellers (prove provenance), Buyers (see mods/maintenance). Include example PDF report preview.
+6. **Footer**: Docs, Terms, Privacy, Twitter/IG.
+
+**VIN Card (public grid)**
+
+* Photo (16:9), overlay chip with year/make/model.
+* Below: small timeline preview (last 3 entries) and red/gold/green accent slashes.
+
+**Timeline Item**
+
+* Left rail: date + mileage badge; right: title + tags + cost; thumbnails below.
+
+**Tailwind Snippet: Card & Timeline**
+
+```tsx
+export function VinCard({ car }) {
+  return (
+    <article className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="relative">
+        <img src={car.coverUrl} alt="" className="w-full h-48 object-cover"/>
+        <span className="absolute top-3 left-3 px-2 py-1 text-xs font-semibold bg-black/70 text-white rounded">
+          {car.year} {car.make} {car.model}
+        </span>
+      </div>
+      <div className="p-4 space-y-2">
+        <h3 className="text-slate-900 font-semibold">{car.title}</h3>
+        <div className="flex items-center gap-1">
+          <span className="h-1 w-4 bg-red-500"/>
+          <span className="h-1 w-4 bg-yellow-500"/>
+          <span className="h-1 w-4 bg-green-500"/>
+        </div>
+        <ul className="text-sm text-slate-600">
+          {car.latest.map((r) => (
+            <li key={r.id}>• {r.title} — {r.mileage?.toLocaleString()} mi</li>
+          ))}
+        </ul>
+      </div>
+    </article>
+  );
+}
+```
+
+```tsx
+export function TimelineItem({ r }) {
+  return (
+    <div className="grid grid-cols-[120px,1fr] gap-4 py-4">
+      <div className="text-right pr-2">
+        <div className="text-slate-900 font-semibold">{new Date(r.performedAt).toLocaleDateString()}</div>
+        {r.mileage && <div className="text-slate-500 text-sm">{r.mileage.toLocaleString()} mi</div>}
+      </div>
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold text-slate-900">{r.title}</h4>
+          {r.costCents ? <span className="text-slate-700 text-sm">${(r.costCents/100).toFixed(2)}</span> : null}
+        </div>
+        {r.description && <p className="text-slate-600 text-sm mt-1">{r.description}</p>}
+        {r.assets?.length ? (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {r.assets.slice(0,3).map(a => (
+              <img key={a.storageKey} src={a.thumbUrl ?? a.publicUrl} className="h-20 w-full object-cover rounded-md"/>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+```
+
+**Authenticity checklist**
+
+* Use real user photos in hero/tiles (ask permission).
+* Replace marketing copy with concise, utility‑first language.
+* Avoid gradients and illustration packs; prefer neutral cards and real UI screenshots.
+
+---
+
+## 10) VIN Decoder Hook (server)
+
+`/server/services/vin.ts`
+
+```ts
+import fetch from "node-fetch";
+export async function decodeVin(vin: string) {
+  const r = await fetch(`${process.env.VIN_DECODER_BASE}/DecodeVin/${vin}?format=json`);
+  const j = await r.json();
+  // Pull useful fields out of Results array
+  const pick = (k: string) => j.Results.find((x: any) => x.Variable === k)?.Value ?? undefined;
+  return {
+    make: pick("Make"),
+    model: pick("Model"),
+    year: Number(pick("Model Year")),
+    trim: pick("Trim"),
+  };
+}
+```
+
+---
+
+## 11) OCR Stub (server)
+
+`/server/services/ocr.ts`
+
+```ts
+import Tesseract from "tesseract.js";
+export async function parseReceipt(url: string) {
+  const { data } = await Tesseract.recognize(url, "eng");
+  // naive extracts — improve w/ regexes per vendor
+  const text = data.text;
+  const date = text.match(/\b\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}\b/)?.[0];
+  const total = text.match(/TOTAL\s*\$?(\d+[\.,]\d{2})/i)?.[1];
+  return { text, date, total: total ? Math.round(parseFloat(total.replace(",","")) * 100) : undefined };
+}
+```
+
+---
+
+## 12) CI (GitHub Actions)
+
+`.github/workflows/ci.yml`
+
+```yml
+name: CI
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: 'pnpm' }
+      - run: pnpm i --frozen-lockfile
+      - run: pnpm -r run typecheck
+      - run: pnpm -r run lint
+      - run: pnpm -r run build
+```
+
+---
+
+## 13) Rate Limiting (Express) — quick drop‑in
+
+`/server/http/rateLimit.ts`
+
+```ts
+import rateLimit from "express-rate-limit";
+export const writeLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+```
+
+Apply to: uploads, create/edit/delete, comments.
+
+---
+
+## 14) Productized PDF “Buyer Report” (outline)
+
+* Cover: car photo + VIN + badges (Verified Mileage / Single Owner).
+* Summary stats: owners, lifetime spend (mods vs maintenance), latest service.
+* Timeline (last 12 items w/ thumbnails).
+* Receipt appendix (links to originals).
+
+---
+
+## 15) Roadmap (Now → Wow)
+
+* **Now**: VIN page + timeline + uploads + transfer + privacy + VIN decode.
+* **Next**: OCR assist, reminders, parts library, shop directory.
+* **Later**: OBD2 sync, provenance seals, event mode, imports from spreadsheets.
+
+---
+
+## 16) Microcopy (swap into UI)
+
+* Hero H1: **Trust every mile.**
+* Sub: **A living logbook for every VIN. Share it. Transfer it. Preserve it.**
+* CTA: **Create VIN profile** / **Add a record**
+* Empty timeline: **No records yet. Start with your latest mod or maintenance.**
+
+---
+
+## 17) QA Checklist
+
+* [ ] New vehicle defaults to **private**.
+* [ ] Cannot add/edit records unless current owner.
+* [ ] Transfers close old ownership and open a new one atomically.
+* [ ] Presigned upload rejects >20MB and unknown MIME types.
+* [ ] Public VIN page never leaks email/PII.
+
+---
+
+**That’s it.** Use this as your implementation guide. Ping me when you want this turned into actual files in your repo (routes, components, and a real homepage using the snippets above).
