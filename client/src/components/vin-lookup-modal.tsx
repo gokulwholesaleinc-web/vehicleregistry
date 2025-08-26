@@ -92,7 +92,7 @@ export function VinLookupModal() {
     mutationFn: async (data: z.infer<typeof vinLookupSchema>) => {
       setIsLookingUp(true);
       try {
-        const result = await api('/v1/vin/decode', { 
+        const result = await api('/api/v1/vin/decode', { 
           method: 'POST', 
           body: JSON.stringify({ 
             vin: data.vin, 
@@ -108,7 +108,7 @@ export function VinLookupModal() {
       setVinData(data);
       toast({
         title: "VIN Decoded Successfully",
-        description: `Found ${data.year} ${data.make} ${data.model} with ${Math.round(data.confidence * 100)}% confidence`,
+        description: `Found ${data.modelYear} ${data.make} ${data.model}${data.aiInsights ? ' with AI insights' : ''}`,
       });
     },
     onError: (error) => {

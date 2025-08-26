@@ -46,7 +46,7 @@ export interface DuplicateCheckResult {
 export function useVinDecoder() {
   return useMutation({
     mutationFn: async (vin: string): Promise<VinDecodeResult> => {
-      const response = await fetch('/api/ai/decode-vin', {
+      const response = await fetch('/api/v1/vin/decode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vin })
@@ -56,7 +56,12 @@ export function useVinDecoder() {
         throw new Error('Failed to decode VIN');
       }
       
-      return response.json();
+      const result = await response.json();
+      if (!result.ok) {
+        throw new Error(result.error?.message || 'VIN decode failed');
+      }
+      
+      return result.data;
     }
   });
 }
