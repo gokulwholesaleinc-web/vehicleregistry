@@ -60,9 +60,9 @@ export default function EditVehicleModal({ isOpen, onClose, vehicle }: EditVehic
       
       const formData = new FormData();
       
-      // Add text fields
+      // Add text fields - include empty values to allow clearing
       Object.entries(data).forEach(([key, value]) => {
-        if (key !== 'photos' && value !== undefined && value !== '') {
+        if (key !== 'photos' && value !== undefined) {
           formData.append(key, String(value));
         }
       });
@@ -80,7 +80,11 @@ export default function EditVehicleModal({ isOpen, onClose, vehicle }: EditVehic
         title: "Vehicle updated",
         description: "Your vehicle information has been updated successfully.",
       });
+      // Invalidate both the vehicles list and the specific vehicle
       queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
+      if (vehicle?.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles", vehicle.id] });
+      }
       onClose();
       form.reset();
       setSelectedPhotos([]);

@@ -888,14 +888,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date()
       };
 
-      // Only update provided fields
-      if (req.body.color !== undefined && req.body.color !== '') {
+      // Only update provided fields - allow empty strings for clearing fields
+      if (req.body.color !== undefined) {
         updateData.color = req.body.color;
       }
-      if (req.body.currentMileage !== undefined && req.body.currentMileage !== '') {
-        updateData.currentMileage = parseInt(req.body.currentMileage);
+      if (req.body.currentMileage !== undefined) {
+        const mileage = parseInt(req.body.currentMileage);
+        updateData.currentMileage = isNaN(mileage) ? 0 : mileage;
       }
-      if (req.body.lastServiceDate !== undefined && req.body.lastServiceDate !== '') {
+      if (req.body.lastServiceDate !== undefined) {
         updateData.lastServiceDate = req.body.lastServiceDate;
       }
 
