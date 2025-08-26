@@ -147,6 +147,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       console.log("Looking up user with ID:", userId);
+      
+      // Handle dev demo user
+      if (process.env.NODE_ENV !== 'production' && userId === 'demo-user') {
+        const demoUser = {
+          id: 'demo-user',
+          email: 'demo@vintagegarage.dev',
+          firstName: 'Demo',
+          lastName: 'User',
+          role: 'user',
+          location: 'Development',
+          isPublic: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        return res.json({ ok: true, data: demoUser });
+      }
+      
       const user = await storage.getUser(userId);
       console.log("Storage returned user:", user ? "found" : "not found");
       
