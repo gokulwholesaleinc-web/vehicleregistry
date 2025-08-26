@@ -1,0 +1,423 @@
+# VehicleRegistry — Frontend UI Pack (Media, Parts, Public, Search, PDF)
+
+> **What this ships**
+>
+> * Photo uploader + gallery UI wired to `/api/v1/media/photos/:vehicleId`
+> * Parts Ledger UI (list/add/edit/delete) wired to `/api/v1/parts`
+> * Public Vehicle Page (token-based) wired to `/api/v1/public/v/:token`
+> * Global Search box wired to `/api/v1/search`
+> * Ownership PDF button linking `/api/v1/pdf/vehicles/:vehicleId/ownership-proof.pdf`
+> * VIN Scanner hook-up example using the `VINScan` component from your previous canvas
+>
+> **How to use:** Paste this to your Replit agent. It will create new files and update routes. Adjust import paths (e.g., shadcn ui) to your project structure.
+
+---
+
+## 0) Prereqs
+
+* Back-end endpoints from your previous canvases should be live: media, parts, public, pdf, search.
+* Ensure `VITE_API_BASE` is set and CORS allows your front-end.
+
+---
+
+## 1) API wrappers (client)
+
+### **web/src/lib/api.ts** (extend)
+
+```ts
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+
+function authHeaders(h: Headers = new Headers()) {
+  const t = localStorage.getItem('token');
+  if (t) h.set('Authorization', `Bearer ${t}`);
+  return h;
+}
+
+export async function apiJSON<T=any>(path: string, opts: RequestInit = {}): Promise<T> {
+  const headers = authHeaders(new Headers(opts.headers));
+  headers.set('Content-Type', 'application/json');
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function apiForm<T=any>(path: string, form: FormData, opts: RequestInit = {}): Promise<T> {
+  const headers = authHeaders(new Headers(opts.headers));
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', body: form, headers });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Media
+export async function uploadVehiclePhoto(vehicleId: number, file: File) {
+  const fd = new FormData();
+  fd.append('photo', file);
+  return apiForm(`/v1/media/photos/${vehicleId}`, fd);
+}
+
+// Parts
+export const Parts = {
+  list: (vehicleId: number) => apiJSON<{ok:true, data:any[]}>(`/v1/parts/${vehicleId}`),
+  create: (vehicleId: number, payload: any) => apiJSON(`/v1/parts/${vehicleId}`, { method:'POST', body: JSON.stringify(payload) }),
+  update: (partId: number, payload: any) => apiJSON(`/v1/parts/${partId}`, { method:'PATCH', body: JSON.stringify(payload) }),
+  remove: (partId: number) => apiJSON(`/v1/parts/${partId}`, { method:'DELETE' }),
+};
+
+// Public
+export const Public = {
+  tokenCreate: (vehicleId: number) => apiJSON(`/v1/public/${vehicleId}/token`, { method:'POST' }),
+  tokenDisable: (vehicleId: number) => apiJSON(`/v1/public/${vehicleId}/disable`, { method:'POST' }),
+  fetchByToken: (token: string) => apiJSON(`/v1/public/v/${token}`),
+};
+
+// Search
+export const Search = {
+  query: (q: string) => apiJSON(`/v1/search?q=${encodeURIComponent(q)}`),
+};
+```
+
+---
+
+## 2) Photo Uploader + Gallery
+
+### **web/src/components/PhotoUploader.tsx** (new)
+
+```tsx
+import { useRef, useState } from 'react';
+import { uploadVehiclePhoto } from '@/lib/api';
+
+export default function PhotoUploader({ vehicleId, onUploaded }: { vehicleId: number; onUploaded?: (row:any)=>void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setBusy(true); setErr('');
+    try {
+      const r = await uploadVehiclePhoto(vehicleId, f);
+      onUploaded?.(r.data);
+    } catch (e:any) {
+      setErr(e?.message || 'Upload failed');
+    } finally { setBusy(false); if (inputRef.current) inputRef.current.value = ''; }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} disabled={busy} />
+      {busy && <span className="text-sm">Uploading…</span>}
+      {err && <span className="text-sm text-red-600">{err}</span>}
+    </div>
+  );
+}
+```
+
+### **web/src/components/VehicleGallery.tsx** (new)
+
+```tsx
+export default function VehicleGallery({ photos }: { photos: Array<{ id:number; urlCard?:string; urlThumb?:string; keyCard?:string; keyThumb?:string }> }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      {photos?.map((p) => {
+        const url = (p as any).urlCard || (p as any).urlThumb || '';
+        return (
+          <div key={p.id} className="rounded-xl overflow-hidden border">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt="vehicle" className="w-full h-40 object-cover" loading="lazy" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+```
+
+---
+
+## 3) Parts Ledger UI
+
+### **web/src/components/PartsLedger.tsx** (new)
+
+```tsx
+import { useEffect, useState } from 'react';
+import { Parts } from '@/lib/api';
+
+type Part = { id:number; title:string; vendor?:string; partNo?:string; costCents?:number; installedAt?:number; notes?:string };
+
+export default function PartsLedger({ vehicleId }: { vehicleId:number }) {
+  const [rows, setRows] = useState<Part[]>([]);
+  const [form, setForm] = useState<Partial<Part>>({ title:'' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function load() {
+    const r = await Parts.list(vehicleId);
+    setRows((r as any).data || []);
+  }
+  useEffect(()=>{ load(); }, [vehicleId]);
+
+  async function addPart() {
+    if (!form.title) return;
+    setBusy(true); setErr('');
+    try {
+      await Parts.create(vehicleId, form);
+      setForm({ title:'' });
+      await load();
+    } catch (e:any) { setErr(e?.message || 'Failed'); } finally { setBusy(false); }
+  }
+
+  async function del(id:number) {
+    if (!confirm('Delete part?')) return;
+    await Parts.remove(id); load();
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <input className="border rounded px-2 py-1" placeholder="Title" value={form.title||''} onChange={e=>setForm({...form, title:e.target.value})} />
+        <input className="border rounded px-2 py-1" placeholder="Vendor" value={form.vendor||''} onChange={e=>setForm({...form, vendor:e.target.value})} />
+        <input className="border rounded px-2 py-1" placeholder="Part #" value={form.partNo||''} onChange={e=>setForm({...form, partNo:e.target.value})} />
+        <input className="border rounded px-2 py-1" placeholder="Cost (USD)" inputMode="decimal" value={(form.costCents ?? '') && ((form.costCents as number)/100).toString()} onChange={e=>setForm({...form, costCents: Math.round(Number(e.target.value||0)*100)})} />
+        <input className="border rounded px-2 py-1" type="date" value={form.installedAt ? new Date(form.installedAt).toISOString().slice(0,10) : ''} onChange={e=>setForm({...form, installedAt: e.target.value ? new Date(e.target.value).getTime() : undefined})} />
+        <input className="border rounded px-2 py-1 col-span-2" placeholder="Notes" value={form.notes||''} onChange={e=>setForm({...form, notes:e.target.value})} />
+      </div>
+      <div className="flex items-center gap-3">
+        <button onClick={addPart} disabled={busy} className="px-3 py-1 rounded bg-black text-white">Add</button>
+        {err && <span className="text-sm text-red-600">{err}</span>}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full border rounded">
+          <thead>
+            <tr className="bg-gray-50 text-left">
+              <th className="p-2">Title</th>
+              <th className="p-2">Vendor</th>
+              <th className="p-2">Part #</th>
+              <th className="p-2">Cost</th>
+              <th className="p-2">Installed</th>
+              <th className="p-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r=> (
+              <tr key={r.id} className="border-t">
+                <td className="p-2">{r.title}</td>
+                <td className="p-2">{r.vendor||'—'}</td>
+                <td className="p-2">{r.partNo||'—'}</td>
+                <td className="p-2">{typeof r.costCents==='number' ? `$${(r.costCents/100).toFixed(2)}` : '—'}</td>
+                <td className="p-2">{r.installedAt ? new Date(r.installedAt).toLocaleDateString() : '—'}</td>
+                <td className="p-2 text-right"><button className="text-red-600" onClick={()=>del(r.id)}>Delete</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 4) Ownership PDF Button
+
+### **web/src/components/OwnershipPdfButton.tsx** (new)
+
+```tsx
+export default function OwnershipPdfButton({ vehicleId }: { vehicleId:number }) {
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+  const href = `${API_BASE}/v1/pdf/vehicles/${vehicleId}/ownership-proof.pdf`;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center px-3 py-1 rounded bg-white border hover:bg-gray-50">Download Ownership PDF</a>
+  );
+}
+```
+
+---
+
+## 5) Public Vehicle Page (frontend route)
+
+### **web/src/pages/PublicVehiclePage.tsx** (new)
+
+```tsx
+import { useEffect, useState } from 'react';
+import { Public } from '@/lib/api';
+
+export default function PublicVehiclePage() {
+  const token = location.pathname.split('/').pop() || '';
+  const [data, setData] = useState<any>(null);
+  const [err, setErr] = useState('');
+
+  useEffect(()=>{ (async()=>{
+    try { const r = await Public.fetchByToken(token); setData((r as any).data); }
+    catch (e:any) { setErr(e?.message || 'Not found'); }
+  })(); }, [token]);
+
+  if (err) return <div className="p-6">{err}</div>;
+  if (!data) return <div className="p-6">Loading…</div>;
+
+  const v = data.vehicle;
+  return (
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">{v.year} {v.make} {v.model} {v.trim}</h1>
+      <p className="text-sm text-gray-600">VIN: {v.vin}</p>
+
+      <section>
+        <h2 className="text-lg font-medium mb-2">Photos</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {data.photos?.map((p:any)=>{
+            const url = p.urlCard || p.urlThumb || '';
+            return <img key={p.id} src={url} alt="vehicle" className="w-full h-48 object-cover rounded" loading="lazy"/>;
+          })}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium mb-2">Recent Maintenance</h2>
+        <ul className="list-disc pl-5">
+          {data.logs?.slice(0,10).map((m:any)=> (
+            <li key={m.id}>{m.name} — {new Date(m.doneAt).toLocaleDateString()} {m.odometer?`@ ${m.odometer} mi`:''}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium mb-2">Build Sheet</h2>
+        <ul className="list-disc pl-5">
+          {data.parts?.map((p:any)=> (
+            <li key={p.id}>{p.title}{p.partNo?` (${p.partNo})`:''} {p.installedAt?` — ${new Date(p.installedAt).toLocaleDateString()}`:''}</li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+```
+
+> **Router wiring:** Map `/public/:token` → `PublicVehiclePage` in your router setup.
+
+---
+
+## 6) Global Search Box
+
+### **web/src/components/GlobalSearch.tsx** (new)
+
+```tsx
+import { useEffect, useRef, useState } from 'react';
+import { Search } from '@/lib/api';
+
+export default function GlobalSearch({ onSelect }: { onSelect: (row:any)=>void }) {
+  const [q, setQ] = useState('');
+  const [rows, setRows] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const deb = useRef<number>();
+
+  useEffect(()=>{
+    window.clearTimeout(deb.current);
+    if (!q) { setRows([]); setOpen(false); return; }
+    deb.current = window.setTimeout(async ()=>{
+      const r = await Search.query(q);
+      setRows((r as any).data || []);
+      setOpen(true);
+    }, 250);
+    return ()=> window.clearTimeout(deb.current);
+  }, [q]);
+
+  return (
+    <div className="relative w-full max-w-lg">
+      <input className="w-full border rounded px-3 py-2" placeholder="Search VIN, make, model…" value={q} onChange={e=>setQ(e.target.value)} />
+      {open && rows.length>0 && (
+        <div className="absolute z-10 mt-1 w-full bg-white border rounded shadow">
+          {rows.map((r:any)=> (
+            <div key={r.vehicle_id} className="px-3 py-2 hover:bg-gray-50 cursor-pointer" onClick={()=>{ setOpen(false); setQ(''); onSelect(r); }}>
+              <div className="text-sm font-medium">{r.make} {r.model} {r.trim}</div>
+              <div className="text-xs text-gray-500">VIN: {r.vin}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## 7) Example Vehicle Detail Page wiring
+
+### **web/src/pages/VehicleDetail.tsx** (new example skeleton)
+
+```tsx
+import { useEffect, useState } from 'react';
+import PhotoUploader from '@/components/PhotoUploader';
+import VehicleGallery from '@/components/VehicleGallery';
+import PartsLedger from '@/components/PartsLedger';
+import OwnershipPdfButton from '@/components/OwnershipPdfButton';
+import VINScan from '@/components/VINScan';
+import { apiJSON } from '@/lib/api';
+
+export default function VehicleDetail() {
+  const vehicleId = Number(location.pathname.split('/').pop());
+  const [veh, setVeh] = useState<any>();
+  const [photos, setPhotos] = useState<any[]>([]);
+
+  async function load() {
+    const r = await apiJSON(`/v1/vehicles/${vehicleId}`);
+    setVeh((r as any).data || r);
+    const p = await apiJSON(`/v1/public/v/${(r as any).data?.publicToken || 'noop'}`).catch(()=>({ data:{ photos: [] }}));
+    setPhotos((p as any).data?.photos || []);
+  }
+  useEffect(()=>{ load(); }, [vehicleId]);
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">{veh?.year} {veh?.make} {veh?.model} {veh?.trim}</h1>
+        <OwnershipPdfButton vehicleId={vehicleId} />
+      </div>
+
+      <PhotoUploader vehicleId={vehicleId} onUploaded={()=>load()} />
+      <VehicleGallery photos={photos} />
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-medium">Parts & Build Sheet</h2>
+        <PartsLedger vehicleId={vehicleId} />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-medium">Quick VIN Scan (add new)</h2>
+        <VINScan onDetect={(vin)=> alert(`Scanned VIN: ${vin}`)} />
+      </section>
+    </div>
+  );
+}
+```
+
+> Replace the `load()` photo call with your real photo list endpoint if you have one; otherwise, reuse the public token endpoint or add a private `/media` list.
+
+---
+
+## 8) Router entries
+
+Add entries for:
+
+* `/vehicle/:id` → `VehicleDetail`
+* `/public/:token` → `PublicVehiclePage`
+* Search box in your main header: `<GlobalSearch onSelect={(row)=> navigate('/vehicle/'+row.vehicle_id)} />`
+
+---
+
+## 9) Quick QA checklist
+
+* Upload a 4–8MB JPG → ensure it renders in gallery as WebP thumb/card.
+* Add parts rows → shows in table; delete works.
+* Generate public token → open `/public/:token` page and validate content.
+* Click **Download Ownership PDF** → opens and contains vehicle data.
+* Search make/model/VIN → results list navigates correctly.
+
+---
+
+### Done
+
+These components bring the media pipeline, parts ledger, public viewing, search, and PDF UX to life. Wire them into your existing layout and you’re production-read
