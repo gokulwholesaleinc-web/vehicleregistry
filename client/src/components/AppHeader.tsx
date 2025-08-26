@@ -36,11 +36,11 @@ export default function AppHeader() {
   const defaultVehicleId = vehicles.length > 0 ? vehicles[0].id : null;
 
   return (
-    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6">
+    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200 safe-area-padding" role="banner">
+      <div className="max-w-7xl mx-auto mobile-padding-x">
         <div className="h-14 flex items-center gap-3">
           {/* Brand: square logo, no squish */}
-          <a href="/dashboard" aria-label="VINtage Garage" className="flex items-center gap-2">
+          <a href="/dashboard" aria-label="VINtage Garage Home" className="flex items-center gap-2 touch-target">
             <img
               src="/vintage-badge.png"
               alt="VINtage Garage"
@@ -50,7 +50,7 @@ export default function AppHeader() {
           </a>
 
           {/* Primary nav */}
-          <nav className="hidden lg:flex items-center gap-1 ml-3">
+          <nav className="hidden lg:flex items-center gap-1 ml-3" role="navigation" aria-label="Main navigation">
             <NavLink href="/dashboard" label="Dashboard" />
             <NavLink href="/vehicles" label="Vehicles" />
             <NavLink href="/maintenance" label="Maintenance" />

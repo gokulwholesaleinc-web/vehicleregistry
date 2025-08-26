@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { FileText, Sparkles } from "lucide-react";
 import { type Vehicle } from "@shared/schema";
+import { api } from "@/lib/api";
 
 interface VehicleSelectorProps {
   selectedVehicleId: string;
@@ -12,19 +13,13 @@ interface VehicleSelectorProps {
 }
 
 export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, onOpenVehicleDetails }: VehicleSelectorProps) {
-  const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
+  const { data: vehiclesResponse, isLoading } = useQuery({
     queryKey: ["/api/v1/vehicles"],
-    queryFn: async () => {
-      const response = await fetch('/api/v1/vehicles');
-      if (!response.ok) {
-        throw new Error('Failed to fetch vehicles');
-      }
-      const result = await response.json();
-      return result.ok ? result.data : [];
-    },
   });
 
-  const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId);
+  const vehicles = (vehiclesResponse as any)?.data || [];
+
+  const selectedVehicle = vehicles.find((v: Vehicle) => v.id === selectedVehicleId);
 
   if (isLoading) {
     return (
@@ -92,7 +87,7 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, on
                 <SelectValue placeholder="Select a vehicle" />
               </SelectTrigger>
               <SelectContent>
-                {vehicles.map((vehicle) => (
+                {vehicles.map((vehicle: Vehicle) => (
                   <SelectItem key={vehicle.id} value={vehicle.id}>
                     <div className="flex items-center justify-between w-full">
                       <span>{vehicle.year} {vehicle.make} {vehicle.model}</span>

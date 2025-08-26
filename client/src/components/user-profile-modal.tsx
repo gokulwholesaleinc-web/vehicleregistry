@@ -18,15 +18,19 @@ export default function UserProfileModal({ isOpen, onClose }: UserProfileModalPr
   const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState("profile");
 
-  const { data: vehicles = [] } = useQuery<any[]>({
+  const { data: vehiclesResponse } = useQuery({
     queryKey: ["/api/v1/vehicles"],
     enabled: isOpen && isAuthenticated,
   });
 
-  const { data: totalStats } = useQuery({
-    queryKey: ["/api/user/stats"],
-    enabled: isOpen && isAuthenticated,
-  });
+  const vehicles = (vehiclesResponse as any)?.data || [];
+
+  // Commented out non-existent endpoint to prevent errors
+  // const { data: totalStats } = useQuery({
+  //   queryKey: ["/api/user/stats"],
+  //   enabled: isOpen && isAuthenticated,
+  // });
+  const totalStats = null;
 
   if (!isAuthenticated || !user) {
     return null;
