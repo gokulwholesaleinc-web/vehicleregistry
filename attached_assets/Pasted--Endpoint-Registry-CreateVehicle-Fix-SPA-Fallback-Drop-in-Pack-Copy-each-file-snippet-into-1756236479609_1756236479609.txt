@@ -1,0 +1,379 @@
+# Endpoint Registry + CreateVehicle Fix + SPA Fallback (Drop‑in Pack)
+
+> Copy each file/snippet into your repo using the same paths. If a path doesn’t exist, create it. This pack fixes **three concerns**:
+>
+> 1. **Endpoint registry** to prevent duplicate routes,
+> 2. **Create vehicle** failure (missing `ai_insights` column) with a safe fallback + optional migration,
+> 3. **`/vehicles` 404** (adds SPA fallback and ensures client route exists).
+
+---
+
+## 0) Prereqs (keeps your current structure)
+
+* Server assumed at `server/http` (adjust imports if yours differ).
+* Client assumed at `client/src`.
+* API is served under **`/api/v1`**.
+
+---
+
+## 1) Runtime duplicate detector (startup guard)
+
+**File:** `server/http/guards/route-duplicates.ts`
+
+```ts
+import type { Express } from "express";
+
+/**
+ * Walk the Express stack and throw if the same METHOD+PATH is registered >1x.
+ * Add this AFTER you mount all routers and BEFORE you start listening.
+ */
+export function assertNoDuplicateRoutes(app: Express) {
+  const seen = new Map<string, number>();
+  const stack: any[] = (app as any)?._router?.stack || [];
+
+  function visit(list: any[]) {
+    for (const layer of list) {
+      if (layer.route) {
+        const path = layer.route.path;
+        const methods = Object.keys(layer.route.methods || {}).filter(Boolean);
+        for (const m of methods) {
+          const key = `${m.toUpperCase()} ${path}`;
+          seen.set(key, (seen.get(key) || 0) + 1);
+        }
+      } else if (layer.name === "router" && layer.handle?.stack) {
+        visit(layer.handle.stack);
+      }
+    }
+  }
+
+  visit(stack);
+
+  const dups = Array.from(seen.entries()).filter(([, n]) => n > 1);
+  if (dups.length) {
+    const msg = `Duplicate routes detected:\n` + dups.map(([k, n]) => `${k}  ← registered ${n}x`).join("\n");
+    if (process.env.NODE_ENV !== 'production') throw new Error(msg);
+    console.warn(msg);
+  }
+}
+```
+
+---
+
+## 2) Registration helper (prevents dupes at definition time)
+
+**File:** `server/http/registry/route-registry.ts`
+
+```ts
+import type { Router } from "express";
+
+const registry = new Set<string>();
+
+export function registerRoute(router: Router, method: string, path: string) {
+  const key = `${method.toUpperCase()} ${path}`;
+  if (registry.has(key)) {
+    const msg = `Attempted to register duplicate endpoint: ${key}`;
+    if (process.env.NODE_ENV !== 'production') throw new Error(msg);
+    console.warn(msg);
+  }
+  registry.add(key);
+}
+
+export function clearRegistry() {
+  registry.clear();
+}
+```
+
+**How to use in a router:**
+
+```ts
+// example: server/http/routes/auth.ts
+import { Router } from "express";
+import { registerRoute } from "../registry/route-registry";
+
+const router = Router();
+registerRoute(router, "GET", "/user");
+router.get("/user", (req, res) => {
+  res.json({ ok: true, data: req.user || null });
+});
+export default router;
+```
+
+> Do this `registerRoute()` call for each route you define (auth, vehicles, vin, notifications, etc.).
+
+---
+
+## 3) Wire guards + SPA fallback into your app
+
+**Edit:** `server/http/app.ts` (or wherever you create `app` and mount routes)
+
+```ts
+import path from 'node:path';
+import express from 'express';
+import { fileURLToPath } from 'node:url';
+import { assertNoDuplicateRoutes } from './guards/route-duplicates';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export const app = express();
+
+// ... your existing middleware (cors, json, auth shim, etc.)
+
+// Mount v1 routes (adjust import to your aggregator)
+// import v1 from './routes/v1';
+// app.use('/api/v1', v1);
+
+// Serve client static (adjust if different)
+const clientDir = path.resolve(__dirname, '../../client');
+app.use(express.static(clientDir));
+
+// SPA fallback — fixes direct link 404s like /vehicles and /vehicles/:id
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  res.sendFile(path.join(clientDir, 'index.html'));
+});
+
+// <<< IMPORTANT: place AFTER all routers are mounted
+assertNoDuplicateRoutes(app);
+```
+
+> If you already have a SPA fallback in another file, keep only one instance.
+
+---
+
+## 4) Fix: Create Vehicle failing (`ai_insights` column)
+
+Your server is inserting `ai_insights` but the column doesn’t exist in your DB, causing a 500. Apply one of the migrations below (Postgres **or** SQLite). The route below also **fails gracefully** if the column is still missing.
+
+### 4.a) Migration — Postgres
+
+**File:** `server/db/sql/20250822_add_ai_insights_pg.sql`
+
+```sql
+ALTER TABLE vehicles
+  ADD COLUMN IF NOT EXISTS ai_insights JSONB;
+```
+
+### 4.b) Migration — SQLite
+
+**File:** `server/db/sql/20250822_add_ai_insights_sqlite.sql`
+
+```sql
+-- SQLite has no JSONB; store as TEXT (JSON string)
+ALTER TABLE vehicles ADD COLUMN ai_insights TEXT;
+```
+
+> Run whichever matches your DB. If you use an ORM (Drizzle/Prisma), also add the column in your schema as `json/jsonb` (PG) or `text` (SQLite) named **`ai_insights`**.
+
+### 4.c) Safer route that retries without `ai_insights` if column is missing
+
+**File:** `server/http/routes/vehicles.ts` (create/update)
+
+```ts
+import { Router } from 'express';
+import { registerRoute } from '../registry/route-registry';
+import { requireAuth } from '../middleware/auth';
+// import your db here
+
+const router = Router();
+
+registerRoute(router, 'POST', '/create-from-vin');
+router.post('/create-from-vin', requireAuth, async (req: any, res: any) => {
+  const { vin, make, model, year, trim, engine, transmission, aiInsights } = req.body || {};
+  if (!vin || !make || !model || !year) {
+    return res.status(400).json({ ok:false, error:{ message:'Missing required fields' }});
+  }
+
+  // Build insert payload with ai_insights.JSON-safe if present
+  const basePayload: any = { vin, make, model, year, trim: trim ?? null, engine: engine ?? null, transmission: transmission ?? null, user_id: req.user?.id };
+  const payloadWithAI = { ...basePayload, ai_insights: aiInsights ? JSON.stringify(aiInsights) : null };
+
+  try {
+    // try insert WITH ai_insights
+    const created = await insertVehicle(payloadWithAI); // implement with your DB/ORM
+    return res.status(201).json({ ok: true, data: created });
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    const isPgMissing = e?.code === '42703'; // undefined_column (Postgres)
+    const isSqliteMissing = /no such column: ai_insights/i.test(msg);
+
+    if (isPgMissing || isSqliteMissing) {
+      console.warn('[vehicles] ai_insights column missing — inserting without it. Add DB migration when possible.');
+      try {
+        const created = await insertVehicle(basePayload);
+        return res.status(201).json({ ok: true, data: created, warning: { message: 'ai_insights not stored (column missing)' } });
+      } catch (ee) {
+        return res.status(500).json({ ok:false, error:{ message:'Insert failed after fallback' } });
+      }
+    }
+
+    // other errors
+    return res.status(500).json({ ok:false, error:{ message:'Insert failed', detail: msg } });
+  }
+});
+
+export default router;
+
+// Example insert (replace with your actual DB call)
+async function insertVehicle(payload: any) {
+  // Example using a generic SQL helper; replace with your own
+  // return db.insert(vehicles).values(payload).returning();
+  return payload; // stub for now
+}
+```
+
+> **Action:** Replace `insertVehicle` with your actual DB insertion (Drizzle/Prisma/pg). Keep the error-code fallback — it protects you until the migration is applied.
+
+---
+
+## 5) Ensure the client uses `/api/v1` and can navigate to `/vehicles`
+
+### 5.a) API helper forces `/api/v1`
+
+**File:** `client/src/lib/api.ts`
+
+```ts
+export const API_BASE = `${location.origin}/api/v1`;
+
+export async function api(path: string, opts: RequestInit = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    credentials: 'include',
+    ...opts,
+  });
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : { ok: true, data: null };
+  if (!res.ok || json?.ok === false) {
+    const msg = json?.error?.message || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return json; // { ok, data }
+}
+```
+
+### 5.b) Add client routes for `/vehicles` and `/vehicles/:id`
+
+**Edit:** `client/src/App.tsx` (or where your routes are defined, using wouter)
+
+```tsx
+import { Route, Switch } from 'wouter';
+import VehiclesPage from './pages/vehicles';
+import VehicleDetail from './pages/vehicle-detail';
+
+export default function App() {
+  return (
+    <Switch>
+      {/* ...your existing routes... */}
+      <Route path="/vehicles" component={VehiclesPage} />
+      <Route path="/vehicles/:id" component={VehicleDetail} />
+      {/* 404 fallback route stays at the end */}
+    </Switch>
+  );
+}
+```
+
+### 5.c) Minimal pages (if you don’t have them yet)
+
+**File:** `client/src/pages/vehicles.tsx`
+
+```tsx
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { Link } from 'wouter';
+
+export default function VehiclesPage() {
+  const [items, setItems] = useState<any[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api('/vehicles')
+      .then((r) => setItems(r.data || []))
+      .catch((e) => setErr(e.message));
+  }, []);
+
+  if (err) return <div className="p-6 text-red-600">{err}</div>;
+
+  return (
+    <div className="p-6 space-y-4">
+      <h1 className="text-2xl font-semibold">My Vehicles</h1>
+      <ul className="space-y-2">
+        {items.map((v) => (
+          <li key={v.id} className="p-3 rounded border flex items-center justify-between">
+            <div>
+              <div className="font-medium">{v.year} {v.make} {v.model}{v.trim ? ` ${v.trim}` : ''}</div>
+              <div className="text-sm text-muted-foreground">VIN: {v.vin}</div>
+            </div>
+            <Link href={`/vehicles/${v.id}`} className="text-primary">View</Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+**File:** `client/src/pages/vehicle-detail.tsx`
+
+```tsx
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { useRoute } from 'wouter';
+
+export default function VehicleDetail() {
+  const [, params] = useRoute('/vehicles/:id');
+  const id = params?.id;
+  const [item, setItem] = useState<any | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    api(`/vehicles/${id}`)
+      .then((r) => setItem(r.data))
+      .catch((e) => setErr(e.message));
+  }, [id]);
+
+  if (!id) return <div className="p-6">Invalid vehicle id</div>;
+  if (err) return <div className="p-6 text-red-600">{err}</div>;
+  if (!item) return <div className="p-6">Loading…</div>;
+
+  const ai = item.ai_insights ? (typeof item.ai_insights === 'string' ? JSON.parse(item.ai_insights) : item.ai_insights) : null;
+
+  return (
+    <div className="p-6 space-y-4">
+      <h1 className="text-2xl font-semibold">{item.year} {item.make} {item.model}{item.trim ? ` ${item.trim}` : ''}</h1>
+      <div className="text-sm text-muted-foreground">VIN: {item.vin}</div>
+
+      {ai && (
+        <div className="mt-4 p-4 rounded border">
+          <h2 className="font-medium mb-2">AI Insights</h2>
+          <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(ai, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## 6) Navigate to `/vehicles/:id` after creating from VIN (optional nicety)
+
+If you create the vehicle client‑side, navigate using `route()` from **wouter** (avoid double API prefix bugs):
+
+```tsx
+import { route } from 'wouter';
+// … inside success handler after POST /api/v1/vehicles/create-from-vin
+route(`/vehicles/${createdId}`);
+```
+
+---
+
+## 7) Quick checklist
+
+* [ ] Added **duplicate detector** and **registerRoute** helper.
+* [ ] Applied **DB migration** for `ai_insights` (PG or SQLite).
+* [ ] Wrapped create route with **fallback** in case the column isn’t there yet.
+* [ ] Ensured client API uses **/api/v1**.
+* [ ] Added client routes for **/vehicles** and **/vehicles/\:id**.
+* [ ] SPA fallback is in place to prevent 404 on refresh.
+
+> After these changes, duplicates will be caught, vehicle creation will no longer 500 (and will store AI once the column exists), and `/vehicles` will load instead of 404.
