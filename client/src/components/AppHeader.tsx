@@ -40,7 +40,7 @@ export default function AppHeader() {
             <NavLink href="/vehicles" label="Vehicles" />
             <NavLink href="/maintenance" label="Maintenance" />
             <NavLink href="/showcase" label="Showcase" />
-            <NavLink href="/mods" label="Modifications" />
+            <NavLink href="/modifications" label="Modifications" />
             <NavLink href="/community" label="Community" />
           </nav>
 
@@ -85,7 +85,7 @@ export default function AppHeader() {
               <NavLink href="/vehicles" label="Vehicles" />
               <NavLink href="/maintenance" label="Maintenance" />
               <NavLink href="/showcase" label="Showcase" />
-              <NavLink href="/mods" label="Modifications" />
+              <NavLink href="/modifications" label="Modifications" />
               <NavLink href="/community" label="Community" />
               <a href="/entry/new" className="mt-1 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold">Add Entry</a>
               <a href="/notifications" className="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm text-slate-700">Notifications</a>
