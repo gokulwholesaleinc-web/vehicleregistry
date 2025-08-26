@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,6 +67,7 @@ export function VinLookupModal() {
   const [open, setOpen] = useState(false);
   const [vinData, setVinData] = useState<VinDecodeResult | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -139,6 +141,10 @@ export function VinLookupModal() {
         title: "Vehicle Created",
         description: response?.data?.message || "Vehicle created successfully with AI data",
       });
+      // Navigate to vehicle detail page
+      if (response?.data?.vehicle?.id) {
+        setLocation(`/vehicles/${response.data.vehicle.id}`);
+      }
     },
     onError: (error) => {
       toast({
@@ -164,6 +170,10 @@ export function VinLookupModal() {
         title: "Draft Vehicle Created",
         description: response?.data?.message || "Draft vehicle created successfully",
       });
+      // Navigate to vehicle detail page
+      if (response?.data?.vehicle?.id) {
+        setLocation(`/vehicles/${response.data.vehicle.id}`);
+      }
     },
     onError: (error) => {
       toast({

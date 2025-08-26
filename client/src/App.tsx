@@ -13,6 +13,7 @@ import PrivacyPolicy from "@/pages/privacy-policy";
 import Community from "@/pages/community";
 import AdminDashboard from "@/pages/admin";
 import VehiclesPage from "@/pages/vehicles";
+import VehicleDetailPage from "@/pages/vehicle-detail";
 import MaintenancePage from "@/pages/maintenance";
 import ModificationsPage from "@/pages/modifications";
 import ProfilePage from "@/pages/profile";
@@ -37,6 +38,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/vehicles" component={VehiclesPage} />
+          <Route path="/vehicles/:id" component={VehicleDetailPage} />
           <Route path="/maintenance" component={MaintenancePage} />
           <Route path="/modifications" component={ModificationsPage} />
           <Route path="/community" component={Community} />

@@ -59,6 +59,7 @@ export const vehicles = pgTable("vehicles", {
   allowPreviousOwners: boolean("allow_previous_owners").default(true).notNull(),
   isDraft: boolean("is_draft").default(false).notNull(), // Track draft status
   autoFilled: boolean("auto_filled").default(false).notNull(), // Track if filled via AI
+  aiInsights: text("ai_insights"), // JSON string from OpenAI analysis
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

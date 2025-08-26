@@ -27,11 +27,12 @@ export function applySecurity(app: Express) {
     contentSecurityPolicy: isDev ? {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://accounts.google.com", "https://replit.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://accounts.google.com", "https://apis.google.com", "https://replit.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:", "https:", "blob:"],
-        connectSrc: ["'self'", "wss:", "ws:"],
+        imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.gstatic.com", "https://accounts.google.com"],
+        connectSrc: ["'self'", "wss:", "ws:", "https://accounts.google.com", "https://apis.google.com"],
+        frameSrc: ["'self'", "https://accounts.google.com"],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: []
       }

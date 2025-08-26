@@ -1173,6 +1173,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SPA fallback - only in production mode (development uses Vite dev server)
+  if (process.env.NODE_ENV === 'production') {
+    const clientDir = path.join(process.cwd(), 'client', 'dist');
+    app.use(express.static(clientDir));
+    
+    app.get(/^(?!\/api\/).*/, (_req, res) => {
+      res.sendFile(path.join(clientDir, 'index.html'));
+    });
+  }
+
   // Final error handler (after all routes) - ensures consistent JSON responses
   app.use((err: any, _req: any, res: any, _next: any) => {
     const status = err?.status || 500;
