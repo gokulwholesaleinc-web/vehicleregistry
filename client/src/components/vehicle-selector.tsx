@@ -64,12 +64,6 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, on
                         Draft
                       </Badge>
                     )}
-                    {selectedVehicle.autoFilled && (
-                      <Badge variant="default" className="text-xs">
-                        <Sparkles className="h-3 w-3 mr-1" />
-                        AI Enhanced
-                      </Badge>
-                    )}
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 truncate" data-testid="text-vehicle-vin">
                     {selectedVehicle.vin ? `VIN: ${selectedVehicle.vin}` : "No VIN (Draft Vehicle)"}

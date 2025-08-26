@@ -162,11 +162,6 @@ export default function VehicleDetailPage() {
                   </span>
                 </CardDescription>
               </div>
-              {vehicle?.autoFilled && (
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-                  AI Enhanced
-                </div>
-              )}
             </div>
           </CardHeader>
         </Card>
