@@ -848,7 +848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ]), async (req: any, res) => {
     try {
       const vehicleId = req.params.id;
-      const userId = req.user?.id || 'demo-user';
+      const userId = req.user?.id;
       
       // Check if vehicle exists and user owns it
       const existingVehicle = await storage.getVehicle(vehicleId);
