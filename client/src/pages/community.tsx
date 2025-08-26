@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { api } from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,10 +21,17 @@ export default function Community() {
     // Placeholder for add entry functionality
   };
 
-  const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
-    queryKey: ["/api/community/vehicles", { limit, offset }],
+  const { data: response, isLoading } = useQuery({
+    queryKey: ["/api/v1/vehicles", "public"],
+    queryFn: () => api(`/vehicles`),
     enabled: true,
   });
+  
+  // Filter for public vehicles and add pagination
+  const allVehicles = response?.data || [];
+  const publicVehicles = allVehicles.filter((v: Vehicle) => v.isPublic === true);
+  const paginatedVehicles = publicVehicles.slice(offset, offset + limit);
+  const vehicles = paginatedVehicles;
 
   if (!isAuthenticated) {
     return (
@@ -40,7 +48,7 @@ export default function Community() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-      <AppHeader onAddEntry={handleAddEntry} />
+      <AppHeader />
       <div className="container-responsive py-6 lg:py-8">
         <div className="mb-6">
           <Breadcrumb items={breadcrumbs} />
@@ -103,7 +111,7 @@ export default function Community() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 lg:mb-8">
-              {vehicles.map((vehicle) => (
+              {vehicles.map((vehicle: Vehicle) => (
                 <Card key={vehicle.id} className="card-modern card-hover cursor-pointer group">
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center justify-between text-sm sm:text-base">
