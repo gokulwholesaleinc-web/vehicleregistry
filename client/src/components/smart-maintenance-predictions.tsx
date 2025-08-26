@@ -47,80 +47,56 @@ export default function SmartMaintenancePredictions({ vehicleId }: SmartMaintena
   const [selectedTab, setSelectedTab] = useState("predictions");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Mock weather data (in real implementation, this would come from a weather API)
-  const currentWeather = {
-    season: "winter",
-    temperature: 32,
-    condition: "snow",
-    humidity: 78
+  // Fetch vehicle data to analyze actual maintenance patterns
+  const { data: vehicle } = useQuery({
+    queryKey: ['/api/v1/vehicles', vehicleId],
+    queryFn: () => fetch(`/api/v1/vehicles/${vehicleId}`).then(r => r.json()),
+    enabled: !!vehicleId,
+  });
+
+  const { data: maintenanceRecords } = useQuery({
+    queryKey: ['/api/v1/vehicles', vehicleId, 'maintenance'],
+    queryFn: () => fetch(`/api/v1/vehicles/${vehicleId}/maintenance`).then(r => r.json()),
+    enabled: !!vehicleId,
+  });
+
+  // Generate predictions based on actual vehicle data
+  const generateMaintenancePredictions = (): MaintenancePrediction[] => {
+    if (!vehicle?.data || !maintenanceRecords?.data) return [];
+    
+    const vehicleData = vehicle.data;
+    const records = maintenanceRecords.data;
+    const predictions: MaintenancePrediction[] = [];
+    
+    // Calculate basic maintenance intervals based on vehicle age and mileage
+    const currentYear = new Date().getFullYear();
+    const vehicleAge = currentYear - vehicleData.year;
+    const currentMileage = vehicleData.currentMileage || 0;
+    
+    // Find last oil change
+    const lastOilChange = records.find((r: any) => 
+      r.serviceType?.toLowerCase().includes('oil') || 
+      r.description?.toLowerCase().includes('oil')
+    );
+    
+    if (!lastOilChange || currentMileage - (lastOilChange.mileage || 0) > 4000) {
+      predictions.push({
+        id: "oil-change",
+        type: "Oil Change",
+        description: "Regular oil change needed based on mileage",
+        estimatedDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        confidence: 95,
+        cost: vehicleAge > 10 ? 85 : 65,
+        urgency: currentMileage - (lastOilChange?.mileage || 0) > 6000 ? "high" : "medium",
+        reason: `${currentMileage - (lastOilChange?.mileage || 0)} miles since last oil change`,
+        aiInsight: `Based on your ${vehicleData.year} ${vehicleData.make} ${vehicleData.model} specifications`
+      });
+    }
+    
+    return predictions;
   };
 
-  // Mock predictions data (in real implementation, this would come from AI analysis)
-  const mockPredictions: MaintenancePrediction[] = [
-    {
-      id: "1",
-      type: "Oil Change",
-      description: "Engine oil change recommended",
-      estimatedDate: "2025-09-15",
-      confidence: 89,
-      cost: 75,
-      urgency: "medium",
-      reason: "Based on current mileage and driving patterns",
-      aiInsight: "Your frequent highway driving suggests oil breakdown is accelerated. Consider switching to full synthetic."
-    },
-    {
-      id: "2", 
-      type: "Brake Inspection",
-      description: "Brake pads showing wear patterns",
-      estimatedDate: "2025-10-01",
-      confidence: 76,
-      cost: 450,
-      urgency: "high",
-      reason: "Heavy city driving detected",
-      aiInsight: "Stop-and-go traffic patterns indicate brake pad wear is 20% faster than average."
-    },
-    {
-      id: "3",
-      type: "Tire Rotation",
-      description: "Tire rotation for even wear",
-      estimatedDate: "2025-08-30",
-      confidence: 95,
-      cost: 50,
-      urgency: "low",
-      reason: "Scheduled maintenance interval",
-      aiInsight: "Your driving style and wheel alignment suggest front tires are wearing 15% faster."
-    }
-  ];
-
-  const mockSeasonalSuggestions: SeasonalSuggestion[] = [
-    {
-      id: "1",
-      title: "Winter Tire Installation",
-      description: "Cold weather approaching - install winter tires for better traction",
-      season: "winter",
-      weatherCondition: "snow",
-      priority: "high",
-      estimatedCost: 400
-    },
-    {
-      id: "2",
-      title: "Battery Health Check",
-      description: "Cold weather reduces battery performance by up to 40%",
-      season: "winter", 
-      weatherCondition: "cold",
-      priority: "medium",
-      estimatedCost: 150
-    },
-    {
-      id: "3",
-      title: "Coolant System Service",
-      description: "Prevent freeze damage with antifreeze concentration check",
-      season: "winter",
-      weatherCondition: "freezing",
-      priority: "medium",
-      estimatedCost: 120
-    }
-  ];
+  const predictions = generateMaintenancePredictions();
 
   const analyzeWithAI = async () => {
     setIsAnalyzing(true);
@@ -162,18 +138,15 @@ export default function SmartMaintenancePredictions({ vehicleId }: SmartMaintena
       <CardContent>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-              <Sun className="w-4 h-4" />
-              <span>{currentWeather.temperature}°F</span>
-            </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-              <Snowflake className="w-4 h-4" />
-              <span>{currentWeather.season}</span>
-            </div>
+            {vehicle?.data && (
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                {vehicle.data.year} {vehicle.data.make} {vehicle.data.model} • {vehicle.data.currentMileage?.toLocaleString()} miles
+              </div>
+            )}
           </div>
           <Button 
             onClick={analyzeWithAI}
-            disabled={isAnalyzing}
+            disabled={isAnalyzing || !vehicle?.data}
             className="btn-primary"
             data-testid="button-ai-analyze"
           >
@@ -198,108 +171,94 @@ export default function SmartMaintenancePredictions({ vehicleId }: SmartMaintena
           </TabsList>
 
           <TabsContent value="predictions" className="space-y-4 mt-6">
-            {mockPredictions.map((prediction) => (
-              <Card key={prediction.id} className="card-hover border-l-4 border-l-purple-500">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <h4 className="font-semibold">{prediction.type}</h4>
-                        <Badge className={getUrgencyColor(prediction.urgency)}>
-                          {prediction.urgency} priority
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        {prediction.description}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-lg">${prediction.cost}</p>
-                      <p className="text-xs text-gray-500">estimated cost</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="w-4 h-4 text-blue-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">Due Date</p>
-                        <p className="text-sm font-medium">
-                          {new Date(prediction.estimatedDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <TrendingUp className="w-4 h-4 text-green-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">Confidence</p>
-                        <p className="text-sm font-medium">{prediction.confidence}%</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Brain className="w-4 h-4 text-purple-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">AI Analysis</p>
-                        <p className="text-sm font-medium">Complete</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
-                    <p className="text-sm">
-                      <strong>AI Insight:</strong> {prediction.aiInsight}
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                      Reason: {prediction.reason}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </TabsContent>
-
-          <TabsContent value="seasonal" className="space-y-4 mt-6">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-4">
-              <div className="flex items-center space-x-2 mb-2">
-                <Snowflake className="w-5 h-5 text-blue-600" />
-                <h3 className="font-semibold text-blue-800 dark:text-blue-200">Winter Preparation</h3>
-              </div>
-              <p className="text-sm text-blue-700 dark:text-blue-300">
-                Based on current weather patterns and your location, here are AI-recommended preparations:
-              </p>
-            </div>
-
-            {mockSeasonalSuggestions.map((suggestion) => (
-              <Card key={suggestion.id} className="card-hover">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start space-x-3 flex-1">
-                      {getPriorityIcon(suggestion.priority)}
+            {predictions.length > 0 ? (
+              predictions.map((prediction) => (
+                <Card key={prediction.id} className="card-hover border-l-4 border-l-purple-500">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <h4 className="font-semibold mb-1">{suggestion.title}</h4>
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h4 className="font-semibold">{prediction.type}</h4>
+                          <Badge className={getUrgencyColor(prediction.urgency)}>
+                            {prediction.urgency} priority
+                          </Badge>
+                        </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          {suggestion.description}
+                          {prediction.description}
                         </p>
-                        <div className="flex items-center space-x-4 text-xs">
-                          <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
-                            {suggestion.season}
-                          </span>
-                          <span className="text-gray-500">
-                            {suggestion.weatherCondition}
-                          </span>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-lg">${prediction.cost}</p>
+                        <p className="text-xs text-gray-500">estimated cost</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-blue-500" />
+                        <div>
+                          <p className="text-xs text-gray-500">Due Date</p>
+                          <p className="text-sm font-medium">
+                            {new Date(prediction.estimatedDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <TrendingUp className="w-4 h-4 text-green-500" />
+                        <div>
+                          <p className="text-xs text-gray-500">Confidence</p>
+                          <p className="text-sm font-medium">{prediction.confidence}%</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Brain className="w-4 h-4 text-purple-500" />
+                        <div>
+                          <p className="text-xs text-gray-500">Based on</p>
+                          <p className="text-sm font-medium">Real Data</p>
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold">${suggestion.estimatedCost}</p>
-                      <Badge className={getUrgencyColor(suggestion.priority)}>
-                        {suggestion.priority}
-                      </Badge>
+
+                    <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
+                      <p className="text-sm">
+                        <strong>Analysis:</strong> {prediction.aiInsight}
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        Reason: {prediction.reason}
+                      </p>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card className="card-modern">
+                <CardContent className="p-6 text-center">
+                  <Brain className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                    No Maintenance Predictions Available
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Predictions will be generated based on your vehicle's maintenance history and mileage. 
+                    Add maintenance records to see AI-powered insights.
+                  </p>
                 </CardContent>
               </Card>
-            ))}
+            )}
+          </TabsContent>
+
+          <TabsContent value="seasonal" className="space-y-4 mt-6">
+            <Card className="card-modern">
+              <CardContent className="p-6 text-center">
+                <Snowflake className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                  Seasonal Recommendations Not Available
+                </h3>
+                <p className="text-sm text-gray-500">
+                  Seasonal maintenance suggestions would be based on your location, local weather patterns, 
+                  and vehicle-specific requirements. This feature requires real weather data integration.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </CardContent>
