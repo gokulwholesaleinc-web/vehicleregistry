@@ -10,8 +10,8 @@ export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
   
   const { data: vehicle, isLoading, error } = useQuery({
-    queryKey: ['/api/vehicles', id],
-    queryFn: () => api(`/vehicles/${id}`).then(r => r),
+    queryKey: ['/api/v1/vehicles', id],
+    queryFn: () => api(`/vehicles/${id}`).then(r => r.data),
   });
 
   if (isLoading) {

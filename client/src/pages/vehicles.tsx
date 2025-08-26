@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Car, FileText, Sparkles, Plus, Calendar, Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { type Vehicle } from "@shared/schema";
+import { api } from "@/lib/api";
 
 export default function VehiclesPage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -20,7 +21,8 @@ export default function VehiclesPage() {
   const breadcrumbs = useBreadcrumbs();
 
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
-    queryKey: ["/api/vehicles"],
+    queryKey: ["/api/v1/vehicles"],
+    queryFn: () => api('/vehicles').then(r => r.data),
   });
 
   const handleAddEntry = () => {
@@ -29,9 +31,7 @@ export default function VehiclesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-      <AppHeader 
-        onAddEntry={handleAddEntry}
-      />
+      <AppHeader />
       
       <div className="container-responsive py-6 lg:py-8">
         <div className="mb-6">

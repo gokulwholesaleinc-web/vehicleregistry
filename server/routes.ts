@@ -403,26 +403,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Vehicles (protected)
-  app.get('/api/vehicles', requireAuth, async (req: any, res) => {
+  // Vehicles (protected) - moved to /api/v1
+  app.get('/api/v1/vehicles', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicles = await storage.getVehiclesByOwner(userId);
-      res.json(vehicles);
+      res.json({ ok: true, data: vehicles });
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch vehicles' });
+      res.status(500).json({ ok: false, error: { message: error instanceof Error ? error.message : 'Failed to fetch vehicles' } });
     }
   });
 
-  app.get('/api/vehicles/:id', async (req, res) => {
+  app.get('/api/v1/vehicles/:id', async (req, res) => {
     try {
       const vehicle = await storage.getVehicle(req.params.id);
       if (!vehicle) {
-        return res.status(404).json({ message: 'Vehicle not found' });
+        return res.status(404).json({ ok: false, error: { message: 'Vehicle not found' } });
       }
-      res.json(vehicle);
+      res.json({ ok: true, data: vehicle });
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch vehicle' });
+      res.status(500).json({ ok: false, error: { message: error instanceof Error ? error.message : 'Failed to fetch vehicle' } });
     }
   });
 
@@ -436,7 +436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Enhanced VIN-based vehicle creation
-  app.post('/api/vehicles/create-from-vin', requireAuth, async (req: any, res) => {
+  app.post('/api/v1/vehicles/create-from-vin', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { vin, currentMileage } = z.object({ 
@@ -502,7 +502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create draft vehicle (without VIN)
-  app.post('/api/vehicles/create-draft', requireAuth, async (req: any, res) => {
+  app.post('/api/v1/vehicles/create-draft', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicleData = insertVehicleSchema.parse({

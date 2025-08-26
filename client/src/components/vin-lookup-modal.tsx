@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { route } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,7 +67,6 @@ export function VinLookupModal() {
   const [open, setOpen] = useState(false);
   const [vinData, setVinData] = useState<VinDecodeResult | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -133,7 +132,7 @@ export function VinLookupModal() {
       });
     },
     onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
       setOpen(false);
       setVinData(null);
       vinForm.reset();
@@ -143,7 +142,7 @@ export function VinLookupModal() {
       });
       // Navigate to vehicle detail page
       if (response?.data?.vehicle?.id) {
-        setLocation(`/vehicles/${response.data.vehicle.id}`);
+        navigateToVehicle(response.data.vehicle.id);
       }
     },
     onError: (error) => {
@@ -163,7 +162,7 @@ export function VinLookupModal() {
       });
     },
     onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
       setOpen(false);
       draftForm.reset();
       toast({
@@ -172,7 +171,7 @@ export function VinLookupModal() {
       });
       // Navigate to vehicle detail page
       if (response?.data?.vehicle?.id) {
-        setLocation(`/vehicles/${response.data.vehicle.id}`);
+        navigateToVehicle(response.data.vehicle.id);
       }
     },
     onError: (error) => {
