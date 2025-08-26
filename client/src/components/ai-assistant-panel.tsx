@@ -9,8 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { 
-  useVinDecoder, 
-  useMaintenanceRecommendations, 
   usePhotoAnalysis, 
   useEntryCategorizer,
   useDuplicateChecker,
@@ -19,13 +17,10 @@ import {
 import type { Vehicle } from "@shared/schema";
 import { 
   Bot, 
-  Search, 
-  Wrench, 
   Camera, 
   Tag, 
   RefreshCw, 
   Sparkles, 
-  CheckCircle,
   AlertTriangle,
   Loader2
 } from "lucide-react";
@@ -45,44 +40,16 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
   });
 
   // State for different AI features
-  const [vinInput, setVinInput] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [entryData, setEntryData] = useState({ title: "", description: "", cost: 0 });
-  const [duplicateCheck, setDuplicateCheck] = useState({ type: "vin" as const, identifier: "" });
+  const [duplicateCheck, setDuplicateCheck] = useState({ type: "vin" as "vin" | "modification" | "maintenance", identifier: "" });
   
   // AI Hooks
-  const vinDecoder = useVinDecoder();
-  const maintenanceRecs = useMaintenanceRecommendations();
   const photoAnalysis = usePhotoAnalysis();
   const entryCategorizer = useEntryCategorizer();
   const duplicateChecker = useDuplicateChecker();
   const cacheInvalidator = useCacheInvalidator();
 
-  const handleVinDecode = async (vin?: string) => {
-    const vinToUse = vin || vinInput;
-    if (vinToUse.length !== 17) {
-      toast({
-        title: "Invalid VIN",
-        description: "VIN must be exactly 17 characters",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const result = await vinDecoder.mutateAsync(vinToUse);
-      toast({
-        title: "VIN Analyzed Successfully! 🚗",
-        description: `${result.year} ${result.make} ${result.model} - ${result.engine}`,
-      });
-    } catch (error) {
-      toast({
-        title: "VIN Analysis Failed",
-        description: "Unable to analyze this VIN. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
 
   const handlePhotoAnalysis = async () => {
     if (!photoFile) {
@@ -134,7 +101,7 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
     }
   };
 
-  const handleDuplicateCheck = async (identifier?: string, type?: "vin" | "license") => {
+  const handleDuplicateCheck = async (identifier?: string, type?: "vin" | "modification" | "maintenance") => {
     const checkData = {
       identifier: identifier || duplicateCheck.identifier,
       type: type || duplicateCheck.type
@@ -198,7 +165,7 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
           <div className="flex-1 min-w-0">
             <CardTitle className="text-xl truncate">AI Assistant</CardTitle>
             <CardDescription className="text-sm leading-relaxed">
-              {vehicle ? `AI insights for your ${vehicle.year} ${vehicle.make} ${vehicle.model}` : "Intelligent features powered by OpenAI"}
+              {vehicle ? `Smart tools for your ${vehicle.year} ${vehicle.make} ${vehicle.model}` : "AI-powered photo analysis, categorization, and tools"}
             </CardDescription>
           </div>
           <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse-glow flex-shrink-0" />
@@ -206,16 +173,8 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
       </CardHeader>
       
       <CardContent className="space-y-4">
-        <Tabs defaultValue="vin-decode" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 gap-1 p-1">
-            <TabsTrigger value="vin-decode" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
-              <Search className="w-4 h-4 mb-1" />
-              <span className="leading-none">VIN</span>
-            </TabsTrigger>
-            <TabsTrigger value="maintenance" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
-              <Wrench className="w-4 h-4 mb-1" />
-              <span className="leading-none">Maint</span>
-            </TabsTrigger>
+        <Tabs defaultValue="photo" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 gap-1 p-1">
             <TabsTrigger value="photo" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
               <Camera className="w-4 h-4 mb-1" />
               <span className="leading-none">Photo</span>
@@ -230,155 +189,7 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="vin-decode" className="mt-6">
-            {vehicle ? (
-              <div className="space-y-3">
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-blue-600" />
-                    <span className="font-semibold text-blue-800 dark:text-blue-300">Current Vehicle VIN</span>
-                  </div>
-                  <div className="text-sm font-mono bg-white dark:bg-gray-800 p-2 rounded border">
-                    {vehicle.vin || "No VIN available"}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-                    <div><strong>Make:</strong> {vehicle.make}</div>
-                    <div><strong>Model:</strong> {vehicle.model}</div>
-                    <div><strong>Year:</strong> {vehicle.year}</div>
-                    <div><strong>Trim:</strong> {vehicle.trim || "Unknown"}</div>
-                  </div>
-                </div>
-                {vehicle.vin && (
-                  <Button 
-                    onClick={() => handleVinDecode(vehicle.vin)}
-                    disabled={vinDecoder.isPending}
-                    className="btn-primary w-full"
-                    data-testid="button-decode-vehicle-vin"
-                  >
-                    {vinDecoder.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Search className="w-4 h-4 mr-2" />
-                    )}
-                    Analyze VIN with AI
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium">VIN Number</label>
-                  <Input
-                    placeholder="Enter 17-character VIN"
-                    value={vinInput}
-                    onChange={(e) => setVinInput(e.target.value.toUpperCase())}
-                    maxLength={17}
-                    className="input-enhanced"
-                    data-testid="input-vin"
-                  />
-                </div>
-                <Button 
-                  onClick={() => handleVinDecode(vinInput)}
-                  disabled={vinDecoder.isPending || vinInput.length !== 17}
-                  className="btn-primary w-full"
-                  data-testid="button-decode-vin"
-                >
-                  {vinDecoder.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Search className="w-4 h-4 mr-2" />
-                  )}
-                  Decode VIN with AI
-                </Button>
-              </div>
-            )}
-            
-            {vinDecoder.data && (
-              <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span className="font-semibold text-green-800 dark:text-green-300">AI Analysis Results</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><strong>Make:</strong> {vinDecoder.data.make}</div>
-                  <div><strong>Model:</strong> {vinDecoder.data.model}</div>
-                  <div><strong>Year:</strong> {vinDecoder.data.year}</div>
-                  <div><strong>Engine:</strong> {vinDecoder.data.engine}</div>
-                </div>
-                <Badge variant="secondary" className="mt-2">
-                  Confidence: {Math.round(vinDecoder.data.confidence * 100)}%
-                </Badge>
-              </div>
-            )}
-          </TabsContent>
 
-          <TabsContent value="maintenance" className="mt-6">
-            <div className="space-y-3">
-              {vehicle ? (
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
-                  <div className="text-sm">
-                    <div><strong>Vehicle:</strong> {vehicle.year} {vehicle.make} {vehicle.model}</div>
-                    <div><strong>Mileage:</strong> {vehicle.currentMileage?.toLocaleString() || "Unknown"} miles</div>
-                    <div><strong>Last Service:</strong> {vehicle.lastServiceDate ? new Date(vehicle.lastServiceDate).toLocaleDateString() : "Unknown"}</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg border border-orange-200 dark:border-orange-800 mb-3">
-                  <div className="text-sm text-orange-700 dark:text-orange-300">
-                    Select a vehicle to get personalized maintenance recommendations
-                  </div>
-                </div>
-              )}
-              
-              <Button 
-                onClick={() => maintenanceRecs.mutate(vehicle ? {
-                  make: vehicle.make,
-                  model: vehicle.model, 
-                  year: vehicle.year,
-                  mileage: vehicle.currentMileage || 0,
-                  modifications: [], // TODO: Fetch actual modifications
-                  lastMaintenance: [] // TODO: Fetch actual maintenance history
-                } : {
-                  make: "Unknown",
-                  model: "Unknown", 
-                  year: 2020,
-                  mileage: 50000,
-                  modifications: [],
-                  lastMaintenance: []
-                })}
-                disabled={maintenanceRecs.isPending}
-                className="btn-primary w-full"
-                data-testid="button-maintenance-recommendations"
-              >
-                {maintenanceRecs.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Wrench className="w-4 h-4 mr-2" />
-                )}
-                Get AI Maintenance Recommendations
-              </Button>
-              
-              {maintenanceRecs.data && maintenanceRecs.data.length > 0 && (
-                <div className="space-y-2">
-                  {maintenanceRecs.data.slice(0, 3).map((rec, index) => (
-                    <div key={index} className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-semibold text-sm">{rec.task}</span>
-                        <Badge variant={rec.priority === 'high' ? 'destructive' : rec.priority === 'medium' ? 'default' : 'secondary'}>
-                          {rec.priority}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">{rec.description}</p>
-                      <div className="flex justify-between items-center mt-2 text-xs">
-                        <span className="text-green-600 dark:text-green-400">{rec.estimatedCost}</span>
-                        <span className="text-orange-600 dark:text-orange-400">{rec.dueDate}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </TabsContent>
 
           <TabsContent value="photo" className="mt-6">
             <div className="space-y-3">
@@ -513,11 +324,12 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
                 <div className="flex gap-2 mt-1">
                   <select 
                     value={duplicateCheck.type}
-                    onChange={(e) => setDuplicateCheck({...duplicateCheck, type: e.target.value as "vin" | "license"})}
+                    onChange={(e) => setDuplicateCheck({...duplicateCheck, type: e.target.value as "vin" | "modification" | "maintenance"})}
                     className="input-enhanced flex-shrink-0"
                   >
                     <option value="vin">VIN</option>
-                    <option value="license">License Plate</option>
+                    <option value="modification">Modification</option>
+                    <option value="maintenance">Maintenance</option>
                   </select>
                   <Input
                     placeholder="Enter identifier"
