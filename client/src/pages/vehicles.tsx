@@ -5,6 +5,7 @@ import VehicleSelector from "@/components/vehicle-selector";
 import { VinLookupModal } from "@/components/vin-lookup-modal";
 import VehicleDetailsModal from "@/components/vehicle-details-modal";
 import EditVehicleModal from "@/components/edit-vehicle-modal";
+import AddEntryModal from "@/components/add-entry-modal";
 import UserProfileModal from "@/components/user-profile-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,9 @@ export default function VehiclesPage() {
   const [isVehicleDetailsModalOpen, setIsVehicleDetailsModalOpen] = useState(false);
   const [isEditVehicleModalOpen, setIsEditVehicleModalOpen] = useState(false);
   const [vehicleToEdit, setVehicleToEdit] = useState<Vehicle | null>(null);
+  const [isAddEntryModalOpen, setIsAddEntryModalOpen] = useState(false);
+  const [vehicleForEntry, setVehicleForEntry] = useState<Vehicle | null>(null);
+  const [entryType, setEntryType] = useState<"modification" | "maintenance">("modification");
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const breadcrumbs = useBreadcrumbs();
 
@@ -29,8 +33,9 @@ export default function VehiclesPage() {
     queryFn: () => api('/vehicles').then(r => r.data),
   });
 
-  const handleAddEntry = () => {
-    // Placeholder for add entry functionality
+  const handleAddEntry = (vehicle: Vehicle) => {
+    setVehicleForEntry(vehicle);
+    setIsAddEntryModalOpen(true);
   };
 
   const handleEditVehicle = (vehicle: Vehicle) => {
@@ -195,7 +200,7 @@ export default function VehiclesPage() {
                           variant="outline"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAddEntry();
+                            handleAddEntry(vehicle);
                           }}
                           data-testid={`button-add-entry-${vehicle.id}`}
                         >
@@ -224,6 +229,17 @@ export default function VehiclesPage() {
             setVehicleToEdit(null);
           }}
           vehicle={vehicleToEdit}
+        />
+
+        <AddEntryModal
+          isOpen={isAddEntryModalOpen}
+          onClose={() => {
+            setIsAddEntryModalOpen(false);
+            setVehicleForEntry(null);
+          }}
+          vehicleId={vehicleForEntry?.id || ""}
+          entryType={entryType}
+          onEntryTypeChange={setEntryType}
         />
 
         <UserProfileModal
