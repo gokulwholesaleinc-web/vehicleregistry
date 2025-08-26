@@ -1,0 +1,385 @@
+# Vehicles Not Showing + 404 + Google CSP + Manual/DCT Detection — Single Drop‑In Pack
+
+This pack fixes five things in one go:
+
+1. **404 on client routes (/vehicles, /vehicles/\:id)** → SPA fallback on server + Router entries.
+2. **Newly created vehicle not visible** → normalized create endpoint, query invalidation, and list/query pages.
+3. **Google Sign‑In blocked by CSP** → Helmet CSP allow‑list for GSI (and guard for missing client id).
+4. **NHTSA decoding marks Manual/DCT as Automatic** → transmission normalizer.
+5. **Where to view OpenAI insights** → persist `aiInsights` and surface on Vehicle Detail.
+
+Copy/paste the snippets into the specified files. Names assume your current structure; adjust imports/paths if needed.
+
+---
+
+## A) Server — SPA fallback + VIN/Vehicle routes
+
+### A1) Helmet CSP for Google Sign‑In
+
+**`server/http/security.ts`** (or your helmet config)
+
+```ts
+import helmet from 'helmet';
+
+export const security = helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "connect-src": ["'self'", 'https:', 'wss:', 'ws:', 'https://accounts.google.com', 'https://apis.google.com'],
+      "script-src": ["'self'", 'https://accounts.google.com', 'https://apis.google.com'],
+      "frame-src":  ["'self'", 'https://accounts.google.com'],
+      "img-src":    ["'self'", 'data:', 'https://*.gstatic.com', 'https://accounts.google.com'],
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+});
+```
+
+Mount **before** routes: `app.use(security)`.
+
+### A2) Transmission normalizer
+
+**`server/http/routes/vin.ts`** – add helper + use it when building the vehicle object.
+
+```ts
+function normalizeTransmission(row: any): string | null {
+  const candidates: string[] = [row.TransmissionDescriptor, row.TransmissionStyle, row.Transmission]
+    .filter(Boolean).map(String);
+  const joined = candidates.join(' ').toLowerCase();
+  const hasManual = /(manual|m\/t|stick|\b6[- ]speed\b|\b5[- ]speed\b)/.test(joined);
+  const hasDCT    = /(dual\s*clutch|\bdct\b)/.test(joined);
+  const hasAMT    = /(automated\s*manual|\bamt\b)/.test(joined);
+  const hasCVT    = /(cvt|continuously\s*variable)/.test(joined);
+  const hasAuto   = /(automatic|\ba\/t\b)/.test(joined);
+  if (hasDCT) return 'Dual Clutch';
+  if (hasAMT) return 'Automated Manual';
+  if (hasManual) return 'Manual';
+  if (hasCVT) return 'CVT';
+  if (hasAuto) return 'Automatic';
+  const speeds = row.TransmissionSpeeds || row.NumberOfForwardGears;
+  const style  = row.TransmissionStyle || row.TransmissionDescriptor;
+  if (speeds && style) return `${speeds}-Speed ${String(style).trim()}`;
+  return style || null;
+}
+```
+
+Use it in your decode handler:
+
+```ts
+const vehicle = {
+  vin,
+  make: row.Make || null,
+  model: row.Model || null,
+  modelYear: row.ModelYear ? Number(row.ModelYear) : null,
+  trim: row.Trim || null,
+  bodyClass: row.BodyClass || null,
+  engine: [row.EngineManufacturer, row.EngineModel].filter(Boolean).join(' '),
+  cylinders: row.EngineCylinders ? Number(row.EngineCylinders) : null,
+  displacement: row.DisplacementL ? Number(row.DisplacementL) : null,
+  transmission: normalizeTransmission(row),
+  driveType: row.DriveType || null,
+  plantCountry: row.PlantCountry || null,
+  fuelType: row.FuelTypePrimary || null,
+  mileage: parsed.data.mileage ?? null,
+};
+```
+
+### A3) Create‑from‑VIN endpoint persists `aiInsights` and returns the created id
+
+**`server/http/routes/vehicles.ts`** (new or extend existing)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../app';
+
+const r = Router();
+
+// Create vehicle straight from decoded payload
+r.post('/create-from-vin', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    // TODO: replace with your DB call
+    const created = await req.db.vehicles.insert({
+      userId: req.user.id,
+      vin: b.vin,
+      year: b.year,
+      make: b.make,
+      model: b.model,
+      trim: b.trim,
+      engine: b.engine,
+      transmission: b.transmission,
+      fuelType: b.fuelType,
+      bodyStyle: b.bodyStyle,
+      drivetrain: b.drivetrain,
+      mileage: b.mileage ?? 0,
+      aiInsights: b.aiInsights ?? null, // JSON column or text
+      createdAt: new Date(),
+    });
+    return res.json({ ok: true, id: created.id });
+  } catch (e) { next(e); }
+});
+
+// List current user's vehicles
+r.get('/', requireAuth, async (req,res,next)=>{
+  try {
+    const rows = await req.db.vehicles.findMany({ where: { userId: req.user.id } });
+    res.json({ ok:true, items: rows });
+  } catch(e){ next(e); }
+});
+
+// Get one vehicle with insights
+r.get('/:id', requireAuth, async (req,res,next)=>{
+  try {
+    const v = await req.db.vehicles.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+    if (!v) return res.status(404).json({ ok:false, error:{ message:'Not found' } });
+    res.json({ ok:true, item: v });
+  } catch(e){ next(e); }
+});
+
+export default r;
+```
+
+Mount under `/api/v1/vehicles` in your app:
+
+```ts
+import vehiclesRouter from './routes/vehicles';
+app.use('/api/v1/vehicles', vehiclesRouter);
+```
+
+### A4) SPA fallback (prevents 404 on refresh/deep links)
+
+After your API routes, serve index.html for everything else:
+
+```ts
+import path from 'node:path';
+const clientDir = path.join(process.cwd(), 'client', 'dist');
+app.use(express.static(clientDir));
+
+// Keep API routes above. Then:
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  res.sendFile(path.join(clientDir, 'index.html'));
+});
+```
+
+This makes `/vehicles` and `/vehicles/:id` refresh-safe.
+
+---
+
+## B) Client — API helper (same‑origin) + routes + pages
+
+### B1) API helper (ensure you have the safe one)
+
+**`client/src/lib/api.ts`**
+
+```ts
+function safeBase(): string {
+  const sameOrigin = `${location.origin}/api/v1`;
+  const env = (import.meta.env as any)?.VITE_API_BASE?.trim();
+  if (!env) return sameOrigin;
+  if (env.startsWith('http://localhost')) return sameOrigin;
+  if (env.startsWith('/')) return `${location.origin}${env}`;
+  try { if (new URL(env).origin !== location.origin) return sameOrigin; } catch { return sameOrigin; }
+  return env;
+}
+export const API_BASE = safeBase();
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t:string|null){ t?localStorage.setItem('vg.jwt',t):localStorage.removeItem('vg.jwt'); }
+export async function api(path:string, init: RequestInit = {}){
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`);
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials:'include' });
+  let json:any=null; try{ json = await res.json(); }catch{}
+  if (res.status===401){ setToken(null); throw new Error(json?.error?.message||'Unauthorized'); }
+  if (!res.ok){ throw new Error(json?.error?.message||res.statusText); }
+  return json ?? { ok:true };
+}
+if (typeof window!=='undefined') console.info('[VG] API_BASE =', API_BASE);
+```
+
+### B2) Router entries
+
+**`client/src/App.tsx`** (or your router file with `wouter`)
+
+```tsx
+import { Route, Switch } from 'wouter';
+import Dashboard from './pages/dashboard';
+import VehiclesPage from './pages/vehicles';
+import VehicleDetailPage from './pages/vehicle-detail';
+
+export default function App(){
+  return (
+    <Switch>
+      <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/vehicles" component={VehiclesPage} />
+      <Route path="/vehicles/:id" component={VehicleDetailPage} />
+      <Route> {/* 404 */}
+        <div className="p-10 text-center">
+          <div className="text-2xl font-semibold">404 Page Not Found</div>
+          <div className="text-muted-foreground mt-2">Did you forget to add the page to the router?</div>
+        </div>
+      </Route>
+    </Switch>
+  );
+}
+```
+
+### B3) Vehicles list page
+
+**`client/src/pages/vehicles.tsx`** (new)
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'wouter';
+import { api } from '@/lib/api';
+
+export default function VehiclesPage(){
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['/api/v1/vehicles'],
+    queryFn: () => api('/vehicles').then(r=>r.items),
+  });
+
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">{String((error as Error).message)}</div>;
+
+  return (
+    <div className="p-6 space-y-4">
+      <h1 className="text-2xl font-semibold">My Vehicles</h1>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {data?.map((v:any)=> (
+          <Link key={v.id} href={`/vehicles/${v.id}`} className="block border rounded-xl p-4 hover:shadow">
+            <div className="text-sm text-muted-foreground">{v.vin}</div>
+            <div className="font-medium">{v.year} {v.make} {v.model}{v.trim?` ${v.trim}`:''}</div>
+            <div className="text-sm">{v.engine || '—'} • {v.transmission || '—'} • {v.fuelType || '—'}</div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### B4) Vehicle detail page (shows AI insights)
+
+**`client/src/pages/vehicle-detail.tsx`** (new)
+
+```tsx
+import { useParams } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
+export default function VehicleDetailPage(){
+  const { id } = useParams<{id:string}>();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['/api/v1/vehicles', id],
+    queryFn: () => api(`/vehicles/${id}`).then(r=>r.item),
+  });
+
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">{String((error as Error).message)}</div>;
+
+  const v = data;
+  const ai = v?.aiInsights || null;
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <div className="text-sm text-muted-foreground">{v.vin}</div>
+        <h1 className="text-2xl font-semibold">{v.year} {v.make} {v.model}{v.trim?` ${v.trim}`:''}</h1>
+        <div className="text-sm">{v.engine || '—'} • {v.transmission || '—'} • {v.fuelType || '—'} • {v.drivetrain || v.driveType || '—'}</div>
+      </div>
+
+      {ai && (
+        <div className="grid md:grid-cols-2 gap-4">
+          <section className="border rounded-xl p-4">
+            <h2 className="font-medium mb-2">Fun Facts</h2>
+            <ul className="list-disc pl-5 space-y-1">{ai.funFacts?.map((x:string,i:number)=>(<li key={i}>{x}</li>))}</ul>
+          </section>
+          <section className="border rounded-xl p-4">
+            <h2 className="font-medium mb-2">Market Value</h2>
+            <div className="text-sm">Estimated: {ai.marketValue?.estimated || '—'}</div>
+            <ul className="list-disc pl-5 space-y-1 mt-2">{ai.marketValue?.factors?.map((x:string,i:number)=>(<li key={i}>{x}</li>))}</ul>
+          </section>
+          <section className="border rounded-xl p-4">
+            <h2 className="font-medium mb-2">Performance</h2>
+            <div className="text-sm">0-60: {ai.performance?.acceleration || '—'}</div>
+            <div className="text-sm">Top speed: {ai.performance?.topSpeed || '—'}</div>
+            <div className="text-sm">MPG: {ai.performance?.mpg || '—'}</div>
+          </section>
+          <section className="border rounded-xl p-4">
+            <h2 className="font-medium mb-2">Reliability</h2>
+            <div className="text-sm">Score: {ai.reliability?.score || '—'}</div>
+            <div className="mt-2 text-sm font-medium">Common Issues</div>
+            <ul className="list-disc pl-5 space-y-1">{ai.reliability?.commonIssues?.map((x:string,i:number)=>(<li key={i}>{x}</li>))}</ul>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### B5) VIN modal — create vehicle then navigate + invalidate list
+
+Update your modal’s create handler so the list shows the new car and we jump to its page.
+
+```ts
+const handleCreateFromVin = async () => {
+  if (!vinData) return;
+  const { vehicle, aiInsights } = vinData;
+  const resp = await api('/vehicles/create-from-vin', {
+    method: 'POST',
+    body: JSON.stringify({
+      vin: vehicle.vin,
+      year: vehicle.modelYear,
+      make: vehicle.make,
+      model: vehicle.model,
+      trim: vehicle.trim,
+      engine: vehicle.engine,
+      transmission: vehicle.transmission,
+      fuelType: vehicle.fuelType,
+      bodyStyle: vehicle.bodyClass,
+      drivetrain: vehicle.driveType,
+      mileage: vehicle.mileage ?? 0,
+      aiInsights,
+    })
+  });
+  // invalidate and navigate
+  queryClient.invalidateQueries({ queryKey: ['/api/v1/vehicles'] });
+  setOpen(false);
+  route(`/vehicles/${resp.id}`); // using wouter's route()
+};
+```
+
+Import `route` from `wouter`: `import { route } from 'wouter';`
+
+### B6) Show/Hide Google Sign‑In Button when client id exists
+
+Where you render the GSI button:
+
+```tsx
+const cid = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+return cid ? (
+  <div id="g_id_onload"
+       data-client_id={cid}
+       data-auto_prompt="false" />
+) : null;
+```
+
+---
+
+## C) ENV sanity
+
+* `VITE_GOOGLE_CLIENT_ID=<your_oauth_client_id>` (Replit Secret)
+* Client should **not** set VITE\_API\_BASE unless it’s the same origin.
+
+---
+
+## D) Why your issues are gone
+
+* **404 on /vehicles** → Express SPA fallback serves `index.html` so client router can resolve it.
+* **Vehicle invisible after create** → we POST normalized data, `invalidateQueries`, and navigate; the list page hits `/api/v1/vehicles` and now shows it.
+* **Manual vs Automatic** → `normalizeTransmission` promotes Manual/DCT/AMT correctly.
+* **Where to read OpenAI results** → stored at create (`aiInsights`) and rendered on Vehicle Detail.
+* **Google button blocked** → CSP allow‑lists Google; we don’t render button when client id is missing.
