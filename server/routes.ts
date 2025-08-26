@@ -620,6 +620,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update vehicle with photos and editable fields (v1 API)
+  app.put('/api/v1/vehicles/:id', isAuthenticated, upload.fields([
+    { name: 'photos', maxCount: 10 }
+  ]), async (req: any, res) => {
+    try {
+      const vehicleId = req.params.id;
+      const userId = req.user.id;
+      
+      // Check if vehicle exists and user owns it
+      const existingVehicle = await storage.getVehicle(vehicleId);
+      if (!existingVehicle) {
+        return res.status(404).json({ ok: false, error: { message: 'Vehicle not found' } });
+      }
+      
+      if (existingVehicle.currentOwnerId !== userId) {
+        return res.status(403).json({ ok: false, error: { message: 'Not authorized to edit this vehicle' } });
+      }
+
+      const files = req.files as any;
+      const photoUrls: string[] = [...(existingVehicle.photos || [])]; // Keep existing photos
+
+      // Process uploaded photos
+      if (files?.photos) {
+        for (const file of files.photos) {
+          const filename = `vehicle_${vehicleId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webp`;
+          const filepath = path.join(uploadsDir, filename);
+          
+          // Compress and convert to WebP
+          await sharp(file.buffer)
+            .resize(1200, 1200, { 
+              fit: 'inside',
+              withoutEnlargement: true 
+            })
+            .webp({ quality: 85 })
+            .toFile(filepath);
+          
+          photoUrls.push(`/uploads/${filename}`);
+        }
+      }
+
+      // Prepare update data (only editable fields)
+      const updateData: any = {
+        photos: photoUrls,
+        updatedAt: new Date()
+      };
+
+      // Only update provided fields
+      if (req.body.color !== undefined && req.body.color !== '') {
+        updateData.color = req.body.color;
+      }
+      if (req.body.currentMileage !== undefined && req.body.currentMileage !== '') {
+        updateData.currentMileage = parseInt(req.body.currentMileage);
+      }
+      if (req.body.lastServiceDate !== undefined && req.body.lastServiceDate !== '') {
+        updateData.lastServiceDate = req.body.lastServiceDate;
+      }
+
+      // Update vehicle
+      const updatedVehicle = await storage.updateVehicle(vehicleId, updateData);
+      res.json({ ok: true, data: updatedVehicle });
+    } catch (error) {
+      console.error('Error updating vehicle:', error);
+      res.status(500).json({ ok: false, error: { message: 'Failed to update vehicle' } });
+    }
+  });
+
   // Vehicle Transfer routes
   app.post('/api/vehicles/:id/transfer', isAuthenticated, async (req: any, res) => {
     try {

@@ -4,12 +4,13 @@ import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 import VehicleSelector from "@/components/vehicle-selector";
 import { VinLookupModal } from "@/components/vin-lookup-modal";
 import VehicleDetailsModal from "@/components/vehicle-details-modal";
+import EditVehicleModal from "@/components/edit-vehicle-modal";
 import UserProfileModal from "@/components/user-profile-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
-import { Car, FileText, Sparkles, Plus, Calendar, Wrench } from "lucide-react";
+import { Car, FileText, Sparkles, Plus, Calendar, Wrench, Edit, Camera } from "lucide-react";
 import { format } from "date-fns";
 import { type Vehicle } from "@shared/schema";
 import { api } from "@/lib/api";
@@ -18,6 +19,8 @@ import { Link } from "wouter";
 export default function VehiclesPage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
   const [isVehicleDetailsModalOpen, setIsVehicleDetailsModalOpen] = useState(false);
+  const [isEditVehicleModalOpen, setIsEditVehicleModalOpen] = useState(false);
+  const [vehicleToEdit, setVehicleToEdit] = useState<Vehicle | null>(null);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const breadcrumbs = useBreadcrumbs();
 
@@ -28,6 +31,11 @@ export default function VehiclesPage() {
 
   const handleAddEntry = () => {
     // Placeholder for add entry functionality
+  };
+
+  const handleEditVehicle = (vehicle: Vehicle) => {
+    setVehicleToEdit(vehicle);
+    setIsEditVehicleModalOpen(true);
   };
 
   return (
@@ -107,6 +115,12 @@ export default function VehiclesPage() {
                             AI
                           </Badge>
                         )}
+                        {vehicle.photos && vehicle.photos.length > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            <Camera className="h-3 w-3 mr-1" />
+                            {vehicle.photos.length}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </CardHeader>
@@ -157,8 +171,8 @@ export default function VehiclesPage() {
                         </span>
                       </div>
 
-                      <div className="flex gap-2 pt-2">
-                        <Link href={`/vehicles/${vehicle.id}`} className="flex-1">
+                      <div className="grid grid-cols-2 gap-2 pt-2">
+                        <Link href={`/vehicles/${vehicle.id}`} className="col-span-2">
                           <Button size="sm" variant="outline" className="w-full" data-testid={`button-details-${vehicle.id}`}>
                             <Wrench className="h-4 w-4 mr-1" />
                             Details
@@ -166,8 +180,19 @@ export default function VehiclesPage() {
                         </Link>
                         <Button 
                           size="sm" 
-                          variant="outline" 
-                          className="flex-1"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditVehicle(vehicle);
+                          }}
+                          data-testid={`button-edit-${vehicle.id}`}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAddEntry();
@@ -175,7 +200,7 @@ export default function VehiclesPage() {
                           data-testid={`button-add-entry-${vehicle.id}`}
                         >
                           <Plus className="h-4 w-4 mr-1" />
-                          Add Entry
+                          Entry
                         </Button>
                       </div>
                     </div>
@@ -190,6 +215,15 @@ export default function VehiclesPage() {
           isOpen={isVehicleDetailsModalOpen}
           onClose={() => setIsVehicleDetailsModalOpen(false)}
           vehicleId={selectedVehicleId}
+        />
+
+        <EditVehicleModal
+          isOpen={isEditVehicleModalOpen}
+          onClose={() => {
+            setIsEditVehicleModalOpen(false);
+            setVehicleToEdit(null);
+          }}
+          vehicle={vehicleToEdit}
         />
 
         <UserProfileModal

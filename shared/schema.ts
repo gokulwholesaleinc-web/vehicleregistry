@@ -64,6 +64,9 @@ export const vehicles = pgTable("vehicles", {
   plantCountry: text("plant_country"),
   bodyClass: text("body_class"),
   
+  // Vehicle photos
+  photos: jsonb("photos").$type<string[]>().default([]),
+  
   isPublic: boolean("is_public").default(false).notNull(),
   allowPreviousOwners: boolean("allow_previous_owners").default(true).notNull(),
   isDraft: boolean("is_draft").default(false).notNull(), // Track draft status
