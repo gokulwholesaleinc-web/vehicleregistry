@@ -5,6 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Car, Gauge, Calendar, Fuel, Cog, MapPin } from 'lucide-react';
 import { Link } from 'wouter';
+import RecentModifications from '@/components/recent-modifications';
+import MaintenanceTimeline from '@/components/maintenance-timeline';
+import PhotoGallery from '@/components/photo-gallery';
+import UpcomingMaintenance from '@/components/upcoming-maintenance';
+import CostSummary from '@/components/cost-summary';
 
 export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -118,10 +123,10 @@ export default function VehicleDetailPage() {
         
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Link href="/vehicles">
+          <Link href="/community">
             <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Vehicles
+              Back to Community
             </Button>
           </Link>
         </div>
@@ -355,6 +360,31 @@ export default function VehicleDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Vehicle Activity & Data */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Left Column */}
+          <div className="space-y-6">
+            <RecentModifications vehicleId={id!} />
+            <MaintenanceTimeline vehicleId={id!} />
+            <UpcomingMaintenance vehicleId={id!} />
+          </div>
+          
+          {/* Right Column */}
+          <div className="space-y-6">
+            <PhotoGallery vehicleId={id!} />
+            <CostSummary vehicleId={id!} />
+          </div>
+        </div>
+
+        {/* Public Notice */}
+        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/20">
+          <CardContent className="p-4">
+            <div className="text-sm text-blue-700 dark:text-blue-300">
+              <strong>Public Profile:</strong> This vehicle profile is public and shows modifications, maintenance logs, photos, and technical details. Private financial information like invoices remains confidential to the owner.
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

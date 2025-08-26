@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Car, Users, ArrowLeft } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 import type { Vehicle } from "@shared/schema";
 
@@ -16,6 +16,7 @@ export default function Community() {
   const [offset, setOffset] = useState(0);
   const limit = 12;
   const breadcrumbs = useBreadcrumbs();
+  const [, navigate] = useLocation();
 
   const handleAddEntry = () => {
     // Placeholder for add entry functionality
@@ -112,7 +113,12 @@ export default function Community() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 lg:mb-8">
               {vehicles.map((vehicle: Vehicle) => (
-                <Card key={vehicle.id} className="card-modern card-hover cursor-pointer group">
+                <Card 
+                  key={vehicle.id} 
+                  className="card-modern card-hover cursor-pointer group"
+                  onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                  data-testid={`card-vehicle-${vehicle.id}`}
+                >
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center justify-between text-sm sm:text-base">
                       <span className="truncate mr-2" data-testid={`text-vehicle-${vehicle.id}`}>
