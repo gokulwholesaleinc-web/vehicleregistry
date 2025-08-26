@@ -10,13 +10,29 @@ import UserProfileModal from "@/components/user-profile-modal";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Wrench, AlertTriangle, CheckCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 
 export default function MaintenancePage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
   const [isAddEntryModalOpen, setIsAddEntryModalOpen] = useState(false);
   const [isVehicleDetailsModalOpen, setIsVehicleDetailsModalOpen] = useState(false);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
+  const [entryType, setEntryType] = useState<"modification" | "maintenance">("maintenance");
   const breadcrumbs = useBreadcrumbs();
+
+  // Get real maintenance data for the selected vehicle
+  const { data: maintenanceRecords = [] } = useQuery({
+    queryKey: ['/api/vehicles', selectedVehicleId, 'maintenance'],
+    queryFn: () => selectedVehicleId ? api(`/vehicles/${selectedVehicleId}/maintenance`).then(r => r.data) : [],
+    enabled: !!selectedVehicleId,
+  });
+
+  const { data: upcomingMaintenance = [] } = useQuery({
+    queryKey: ['/api/vehicles', selectedVehicleId, 'upcoming-maintenance'],
+    queryFn: () => selectedVehicleId ? api(`/vehicles/${selectedVehicleId}/upcoming-maintenance`).then(r => r.data) : [],
+    enabled: !!selectedVehicleId,
+  });
 
   const handleAddEntry = () => {
     setIsAddEntryModalOpen(true);
@@ -101,56 +117,73 @@ export default function MaintenancePage() {
             onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
           />
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Overdue</p>
-                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">2</p>
+          {/* Real Stats - Only show if we have data */}
+          {selectedVehicleId && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Overdue</p>
+                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                        {upcomingMaintenance.filter((item: any) => 
+                          new Date(item.dueDate) < new Date()
+                        ).length}
+                      </p>
+                    </div>
+                    <AlertTriangle className="h-8 w-8 text-red-500" />
                   </div>
-                  <AlertTriangle className="h-8 w-8 text-red-500" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Due Soon</p>
-                    <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">3</p>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Due Soon</p>
+                      <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                        {upcomingMaintenance.filter((item: any) => {
+                          const dueDate = new Date(item.dueDate);
+                          const today = new Date();
+                          const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+                          return dueDate >= today && dueDate <= thirtyDaysFromNow;
+                        }).length}
+                      </p>
+                    </div>
+                    <CalendarDays className="h-8 w-8 text-yellow-500" />
                   </div>
-                  <CalendarDays className="h-8 w-8 text-yellow-500" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Completed</p>
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">8</p>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Completed</p>
+                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {maintenanceRecords.length}
+                      </p>
+                    </div>
+                    <CheckCircle className="h-8 w-8 text-green-500" />
                   </div>
-                  <CheckCircle className="h-8 w-8 text-green-500" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Total Records</p>
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">13</p>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Total Records</p>
+                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        {maintenanceRecords.length + upcomingMaintenance.length}
+                      </p>
+                    </div>
+                    <Wrench className="h-8 w-8 text-blue-500" />
                   </div>
-                  <Wrench className="h-8 w-8 text-blue-500" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2">
@@ -175,7 +208,7 @@ export default function MaintenancePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span>Upcoming Maintenance</span>
-                    <Badge variant="secondary">3 items</Badge>
+                    <Badge variant="secondary">{upcomingMaintenance.length} items</Badge>
                   </CardTitle>
                   <CardDescription>
                     Scheduled services and recommended maintenance
@@ -193,8 +226,8 @@ export default function MaintenancePage() {
           isOpen={isAddEntryModalOpen}
           onClose={() => setIsAddEntryModalOpen(false)}
           vehicleId={selectedVehicleId}
-          entryType="maintenance"
-          onEntryTypeChange={() => {}}
+          entryType={entryType}
+          onEntryTypeChange={setEntryType}
         />
 
         <VehicleDetailsModal 
