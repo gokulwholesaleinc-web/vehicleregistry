@@ -1,0 +1,408 @@
+# VINtage Garage — Mobile & A11y Pack (Auth‑agnostic, drop‑in)
+
+> **Scope (safe with your current Replit Auth + sessions):**
+>
+> * No auth refactor. This is **frontend‑only** plus a tiny API helper that keeps **cookies/sessions** via `credentials: 'include'`.
+> * Mobile‑first app shell (drawer + bottom bar), responsive table→card fallback, larger tap targets.
+> * A11y fixes for breadcrumbs and modals (no nested anchors, proper `aria-*`).
+>
+> **Paths** assume your client lives at `client/src/*`. If you use `web/src`, rename paths accordingly.
+
+---
+
+## 0) HTML viewport (if not already present)
+
+### **client/index.html** (ensure this head)
+
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#111827" />
+```
+
+---
+
+## 1) API helper (cookie/session friendly + clean 401s)
+
+> Keeps your **Replit Auth sessions**—does not send Authorization headers. Centralizes error handling and always includes cookies.
+
+### **client/src/lib/apiClient.ts** (new)
+
+```ts
+const API_BASE = import.meta.env.VITE_API_BASE || "/api"; // keep your current base
+
+export async function apiJSON<T=any>(path: string, opts: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: "include", // important for session cookies
+    headers: {
+      ...(opts.headers || {}),
+      ...(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    },
+    ...opts,
+  });
+
+  if (res.status === 401) {
+    const txt = await res.text().catch(()=>"Unauthorized");
+    throw new Error(txt || "Unauthorized");
+  }
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>`HTTP ${res.status}`);
+    throw new Error(txt);
+  }
+  // Some endpoints may return 204
+  const ct = res.headers.get("content-type") || "";
+  return ct.includes("application/json") ? (await res.json()) : (undefined as any);
+}
+```
+
+> **Optional (vehicles update convenience):**
+
+### **client/src/lib/vehiclesApi.ts** (new)
+
+```ts
+import { apiJSON } from "./apiClient";
+
+export const VehiclesApi = {
+  detail: (id: number) => apiJSON(`/v1/vehicles/${id}`),
+  update: (id: number, payload: any) => apiJSON(`/v1/vehicles/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+};
+```
+
+---
+
+## 2) App shell — mobile‑first layout with drawer + bottom bar
+
+### **client/src/layouts/AppLayout.tsx** (new)
+
+```tsx
+import { useState } from "react";
+import { NavLink, Outlet } from "react-router-dom";
+
+function NavItem({ to, children }: any) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `px-3 py-2 rounded-lg ${isActive ? "bg-gray-900 text-white" : "text-gray-200 hover:bg-gray-800"}`
+      }
+    >
+      {children}
+    </NavLink>
+  );
+}
+
+export default function AppLayout() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      {/* Top bar */}
+      <header className="sticky top-0 z-40 bg-gray-900 text-white">
+        <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
+          <button aria-label="Menu" className="md:hidden p-2 -ml-2" onClick={() => setOpen((v) => !v)}>
+            <svg width="24" height="24" fill="currentColor"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+          </button>
+          <div className="font-semibold tracking-tight">VINtage Garage</div>
+          <nav className="hidden md:flex items-center gap-2">
+            <NavItem to="/dashboard">Dashboard</NavItem>
+            <NavItem to="/vehicles">Vehicles</NavItem>
+            <NavItem to="/maintenance">Maintenance</NavItem>
+            <NavItem to="/showcase">Showcase</NavItem>
+          </nav>
+        </div>
+        {open && (
+          <div className="md:hidden border-t border-gray-800 bg-gray-900">
+            <div className="px-4 py-2 flex flex-col gap-2">
+              <NavItem to="/dashboard">Dashboard</NavItem>
+              <NavItem to="/vehicles">Vehicles</NavItem>
+              <NavItem to="/maintenance">Maintenance</NavItem>
+              <NavItem to="/showcase">Showcase</NavItem>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* page content */}
+      <main className="mx-auto max-w-6xl px-3 md:px-6 py-4 md:py-6">
+        <Outlet />
+      </main>
+
+      {/* Bottom bar */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t">
+        <div className="grid grid-cols-4 text-xs">
+          <NavLink to="/dashboard" className="flex flex-col items-center py-2">🏠<span>Home</span></NavLink>
+          <NavLink to="/vehicles" className="flex flex-col items-center py-2">🚗<span>Vehicles</span></NavLink>
+          <NavLink to="/maintenance" className="flex flex-col items-center py-2">🛠️<span>Maint</span></NavLink>
+          <NavLink to="/showcase" className="flex flex-col items-center py-2">✨<span>Show</span></NavLink>
+        </div>
+      </nav>
+      <div className="h-14 md:hidden" />
+    </div>
+  );
+}
+```
+
+> **Mount it** in your router, e.g. `client/src/App.tsx`:
+
+```tsx
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import AppLayout from "./layouts/AppLayout";
+import Dashboard from "./pages/Dashboard"; // your existing pages
+import Vehicles from "./pages/Vehicles";
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<AppLayout /> }>
+          <Route path="/dashboard" element={<Dashboard/>} />
+          <Route path="/vehicles" element={<Vehicles/>} />
+          {/* ...other routes */}
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}
+```
+
+---
+
+## 3) Table → Card responsive component
+
+### **client/src/components/ResponsiveTable.tsx** (new)
+
+```tsx
+import { ReactNode } from "react";
+
+export default function ResponsiveTable({
+  headers,
+  rows,
+  renderRow,
+  renderCard,
+}: {
+  headers: ReactNode[];
+  rows: any[];
+  renderRow: (row: any) => ReactNode; // <tr>…</tr>
+  renderCard: (row: any) => ReactNode; // <div>…</div>
+}) {
+  return (
+    <div>
+      <div className="hidden md:block overflow-x-auto rounded-lg border bg-white">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>{headers.map((h, i) => (<th key={i} className="px-3 py-2 text-left">{h}</th>))}</tr>
+          </thead>
+          <tbody className="divide-y">{rows.map((r) => renderRow(r))}</tbody>
+        </table>
+      </div>
+      <div className="md:hidden grid gap-3">
+        {rows.map((r, i) => (
+          <div key={i} className="rounded-xl border bg-white p-3">{renderCard(r)}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 4) A11y — Breadcrumbs (no nested anchors)
+
+### **client/src/components/Breadcrumbs.tsx** (new)
+
+```tsx
+import { Link } from "react-router-dom";
+
+export default function Breadcrumbs({ items }: { items: Array<{ to?: string; label: string }> }) {
+  return (
+    <nav aria-label="Breadcrumb" className="text-sm text-gray-500">
+      <ol className="flex items-center gap-2">
+        {items.map((it, i) => (
+          <li key={i} className="flex items-center gap-2">
+            {it.to ? <Link to={it.to} className="hover:underline">{it.label}</Link> : <span>{it.label}</span>}
+            {i < items.length - 1 && <span aria-hidden>›</span>}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+```
+
+Usage:
+
+```tsx
+<Breadcrumbs items={[{ to: "/dashboard", label: "Home" }, { label: "Vehicles" }]} />
+```
+
+---
+
+## 5) A11y — Modal pattern (Radix or custom)
+
+> If you use Radix `@radix-ui/react-dialog`, ensure content has **either** a `<Dialog.Description>` **or** `aria-describedby`. Here’s a minimal custom wrapper you can use if you’re not on Radix:
+
+### **client/src/components/Modal.tsx** (new, lightweight)
+
+```tsx
+import { ReactNode } from "react";
+
+export default function Modal({ title, onClose, children }:{ title: string; onClose: ()=>void; children: ReactNode }) {
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc" className="fixed inset-0 grid place-items-center bg-black/40 p-3">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow">
+        <div className="p-4 border-b flex items-center justify-between">
+          <h2 id="modal-title" className="text-lg font-semibold">{title}</h2>
+          <button aria-label="Close" className="p-2" onClick={onClose}>✕</button>
+        </div>
+        <div id="modal-desc" className="sr-only">Dialog window for editing fields.</div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+> Replace any warning‑prone dialog with this or add a proper `<Dialog.Description>`.
+
+---
+
+## 6) Form/touch utilities
+
+### **client/src/styles/form.css** (new)
+
+```css
+.btn { @apply inline-flex items-center justify-center rounded-lg px-4 py-2 min-h-[44px]; }
+.input { @apply w-full rounded-lg border px-3 py-2 min-h-[44px]; }
+.select { @apply w-full rounded-lg border px-3 py-2 min-h-[44px] bg-white; }
+.label { @apply text-sm text-gray-700; }
+```
+
+Import once (e.g., in `client/src/main.tsx`):
+
+```ts
+import "./styles/form.css";
+```
+
+---
+
+## 7) Vehicle Edit (client) — session‑friendly update
+
+> Example edit modal that **only** depends on session cookies. Swap into your vehicle page if your current modal is noisy.
+
+### **client/src/pages/vehicle/EditVehicleModal.tsx** (new)
+
+```tsx
+import { useState } from "react";
+import { VehiclesApi } from "@/lib/vehiclesApi";
+
+export default function EditVehicleModal({ vehicle, onClose, onUpdated }:{ vehicle:any; onClose:()=>void; onUpdated:()=>void }) {
+  const [form, setForm] = useState({
+    color: vehicle.color || "",
+    currentMileage: vehicle.currentMileage || vehicle.mileage || 0,
+    lastServiceDate: vehicle.lastServiceDate || null,
+    notes: vehicle.notes || "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>("");
+
+  async function submit() {
+    setBusy(true); setErr("");
+    try {
+      await VehiclesApi.update(vehicle.id, form);
+      onUpdated();
+      onClose();
+    } catch (e:any) {
+      setErr(e?.message || "Update failed");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="edit-title" aria-describedby="edit-desc" className="fixed inset-0 grid place-items-center bg-black/40 p-3">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow">
+        <div className="p-4 border-b"><h2 id="edit-title" className="text-lg font-semibold">Edit {vehicle.year} {vehicle.make} {vehicle.model}</h2></div>
+        <p id="edit-desc" className="sr-only">Update vehicle details</p>
+        <div className="p-4 space-y-3">
+          <label className="block"><span className="label">Color</span><input className="input" value={form.color} onChange={e=>setForm({...form, color:e.target.value})} /></label>
+          <label className="block"><span className="label">Current Mileage</span><input className="input" inputMode="numeric" value={form.currentMileage} onChange={e=>setForm({...form, currentMileage:Number(e.target.value||0)})} /></label>
+          <label className="block"><span className="label">Notes</span><textarea className="input" value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})} /></label>
+          {err && <div className="text-sm text-red-600">{err}</div>}
+        </div>
+        <div className="p-4 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="btn">Cancel</button>
+          <button onClick={submit} disabled={busy} className="btn bg-blue-600 text-white">{busy?"Saving…":"Update Vehicle"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 8) Example: list page using ResponsiveTable (no nested anchors)
+
+### **client/src/pages/VehiclesList.tsx** (sample)
+
+```tsx
+import ResponsiveTable from "@/components/ResponsiveTable";
+import { Link } from "react-router-dom";
+
+export default function VehiclesList({ rows=[] as any[] }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <input className="input" placeholder="Search vehicles" />
+        <Link to="/vehicles/new" className="btn bg-black text-white">Add</Link>
+      </div>
+
+      <ResponsiveTable
+        headers={["Vehicle","VIN","Actions"]}
+        rows={rows}
+        renderRow={(v:any) => (
+          <tr key={v.id}>
+            <td className="px-3 py-2">{v.year} {v.make} {v.model}</td>
+            <td className="px-3 py-2 font-mono text-xs">{v.vin}</td>
+            <td className="px-3 py-2"><Link to={`/vehicle/${v.id}`} className="text-blue-600">Open</Link></td>
+          </tr>
+        )}
+        renderCard={(v:any) => (
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="font-medium">{v.year} {v.make} {v.model}</div>
+              <div className="text-xs font-mono text-gray-500">{v.vin}</div>
+            </div>
+            <Link to={`/vehicle/${v.id}`} className="btn bg-black text-white">Open</Link>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+## 9) CSS base
+
+### **client/src/index.css** (append if needed)
+
+```css
+html, body, #root { height: 100%; }
+body { @apply bg-gray-50 text-gray-900; }
+img { max-width: 100%; height: auto; display: block; }
+```
+
+---
+
+## 10) QA checklist (mobile + a11y)
+
+* No horizontal scroll at **320px** width.
+* Interactive elements ≥ **44px** tall (`.btn`, `.input`).
+* Tables collapse to **cards** on mobile.
+* Breadcrumbs don’t nest anchors; modals have `aria-labelledby` & `aria-describedby`.
+* Vehicle edit uses cookie sessions (`credentials: 'include'`) and respects your current owner column (`currentOwnerId` still on the server; no changes needed here).
+
+---
+
+### Done
+
+This pack is designed to **drop straight into your current app** without touching the Replit Auth flow or your DB columns. Wire the `AppLayout` into your router, replace any brittle breadcrumbs/modals with these components, and swap your fetch calls to `apiJSON()` where you want uniform errors + cookie auth.

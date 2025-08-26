@@ -33,9 +33,11 @@ export default function VehiclesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
+  const { data: vehiclesResponse, isLoading } = useQuery({
     queryKey: ["/api/v1/vehicles"],
   });
+
+  const vehicles = vehiclesResponse?.data || [];
 
   const handleAddEntry = (vehicle: Vehicle) => {
     setVehicleForEntry(vehicle);
