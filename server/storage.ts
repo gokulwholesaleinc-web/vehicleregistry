@@ -8,6 +8,7 @@ import {
   vehicleTransfers,
   notifications,
   adminActionLogs,
+  auditEvents,
   type User,
   type UpsertUser,
   type Vehicle,
@@ -26,6 +27,8 @@ import {
   type InsertNotification,
   type AdminActionLog,
   type InsertAdminActionLog,
+  type AuditEvent,
+  type InsertAuditEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, sql } from "drizzle-orm";
@@ -85,6 +88,27 @@ export interface IStorage {
   getPlatformStats(): Promise<any>;
   getAdminActionLogs(limit?: number, offset?: number): Promise<AdminActionLog[]>;
   logAdminAction(action: InsertAdminActionLog): Promise<AdminActionLog>;
+
+  // Audit Events (Enterprise Security)
+  createAuditEvent(event: InsertAuditEvent): Promise<AuditEvent>;
+  getAuditEvent(id: string): Promise<AuditEvent | undefined>;
+  getAuditEvents(filter: {
+    actor?: string;
+    action?: string;
+    resource?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<AuditEvent[]>;
+  getAuditEventCount(filter: {
+    actor?: string;
+    action?: string;
+    resource?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<number>;
+  getLastAuditEventHash(): Promise<string | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -543,6 +567,107 @@ export class DatabaseStorage implements IStorage {
       .values(actionData)
       .returning();
     return action;
+  }
+
+  // Audit Events Implementation
+  async createAuditEvent(eventData: InsertAuditEvent): Promise<AuditEvent> {
+    const [event] = await db
+      .insert(auditEvents)
+      .values(eventData)
+      .returning();
+    return event;
+  }
+
+  async getAuditEvent(id: string): Promise<AuditEvent | undefined> {
+    const [event] = await db
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.id, id));
+    return event || undefined;
+  }
+
+  async getAuditEvents(filter: {
+    actor?: string;
+    action?: string;
+    resource?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<AuditEvent[]> {
+    let query = db.select().from(auditEvents);
+
+    // Build dynamic filters
+    const conditions = [];
+    if (filter.actor) {
+      conditions.push(eq(auditEvents.actor, filter.actor));
+    }
+    if (filter.action) {
+      conditions.push(eq(auditEvents.action, filter.action));
+    }
+    if (filter.resource) {
+      conditions.push(eq(auditEvents.resource, filter.resource));
+    }
+    if (filter.startDate) {
+      conditions.push(sql`${auditEvents.timestamp} >= ${filter.startDate}`);
+    }
+    if (filter.endDate) {
+      conditions.push(sql`${auditEvents.timestamp} <= ${filter.endDate}`);
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query
+      .orderBy(desc(auditEvents.timestamp))
+      .limit(filter.limit || 50)
+      .offset(filter.offset || 0);
+  }
+
+  async getAuditEventCount(filter: {
+    actor?: string;
+    action?: string;
+    resource?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<number> {
+    let query = db.select({ count: sql`COUNT(*)` }).from(auditEvents);
+
+    // Build dynamic filters
+    const conditions = [];
+    if (filter.actor) {
+      conditions.push(eq(auditEvents.actor, filter.actor));
+    }
+    if (filter.action) {
+      conditions.push(eq(auditEvents.action, filter.action));
+    }
+    if (filter.resource) {
+      conditions.push(eq(auditEvents.resource, filter.resource));
+    }
+    if (filter.startDate) {
+      conditions.push(sql`${auditEvents.timestamp} >= ${filter.startDate}`);
+    }
+    if (filter.endDate) {
+      conditions.push(sql`${auditEvents.timestamp} <= ${filter.endDate}`);
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const [result] = await query;
+    return Number(result.count);
+  }
+
+  async getLastAuditEventHash(): Promise<string | null> {
+    const [lastEvent] = await db
+      .select({ hash: auditEvents.hash })
+      .from(auditEvents)
+      .orderBy(desc(auditEvents.timestamp))
+      .limit(1);
+    
+    return lastEvent?.hash || null;
   }
 }
 

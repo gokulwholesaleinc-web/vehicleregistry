@@ -533,3 +533,38 @@ export const showcaseItemsRelations = relations(showcaseItems, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+// Enterprise Audit Events - Tamper-evident hash chain for compliance
+export const auditEvents = pgTable("audit_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestId: varchar("request_id").notNull(), // Correlate events within same request
+  actor: varchar("actor").notNull(), // User ID or system identifier
+  action: varchar("action").notNull(), // CREATE, UPDATE, DELETE, TRANSFER, etc.
+  resource: varchar("resource").notNull(), // vehicles, modifications, users, etc.
+  resourceId: varchar("resource_id"), // ID of the affected resource
+  method: varchar("method").notNull(), // HTTP method (GET, POST, PUT, DELETE)
+  path: varchar("path").notNull(), // API endpoint path
+  ipAddress: varchar("ip_address"), // Client IP address
+  userAgent: text("user_agent"), // Client user agent
+  requestBody: jsonb("request_body"), // Request payload (sanitized)
+  responseStatus: integer("response_status"), // HTTP response status
+  metadata: jsonb("metadata"), // Additional context and details
+  previousHash: varchar("previous_hash"), // Hash of previous audit event (chain integrity)
+  hash: varchar("hash").notNull(), // SHA-256 hash of this event (tamper detection)
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+}, (table) => [
+  index("idx_audit_timestamp").on(table.timestamp.desc()),
+  index("idx_audit_actor").on(table.actor),
+  index("idx_audit_action").on(table.action),
+  index("idx_audit_resource").on(table.resource),
+  index("idx_audit_request_id").on(table.requestId),
+]);
+
+export type AuditEvent = typeof auditEvents.$inferSelect;
+export type InsertAuditEvent = typeof auditEvents.$inferInsert;
+
+export const insertAuditEventSchema = createInsertSchema(auditEvents).omit({
+  id: true,
+  timestamp: true,
+  hash: true
+});

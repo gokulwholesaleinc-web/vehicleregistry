@@ -15,6 +15,7 @@ import { pdfReportsRouter } from "./routes/pdfReports";
 import { csvImportExportRouter } from "./routes/csvImportExport";
 import vinRouter from "./routes/vin";
 import { applySecurity } from "./http/security";
+import auditRoutes from "./audit/auditRoutes";
 import { 
   insertVehicleSchema,
   insertModificationSchema,
@@ -1472,6 +1473,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const message = err?.message || 'Internal Server Error';
     res.status(status).json({ ok: false, error: { message } });
   });
+
+  // Enterprise Audit Routes - Admin Only
+  app.use('/api/v1/admin/audit', isAdminJWT, auditRoutes);
+  routeRegistry.register('GET', '/api/v1/admin/audit/events');
+  routeRegistry.register('GET', '/api/v1/admin/audit/events/:id');
+  routeRegistry.register('POST', '/api/v1/admin/audit/verify');
+  routeRegistry.register('GET', '/api/v1/admin/audit/stats');
+  routeRegistry.register('GET', '/api/v1/admin/audit/export');
 
   // Route Registry Diagnostic Endpoint
   app.get('/api/v1/admin/routes', isAdminJWT, async (req, res) => {

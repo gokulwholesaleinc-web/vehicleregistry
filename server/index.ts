@@ -3,18 +3,25 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { applySecurity } from "./http/security";
 import { logMiddleware } from "./http/logging";
-import { config } from "dotenv";
+import { validateEnvironment } from "./security/environment";
+import { auditRequestContext, auditAutoInstrumentation } from "./audit/auditLogger";
 
-// Load environment variables
-config();
+// Validate environment before starting
+validateEnvironment();
 
 const app = express();
 
-// Apply security first
+// Apply security first (includes environment-validated settings)
 applySecurity(app);
+
+// Add audit context middleware (captures request metadata)
+app.use(auditRequestContext);
 
 // Add request logging
 app.use(logMiddleware);
+
+// Add audit auto-instrumentation (logs mutating operations)
+app.use(auditAutoInstrumentation);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
