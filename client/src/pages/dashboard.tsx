@@ -38,24 +38,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
         <AppHeader onOpenProfile={() => setIsUserProfileModalOpen(true)} />
         
-        {/* Community Showcase - Hero Section */}
-        <div className="py-6 lg:py-8">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-6">
-              <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                Featured Community Builds
-              </h1>
-              <p className="text-lg text-gray-600 dark:text-gray-300">
-                Discover incredible builds from automotive enthusiasts worldwide
-              </p>
-            </div>
-            
-            <CommunitySlideshow />
-          </div>
-        </div>
-
-        {/* Secondary Content */}
-        <div className="bg-white/50 dark:bg-gray-900/50 py-8">
+        <div className="py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-6">
               <div className="flex items-center justify-between">
@@ -78,6 +61,19 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        
+        {/* User Profile Modal */}
+        <UserProfileModal 
+          isOpen={isUserProfileModalOpen}
+          onClose={() => setIsUserProfileModalOpen(false)}
+        />
+        
+        {/* Vehicle Details Modal */}
+        <VehicleDetailsModal 
+          isOpen={isVehicleDetailsModalOpen}
+          onClose={() => setIsVehicleDetailsModalOpen(false)}
+          vehicleId=""
+        />
       </div>
     );
   }

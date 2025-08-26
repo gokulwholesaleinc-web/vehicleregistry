@@ -1,0 +1,943 @@
+# VehicleRegistry — Drop‑in Patch (3, 4, 5, 6 + High‑Value Features)
+
+> **What this adds**
+> **3)** VIN ownership history (claims + transfer flow)
+> **4)** Media pipeline v1 (S3/R2 or local, sizes, EXIF strip, signed URLs)
+> **5)** Ownership Proof PDF export (server-side PDF)
+> **6)** Basic FTS search across vehicles
+> **High‑value features:** maintenance/reminders, build sheet & parts ledger, public vehicle pages (share tokens), auction helper stats, VIN scanner component (frontend)
+>
+> **How to use:** Paste this canvas into your Replit AI Agent. It can create new files and edit existing ones. Adjust paths if your layout slightly differs from previous patches (`server/...`, `web/src/...`).
+
+---
+
+## 0) Dependencies
+
+```bash
+# storage + pdf + csv + search + scanning
+npm i @aws-sdk/client-s3 @aws-sdk/s3-request-presigner pdf-lib csv-parse uuid
+# (already installed in earlier patches) sharp multer zod
+# frontend VIN scan
+npm i @zxing/browser
+```
+
+---
+
+## 1) Environment
+
+### **.env.example** (append)
+
+```env
+# ---- Storage ----
+STORAGE_DRIVER=local             # local | s3
+S3_ENDPOINT=                     # e.g., https://<accountid>.r2.cloudflarestorage.com
+S3_REGION=auto                   # or us-east-1
+S3_BUCKET=vehicleregistry-media
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+S3_PUBLIC_BASE_URL=              # if bucket is public CDN (e.g. https://cdn.yourapp.com)
+SIGNED_URL_TTL_SECONDS=900       # 15 minutes
+
+# ---- PDF Branding ----
+PDF_BRAND_NAME=Vehicle Registry
+PDF_BRAND_URL=https://vehicleregistry.app
+```
+
+---
+
+## 2) Database — schema & migrations
+
+### **server/db/migrations/2025\_08\_26\_feature\_bundle.sql** (new)
+
+```sql
+-- 3) VIN Ownership history (claims)
+CREATE TABLE IF NOT EXISTS vehicle_claims (
+  id INTEGER PRIMARY KEY,
+  vehicle_id INTEGER NOT NULL,
+  owner_user_id INTEGER NOT NULL,
+  start_at INTEGER NOT NULL,
+  end_at INTEGER,
+  proof_doc_url TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS vc_idx_vehicle ON vehicle_claims(vehicle_id);
+CREATE INDEX IF NOT EXISTS vc_idx_owner ON vehicle_claims(owner_user_id);
+
+-- Soft guarantee: only one open claim per vehicle
+-- (App logic enforces; DB trigger optional if desired.)
+
+-- 4) Media pipeline: simple table for photos (if not existing)
+CREATE TABLE IF NOT EXISTS vehicle_photos (
+  id INTEGER PRIMARY KEY,
+  vehicle_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  key_original TEXT NOT NULL,
+  key_card TEXT,
+  key_thumb TEXT,
+  width INTEGER,
+  height INTEGER,
+  bytes INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS vp_idx_vehicle ON vehicle_photos(vehicle_id);
+
+-- 5) Build sheet / parts ledger
+CREATE TABLE IF NOT EXISTS vehicle_parts (
+  id INTEGER PRIMARY KEY,
+  vehicle_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  vendor TEXT,
+  part_no TEXT,
+  cost_cents INTEGER,
+  installed_at INTEGER,
+  notes TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS vparts_idx_vehicle ON vehicle_parts(vehicle_id);
+
+-- 5) Maintenance schedules & logs
+CREATE TABLE IF NOT EXISTS maintenance_schedules (
+  id INTEGER PRIMARY KEY,
+  vehicle_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  interval_days INTEGER,
+  interval_miles INTEGER,
+  last_done_at INTEGER,
+  last_odometer INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_logs (
+  id INTEGER PRIMARY KEY,
+  vehicle_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  schedule_id INTEGER,
+  name TEXT NOT NULL,
+  done_at INTEGER NOT NULL,
+  odometer INTEGER,
+  notes TEXT,
+  cost_cents INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS mlog_idx_vehicle ON maintenance_logs(vehicle_id);
+
+-- 6) Public share tokens
+CREATE TABLE IF NOT EXISTS public_vehicle_shares (
+  id INTEGER PRIMARY KEY,
+  vehicle_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS pvs_idx_vehicle ON public_vehicle_shares(vehicle_id);
+
+-- 6) Basic FTS5 search over vehicles
+-- Assuming SQLite. If Postgres, use tsvector instead.
+CREATE VIRTUAL TABLE IF NOT EXISTS vehicles_fts USING fts5(
+  vehicle_id UNINDEXED,
+  vin,
+  make,
+  model,
+  trim,
+  notes,
+  content=''
+);
+
+-- Seed from existing vehicles table if present
+-- INSERTS are application-driven; triggers can be added later.
+```
+
+### **server/db/schema/featureBundle.ts** (new)
+
+```ts
+import { sqliteTable, integer, text, index } from 'drizzle-orm/sqlite-core';
+
+export const vehicleClaims = sqliteTable('vehicle_claims', {
+  id: integer('id').primaryKey(),
+  vehicleId: integer('vehicle_id').notNull(),
+  ownerUserId: integer('owner_user_id').notNull(),
+  startAt: integer('start_at').notNull(),
+  endAt: integer('end_at'),
+  proofDocUrl: text('proof_doc_url'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const vehiclePhotos = sqliteTable('vehicle_photos', {
+  id: integer('id').primaryKey(),
+  vehicleId: integer('vehicle_id').notNull(),
+  userId: integer('user_id').notNull(),
+  keyOriginal: text('key_original').notNull(),
+  keyCard: text('key_card'),
+  keyThumb: text('key_thumb'),
+  width: integer('width'),
+  height: integer('height'),
+  bytes: integer('bytes'),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const vehicleParts = sqliteTable('vehicle_parts', {
+  id: integer('id').primaryKey(),
+  vehicleId: integer('vehicle_id').notNull(),
+  userId: integer('user_id').notNull(),
+  title: text('title').notNull(),
+  vendor: text('vendor'),
+  partNo: text('part_no'),
+  costCents: integer('cost_cents'),
+  installedAt: integer('installed_at'),
+  notes: text('notes'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const maintenanceSchedules = sqliteTable('maintenance_schedules', {
+  id: integer('id').primaryKey(),
+  vehicleId: integer('vehicle_id').notNull(),
+  userId: integer('user_id').notNull(),
+  name: text('name').notNull(),
+  intervalDays: integer('interval_days'),
+  intervalMiles: integer('interval_miles'),
+  lastDoneAt: integer('last_done_at'),
+  lastOdometer: integer('last_odometer'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const maintenanceLogs = sqliteTable('maintenance_logs', {
+  id: integer('id').primaryKey(),
+  vehicleId: integer('vehicle_id').notNull(),
+  userId: integer('user_id').notNull(),
+  scheduleId: integer('schedule_id'),
+  name: text('name').notNull(),
+  doneAt: integer('done_at').notNull(),
+  odometer: integer('odometer'),
+  notes: text('notes'),
+  costCents: integer('cost_cents'),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const publicVehicleShares = sqliteTable('public_vehicle_shares', {
+  id: integer('id').primaryKey(),
+  vehicleId: integer('vehicle_id').notNull(),
+  userId: integer('user_id').notNull(),
+  token: text('token').notNull(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull(),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at'),
+});
+```
+
+---
+
+## 3) Storage helpers (S3/R2 or local)
+
+### **server/utils/storage.ts** (new)
+
+```ts
+import { env } from '../config/env';
+import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+const driver = process.env.STORAGE_DRIVER || 'local';
+
+let s3: S3Client | null = null;
+if (driver === 's3') {
+  s3 = new S3Client({
+    region: process.env.S3_REGION || 'auto',
+    endpoint: process.env.S3_ENDPOINT || undefined,
+    credentials: process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY ? {
+      accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+    } : undefined,
+    forcePathStyle: !!process.env.S3_ENDPOINT, // for R2/minio
+  });
+}
+
+export async function putObject(key: string, body: Buffer, contentType: string) {
+  if (driver === 'local') {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const full = path.join(process.cwd(), 'uploads', key);
+    await fs.mkdir(path.dirname(full), { recursive: true });
+    await fs.writeFile(full, body);
+    return { key };
+  }
+  if (!s3) throw new Error('S3 client not configured');
+  await s3.send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key, Body: body, ContentType: contentType }));
+  return { key };
+}
+
+export function publicUrl(key: string) {
+  if (process.env.S3_PUBLIC_BASE_URL) return `${process.env.S3_PUBLIC_BASE_URL}/${key}`;
+  if (driver === 'local') return `/uploads/${key}`; // serve statically in dev
+  return undefined; // use signed URL
+}
+
+export async function signedGetUrl(key: string) {
+  if (driver === 'local') return publicUrl(key);
+  if (!s3) throw new Error('S3 client not configured');
+  const ttl = Number(process.env.SIGNED_URL_TTL_SECONDS || 900);
+  return await getSignedUrl(s3, new GetObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key }), { expiresIn: ttl });
+}
+```
+
+### **server/index.ts** (serve local uploads in dev)
+
+```ts
+// after app.use(express.json(...))
+import path from 'node:path';
+import express from 'express';
+if ((process.env.STORAGE_DRIVER || 'local') === 'local') {
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+}
+```
+
+---
+
+## 4) Media upload & processing
+
+### **server/routes/modules/media.ts** (new)
+
+```ts
+import { Router } from 'express';
+import multer from 'multer';
+import sharp from 'sharp';
+import { requireAuth } from '../../modules/auth/middleware';
+import { db } from '../../../db/client';
+import { vehiclePhotos } from '../../../db/schema/featureBundle';
+import { putObject, publicUrl, signedGetUrl } from '../../../utils/storage';
+import { customAlphabet } from 'nanoid';
+
+const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
+const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/^image\/(png|jpe?g|webp)$/i.test(file.mimetype)) return cb(new Error('Only PNG/JPG/WEBP'));
+    cb(null, true);
+  }
+});
+
+router.post('/photos/:vehicleId', requireAuth, upload.single('photo'), async (req, res, next) => {
+  try {
+    const userId = (req as any).user.id as number;
+    const vehicleId = Number(req.params.vehicleId);
+    if (!req.file) return res.status(400).json({ ok:false, error:{ code:'NO_FILE', message:'No file uploaded' } });
+
+    const base = `vehicles/${vehicleId}/${Date.now()}_${nano()}`;
+
+    // strip EXIF by default, create sizes
+    const img = sharp(req.file.buffer, { failOnError: false });
+    const meta = await img.metadata();
+
+    const originalWebp = await img.clone().rotate().webp({ quality: 90 }).toBuffer();
+    const card = await img.clone().rotate().resize(1400, 1400, { fit:'inside' }).webp({ quality: 85 }).toBuffer();
+    const thumb = await img.clone().rotate().resize(360, 360, { fit:'cover' }).webp({ quality: 80 }).toBuffer();
+
+    const keyOriginal = `${base}_orig.webp`;
+    const keyCard = `${base}_card.webp`;
+    const keyThumb = `${base}_thumb.webp`;
+
+    await putObject(keyOriginal, originalWebp, 'image/webp');
+    await putObject(keyCard, card, 'image/webp');
+    await putObject(keyThumb, thumb, 'image/webp');
+
+    const row = {
+      vehicleId,
+      userId,
+      keyOriginal,
+      keyCard,
+      keyThumb,
+      width: meta.width || null,
+      height: meta.height || null,
+      bytes: req.file.size,
+      createdAt: Date.now(),
+    };
+    await db.insert(vehiclePhotos).values(row).run?.();
+
+    res.status(201).json({
+      ok:true,
+      data:{
+        ...row,
+        urlOriginal: publicUrl(keyOriginal) || await signedGetUrl(keyOriginal),
+        urlCard: publicUrl(keyCard) || await signedGetUrl(keyCard),
+        urlThumb: publicUrl(keyThumb) || await signedGetUrl(keyThumb),
+      }
+    });
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire the media router)
+
+```ts
+import media from './modules/media';
+router.use('/media', media);
+```
+
+---
+
+## 5) Ownership history (claims) + transfer flow
+
+### **server/routes/modules/claims.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../../modules/auth/middleware';
+import { db } from '../../../db/client';
+import { vehicleClaims } from '../../../db/schema/featureBundle';
+import { eq, and, isNull } from 'drizzle-orm';
+import { log as auditLog } from '../../utils/audit';
+
+const router = Router();
+
+// List claims for a vehicle
+router.get('/:vehicleId', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    const rows = await db.select().from(vehicleClaims).where(eq(vehicleClaims.vehicleId, vehicleId));
+    res.json({ ok:true, data: rows });
+  } catch (err) { next(err); }
+});
+
+// Transfer: close existing open claim, open new claim
+router.post('/:vehicleId/transfer', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    const newOwnerUserId = Number(req.body?.newOwnerUserId);
+    const proofDocUrl = req.body?.proofDocUrl || null;
+    const now = Date.now();
+
+    // close current open claim if present
+    const open = await db.select().from(vehicleClaims)
+      .where(and(eq(vehicleClaims.vehicleId, vehicleId), isNull(vehicleClaims.endAt)));
+
+    if (open.length) {
+      await db.update(vehicleClaims)
+        .set({ endAt: now, updatedAt: now })
+        .where(and(eq(vehicleClaims.vehicleId, vehicleId), isNull(vehicleClaims.endAt)))
+        .run?.();
+    }
+
+    await db.insert(vehicleClaims).values({
+      vehicleId,
+      ownerUserId: newOwnerUserId,
+      startAt: now,
+      endAt: null,
+      proofDocUrl,
+      createdAt: now,
+      updatedAt: now,
+    }).run?.();
+
+    await auditLog({ req, action:'VEHICLE_TRANSFER', resourceType:'vehicle', resourceId: vehicleId, statusCode: 200, metadata:{ newOwnerUserId } });
+
+    res.json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire)
+
+```ts
+import claims from './modules/claims';
+router.use('/claims', claims);
+```
+
+> **Tip:** On vehicle create, also insert an initial claim with `owner_user_id = creator`.
+
+---
+
+## 6) Ownership Proof PDF export
+
+### **server/routes/modules/pdf.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { requireAuth } from '../../modules/auth/middleware';
+import { db } from '../../../db/client';
+import { vehicles } from '../../../db/schema/vehicles';
+import { eq } from 'drizzle-orm';
+import { vehiclePhotos, vehicleParts, maintenanceLogs } from '../../../db/schema/featureBundle';
+import { signedGetUrl } from '../../utils/storage';
+
+const router = Router();
+
+router.get('/vehicles/:vehicleId/ownership-proof.pdf', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    const [veh] = await db.select().from(vehicles).where(eq(vehicles.id, vehicleId)).limit(1);
+    if (!veh) return res.status(404).send('Not found');
+
+    const photos = await db.select().from(vehiclePhotos).where(eq(vehiclePhotos.vehicleId, vehicleId)).limit(4);
+    const parts = await db.select().from(vehicleParts).where(eq(vehicleParts.vehicleId, vehicleId)).limit(50);
+    const logs = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.vehicleId, vehicleId)).limit(50);
+
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([612, 792]); // Letter portrait
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+
+    const brand = process.env.PDF_BRAND_NAME || 'Vehicle Registry';
+    const url = process.env.PDF_BRAND_URL || '';
+
+    let y = 750;
+    const drawText = (t: string, size=12, bold=false) => {
+      page.drawText(t, { x: 50, y, size, font, color: rgb(0,0,0) });
+      y -= size + 6;
+    };
+
+    page.drawRectangle({ x:0, y:760, width:612, height:32, color: rgb(0.95,0.95,0.97) });
+    page.drawText(`${brand} — Ownership Proof`, { x:50, y:770, size:14, font });
+    if (url) page.drawText(url, { x:380, y:770, size:10, font });
+
+    drawText(`Vehicle: ${veh.year ?? ''} ${veh.make ?? ''} ${veh.model ?? ''} ${veh.trim ?? ''}`, 12);
+    drawText(`VIN: ${veh.vin}`, 12);
+
+    // parts summary
+    drawText('Parts / Modifications:', 12);
+    const partsSummary = parts.slice(0,8).map(p => `• ${p.title}${p.partNo ? ` (${p.partNo})` : ''}${p.installedAt ? ` — ${new Date(p.installedAt).toLocaleDateString()}`:''}`).join('\n');
+    page.drawText(partsSummary || '—', { x:50, y: y-4, size:10, font, lineHeight:12 });
+    y -= Math.max(12, (partsSummary.split('\n').length)*12 + 8);
+
+    // maintenance summary
+    drawText('Recent Maintenance:', 12);
+    const maintSummary = logs.slice(0,8).map(m => `• ${m.name} — ${new Date(m.doneAt).toLocaleDateString()}${m.odometer?` @ ${m.odometer} mi`:''}`).join('\n');
+    page.drawText(maintSummary || '—', { x:50, y: y-4, size:10, font, lineHeight:12 });
+
+    // add first photo on right if present
+    if (photos[0]) {
+      try {
+        const url = await signedGetUrl(photos[0].keyCard || photos[0].keyOriginal);
+        const resp = await fetch(url!);
+        const buf = Buffer.from(await resp.arrayBuffer());
+        const img = await pdf.embedPng(buf).catch(async () => await pdf.embedJpg(buf));
+        const dims = img.scale(0.5);
+        img && page.drawImage(img, { x:350, y:450, width:200, height:150 });
+      } catch {}
+    }
+
+    const bytes = await pdf.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=ownership_${veh.vin}.pdf`);
+    res.send(Buffer.from(bytes));
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire)
+
+```ts
+import pdf from './modules/pdf';
+router.use('/pdf', pdf);
+```
+
+---
+
+## 7) Basic FTS search endpoint
+
+### **server/routes/modules/search.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../../modules/auth/middleware';
+import { db } from '../../../db/client';
+import { sql } from 'drizzle-orm';
+
+const router = Router();
+
+router.get('/', requireAuth, async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ ok:true, data: [] });
+
+    // FTS5 MATCH query; escape unsafe chars lightly
+    const token = q.replace(/[^\w\s-]/g, '');
+    const rows = await db.all?.(sql`SELECT vehicle_id, vin, make, model, trim, notes FROM vehicles_fts WHERE vehicles_fts MATCH ${token} LIMIT 50`)
+      || [] as any[];
+
+    res.json({ ok:true, data: rows });
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire)
+
+```ts
+import search from './modules/search';
+router.use('/search', search);
+```
+
+> **Indexing:** when creating/updating vehicles, insert/update a row in `vehicles_fts`. (Add to your vehicles routes.)
+
+### **server/routes/modules/vehicles.ts** (snippet to sync FTS)
+
+```ts
+import { sql } from 'drizzle-orm';
+// after creating/updating a vehicle record (vars: id, vin, make, model, trim, notes)
+await db.run?.(sql`INSERT INTO vehicles_fts(vehicle_id, vin, make, model, trim, notes) VALUES (${id}, ${vin}, ${make}, ${model}, ${trim}, ${notes})`);
+```
+
+---
+
+## 8) Build sheet & parts ledger endpoints
+
+### **server/routes/modules/parts.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../../modules/auth/middleware';
+import { db } from '../../../db/client';
+import { vehicleParts } from '../../../db/schema/featureBundle';
+import { eq } from 'drizzle-orm';
+
+const router = Router();
+
+router.get('/:vehicleId', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    const rows = await db.select().from(vehicleParts).where(eq(vehicleParts.vehicleId, vehicleId));
+    res.json({ ok:true, data: rows });
+  } catch (err) { next(err); }
+});
+
+router.post('/:vehicleId', requireAuth, async (req, res, next) => {
+  try {
+    const now = Date.now();
+    const vehicleId = Number(req.params.vehicleId);
+    const userId = (req as any).user.id as number;
+    const { title, vendor, partNo, costCents, installedAt, notes } = req.body || {};
+    const row = { vehicleId, userId, title, vendor, partNo, costCents: costCents ?? null, installedAt: installedAt ?? null, notes: notes ?? null, createdAt: now, updatedAt: now };
+    await db.insert(vehicleParts).values(row).run?.();
+    res.status(201).json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+router.patch('/:partId', requireAuth, async (req, res, next) => {
+  try {
+    const partId = Number(req.params.partId);
+    const now = Date.now();
+    const payload = { ...req.body, updatedAt: now };
+    await db.update(vehicleParts).set(payload).where(eq(vehicleParts.id, partId)).run?.();
+    res.json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+router.delete('/:partId', requireAuth, async (req, res, next) => {
+  try {
+    const partId = Number(req.params.partId);
+    await db.delete(vehicleParts).where(eq(vehicleParts.id, partId)).run?.();
+    res.json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire)
+
+```ts
+import parts from './modules/parts';
+router.use('/parts', parts);
+```
+
+---
+
+## 9) Maintenance schedules & logs
+
+### **server/routes/modules/maintenance.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../../modules/auth/middleware';
+import { db } from '../../../db/client';
+import { maintenanceSchedules, maintenanceLogs } from '../../../db/schema/featureBundle';
+import { eq } from 'drizzle-orm';
+
+const router = Router();
+
+// Schedules
+router.get('/schedules/:vehicleId', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    const rows = await db.select().from(maintenanceSchedules).where(eq(maintenanceSchedules.vehicleId, vehicleId));
+    res.json({ ok:true, data: rows });
+  } catch (err) { next(err); }
+});
+
+router.post('/schedules/:vehicleId', requireAuth, async (req, res, next) => {
+  try {
+    const now = Date.now();
+    const vehicleId = Number(req.params.vehicleId);
+    const userId = (req as any).user.id as number;
+    const { name, intervalDays, intervalMiles, lastDoneAt, lastOdometer } = req.body || {};
+    await db.insert(maintenanceSchedules).values({ vehicleId, userId, name, intervalDays: intervalDays ?? null, intervalMiles: intervalMiles ?? null, lastDoneAt: lastDoneAt ?? null, lastOdometer: lastOdometer ?? null, createdAt: now, updatedAt: now }).run?.();
+    res.status(201).json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+router.patch('/schedules/:scheduleId', requireAuth, async (req, res, next) => {
+  try {
+    const scheduleId = Number(req.params.scheduleId);
+    await db.update(maintenanceSchedules).set({ ...req.body, updatedAt: Date.now() }).where(eq(maintenanceSchedules.id, scheduleId)).run?.();
+    res.json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+// Logs
+router.get('/logs/:vehicleId', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    const rows = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.vehicleId, vehicleId));
+    res.json({ ok:true, data: rows });
+  } catch (err) { next(err); }
+});
+
+router.post('/logs/:vehicleId', requireAuth, async (req, res, next) => {
+  try {
+    const now = Date.now();
+    const vehicleId = Number(req.params.vehicleId);
+    const userId = (req as any).user.id as number;
+    const { scheduleId, name, doneAt, odometer, notes, costCents } = req.body || {};
+    await db.insert(maintenanceLogs).values({ vehicleId, userId, scheduleId: scheduleId ?? null, name, doneAt, odometer: odometer ?? null, notes: notes ?? null, costCents: costCents ?? null, createdAt: now }).run?.();
+    res.status(201).json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire)
+
+```ts
+import maintenance from './modules/maintenance';
+router.use('/maintenance', maintenance);
+```
+
+---
+
+## 10) Public vehicle pages (share tokens)
+
+### **server/routes/modules/publicShare.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../../modules/auth/middleware';
+import { db } from '../../../db/client';
+import { publicVehicleShares, vehicleParts, maintenanceLogs, vehiclePhotos } from '../../../db/schema/featureBundle';
+import { vehicles } from '../../../db/schema/vehicles';
+import { eq } from 'drizzle-orm';
+import { customAlphabet } from 'nanoid';
+
+const nano = customAlphabet('abcdefghjkmnpqrstuvwxyz23456789', 22);
+const router = Router();
+
+// Create or rotate token
+router.post('/:vehicleId/token', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    const userId = (req as any).user.id as number;
+    const token = nano();
+    const now = Date.now();
+
+    await db.insert(publicVehicleShares).values({ vehicleId, userId, token, isActive: true, createdAt: now, expiresAt: null }).run?.();
+
+    res.json({ ok:true, data: { token } });
+  } catch (err) { next(err); }
+});
+
+// Disable token
+router.post('/:vehicleId/disable', requireAuth, async (req, res, next) => {
+  try {
+    const vehicleId = Number(req.params.vehicleId);
+    await db.update(publicVehicleShares).set({ isActive: false }).where(eq(publicVehicleShares.vehicleId, vehicleId)).run?.();
+    res.json({ ok:true });
+  } catch (err) { next(err); }
+});
+
+// Public read by token (no auth)
+router.get('/v/:token', async (req, res, next) => {
+  try {
+    const token = String(req.params.token);
+    const [share] = await db.select().from(publicVehicleShares).where(eq(publicVehicleShares.token, token)).limit(1);
+    if (!share || !share.isActive) return res.status(404).json({ ok:false, error:{ code:'NOT_FOUND' } });
+
+    const [veh] = await db.select().from(vehicles).where(eq(vehicles.id, share.vehicleId)).limit(1);
+    const parts = await db.select().from(vehicleParts).where(eq(vehicleParts.vehicleId, share.vehicleId));
+    const logs = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.vehicleId, share.vehicleId));
+    const photos = await db.select().from(vehiclePhotos).where(eq(vehiclePhotos.vehicleId, share.vehicleId));
+
+    res.json({ ok:true, data: { vehicle: veh, parts, logs, photos } });
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire)
+
+```ts
+import publicShare from './modules/publicShare';
+router.use('/public', publicShare);
+```
+
+---
+
+## 11) Auction helper (stats from user-supplied data)
+
+### **server/routes/modules/auction.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../../modules/auth/middleware';
+
+const router = Router();
+
+function stats(nums: number[]) {
+  const n = nums.length; if (!n) return { n:0 };
+  const sorted = [...nums].sort((a,b)=>a-b);
+  const sum = sorted.reduce((a,b)=>a+b,0);
+  const mean = sum/n;
+  const median = n%2? sorted[(n-1)/2] : (sorted[n/2-1]+sorted[n/2])/2;
+  const p = (q:number)=> sorted[Math.min(n-1, Math.max(0, Math.floor(q*(n-1))))];
+  return { n, mean, median, p10:p(0.10), p25:p(0.25), p75:p(0.75), p90:p(0.90), min:sorted[0], max:sorted[n-1] };
+}
+
+router.post('/stats', requireAuth, async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  const prices = rows.map((r:any)=>Number(r.price)).filter((x:number)=>Number.isFinite(x) && x>0);
+  const miles = rows.map((r:any)=>Number(r.mileage)).filter((x:number)=>Number.isFinite(x) && x>0);
+  res.json({ ok:true, data:{ prices: stats(prices), mileage: stats(miles) } });
+});
+
+export default router;
+```
+
+### **server/routes/index.ts** (wire)
+
+```ts
+import auction from './modules/auction';
+router.use('/auction', auction);
+```
+
+---
+
+## 12) Frontend — VIN scanner component
+
+### **web/src/components/VINScan.tsx** (new)
+
+```tsx
+import { useEffect, useRef, useState } from 'react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+
+export default function VINScan({ onDetect }: { onDetect: (vin:string)=>void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [err, setErr] = useState<string>('');
+
+  useEffect(()=>{
+    const reader = new BrowserMultiFormatReader();
+    let cancelled = false;
+    (async()=>{
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        await new Promise(r=> setTimeout(r, 300));
+        const result = await reader.decodeOnceFromVideoDevice(undefined, videoRef.current!);
+        if (!cancelled && result?.text) {
+          const vin = result.text.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+          if (vin.length >= 11) onDetect(vin);
+        }
+      } catch (e:any) {
+        setErr(e?.message || 'Camera error');
+      }
+    })();
+    return ()=>{ cancelled = true; reader.reset(); const s = (videoRef.current?.srcObject as MediaStream); s?.getTracks()?.forEach(t=>t.stop()); };
+  },[]);
+
+  return (
+    <div className="space-y-2">
+      <video ref={videoRef} autoPlay playsInline className="w-full rounded-xl" />
+      {err && <p className="text-sm text-red-600">{err}</p>}
+      <p className="text-xs text-muted-foreground">Point at barcode/VIN label; we’ll capture the code once.</p>
+    </div>
+  );
+}
+```
+
+---
+
+## 13) Frontend — minimal hooks for features
+
+* **Upload photo:** `POST /api/v1/media/photos/:vehicleId` with `FormData` field `photo`.
+* **Transfer ownership:** `POST /api/v1/claims/:vehicleId/transfer { newOwnerUserId, proofDocUrl? }`.
+* **Ownership PDF:** open `/api/v1/pdf/vehicles/:vehicleId/ownership-proof.pdf` in a new tab.
+* **Search:** `GET /api/v1/search?q=...` → results list to drive a global search box.
+* **Public token:** `POST /api/v1/public/:vehicleId/token` → get token, then share `https://app/public/:token` (your frontend route can fetch `/api/v1/public/v/:token`).
+* **Parts ledger:** CRUD under `/api/v1/parts`.
+* **Maintenance:** schedules under `/api/v1/maintenance/schedules`, logs under `/api/v1/maintenance/logs`.
+* **Auction stats:** `POST /api/v1/auction/stats` with `{ rows:[{price,mileage,date?},...] }`.
+
+---
+
+## 14) Vehicles route: persist normalized fields + FTS sync (example)
+
+### **server/routes/modules/vehicles.ts** (augment create/update handlers)
+
+```ts
+// After NHTSA decode, persist normalized fields (make/model/year/trim/bodyClass)
+// and sync to vehicles_fts
+import { sql } from 'drizzle-orm';
+
+// Example after insert:
+await db.run?.(sql`INSERT INTO vehicles_fts(vehicle_id, vin, make, model, trim, notes) VALUES (${newId}, ${vin}, ${make}, ${model}, ${trim}, ${notes || ''})`);
+
+// Example after update:
+await db.run?.(sql`UPDATE vehicles_fts SET vin=${vin}, make=${make}, model=${model}, trim=${trim}, notes=${notes || ''} WHERE vehicle_id=${id}`);
+```
+
+---
+
+## 15) Admin/ops notes
+
+* If you use Cloudflare R2, set `S3_ENDPOINT`, `S3_REGION=auto`, `S3_BUCKET`, credentials, and optionally a CDN `S3_PUBLIC_BASE_URL` to avoid signed URLs.
+* For local dev, files are saved under `/uploads` and served statically.
+* Consider nightly export of the last audit hash + counts to S3 for tamper-evidence continuity.
+
+---
+
+## 16) Post‑install smoke tests
+
+* Upload a photo → verify three sizes saved and URLs resolve.
+* Transfer ownership → old claim gets `end_at`, new claim starts.
+* Generate PDF → opens with vehicle summary + photo.
+* Search → ensure results when typing `vin` or `make model`.
+* Create public token → fetch `/api/v1/public/v/:token` returns vehicle JSON.
+* Add parts & maintenance → appear in PDF and public JSON.
+
+---
+
+### Done 🎉
+
+You now have:
+
+* **Ownership history** with transfers,
+* **Media pipeline** with thumbnails & WebP + signed URLs,
+* **Ownership Proof PDF**,
+* **FTS search**,
+* **Build sheet**, **Maintenance logs**, **Public share pages**, **Auction stats**, and a **VIN scanner** component ready to wire into your UI.
