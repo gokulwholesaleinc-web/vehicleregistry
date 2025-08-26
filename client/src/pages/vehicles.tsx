@@ -242,12 +242,20 @@ export default function VehiclesPage() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 pt-2">
-                        <Link href={`/vehicles/${vehicle.id}`} className="col-span-2">
-                          <Button size="sm" variant="outline" className="w-full" data-testid={`button-details-${vehicle.id}`}>
-                            <Wrench className="h-4 w-4 mr-1" />
-                            Details
-                          </Button>
-                        </Link>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full col-span-2" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedVehicleId(vehicle.id);
+                            setIsVehicleDetailsModalOpen(true);
+                          }}
+                          data-testid={`button-details-${vehicle.id}`}
+                        >
+                          <Wrench className="h-4 w-4 mr-1" />
+                          Details
+                        </Button>
                         <Button 
                           size="sm" 
                           variant="outline"
