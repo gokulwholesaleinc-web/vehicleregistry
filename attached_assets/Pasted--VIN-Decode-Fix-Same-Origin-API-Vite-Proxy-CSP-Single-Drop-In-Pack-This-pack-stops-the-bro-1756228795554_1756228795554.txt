@@ -1,0 +1,152 @@
+# VIN Decode Fix — Same‑Origin API + Vite Proxy + CSP (Single Drop‑In Pack)
+
+This pack stops the browser from calling `http://localhost:5000/...` (blocked by CSP) and forces **same‑origin** API calls. It includes a safe API helper, Vite dev proxy, and a CSP snippet.
+
+---
+
+## 1) Client API Helper (replace file)
+
+**`client/src/lib/api.ts`**
+
+```ts
+// --- Single source of truth for API base ---
+// Always prefer same-origin. Ignore envs that point to localhost or a different origin.
+
+function safeBase(): string {
+  const sameOrigin = `${location.origin}/api/v1`;
+  const env = (import.meta.env as any)?.VITE_API_BASE?.trim();
+  if (!env) return sameOrigin;
+
+  // If someone set VITE_API_BASE to localhost, ignore it in the browser
+  if (env.startsWith('http://localhost')) return sameOrigin;
+
+  // If it's relative, treat as same-origin
+  if (env.startsWith('/')) return `${location.origin}${env}`;
+
+  // If absolute but not same-origin, ignore (prevents CSP breakage)
+  try {
+    const envOrigin = new URL(env).origin;
+    if (envOrigin !== location.origin) return sameOrigin;
+  } catch {
+    return sameOrigin;
+  }
+  return env;
+}
+
+export const API_BASE = safeBase();
+
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t: string | null){ if (t) localStorage.setItem('vg.jwt', t); else localStorage.removeItem('vg.jwt'); }
+
+export async function api(path: string, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`);
+
+  const url = `${API_BASE}${path}`; // path like '/vin/decode'
+  const res = await fetch(url, { ...init, headers, credentials: 'include' });
+  const json = await res.json().catch(()=>null);
+  if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+  return json;
+}
+
+// Debug: confirm in console this is not localhost
+if (typeof window !== 'undefined') console.info('[VG] API_BASE =', API_BASE);
+```
+
+**Usage rule:** In all client code, call **`api('/vin/decode', …)`** (no `/api/v1` in the path). The helper prefixes `/api/v1`.
+
+> **Find & fix:** Search your client for `localhost:5000` and for `api('/api/v1/` and replace with `api('/`.
+
+---
+
+## 2) Vite Dev Proxy (keep/add for local dev)
+
+**`vite.config.ts`**
+
+```ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': { target: 'http://localhost:5000', changeOrigin: true, secure: false }
+    }
+  }
+});
+```
+
+When running locally (Vite 5173, server 5000):
+
+* Browser calls `http://localhost:5173/api/v1/...`
+* Vite proxies to `http://localhost:5000/api/v1/...`
+* In Replit/Prod, both live on the same origin, so no proxy is used and CSP stays happy.
+
+---
+
+## 3) Helmet CSP (confirm/tweak)
+
+**`server/http/security.ts`** (ensure this shape)
+
+```ts
+import helmet from 'helmet';
+
+export const security = helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'connect-src': ["'self'", 'https:', 'wss:', 'ws:'],
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+});
+```
+
+Mount before routes: `app.use(security)`.
+
+---
+
+## 4) Route Mount Check (server)
+
+Make sure VIN routes are mounted exactly once at `/api/v1/vin`.
+
+```ts
+// server/http/app.ts
+import vinRouter from './routes/vin';
+app.use('/api/v1/vin', vinRouter);
+```
+
+---
+
+## 5) ENV sanity
+
+**Replit Secrets / .env**
+
+```
+# Leave unset so client uses same-origin by default
+VITE_API_BASE=
+
+# Server
+PORT=5000
+NODE_ENV=production
+```
+
+If you must override the client base in staging, set `VITE_API_BASE` to the **same origin** (e.g., `https://your-app.replit.app/api/v1`). Never point it to `http://localhost:5000` in the browser.
+
+---
+
+## 6) Quick QA
+
+* Open DevTools → Console: you should see `[VG] API_BASE = https://<your-origin>/api/v1`.
+* DevTools → Network (decode VIN): Request URL must be `https://<your-origin>/api/v1/vin/decode` (not localhost).
+* No CSP errors; VIN request returns `{ ok:true, data:{ vehicle, aiInsights } }` or a clean server error.
+
+---
+
+## 7) Common leftovers to fix
+
+* Notifications: change any `fetch('http://localhost:5000/api/notifications/...')` to `api('/notifications/...')`.
+* Any direct axios base set to `localhost` → remove; use the helper.
+* Any paths like `api('/api/v1/...')` → `api('/...')`.

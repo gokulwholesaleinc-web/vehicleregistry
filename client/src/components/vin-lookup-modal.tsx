@@ -47,16 +47,19 @@ const draftVehicleSchema = insertVehicleSchema.extend({
 });
 
 interface VinDecodeResult {
-  make: string;
-  model: string;
-  year: number;
-  trim?: string;
-  engine: string;
-  transmission: string;
-  fuelType: string;
-  bodyStyle: string;
-  drivetrain: string;
-  confidence: number;
+  vehicle: {
+    make: string;
+    model: string;
+    modelYear: number;
+    trim?: string;
+    engine: string;
+    transmission: string;
+    fuelType: string;
+    bodyClass: string;
+    driveType: string;
+    confidence?: number;
+  };
+  aiInsights?: any;
 }
 
 export function VinLookupModal() {
