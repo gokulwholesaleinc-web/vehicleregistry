@@ -430,6 +430,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Global search functionality (searches all public vehicles)
+  app.get('/api/v1/search', async (req: any, res) => {
+    try {
+      const { q } = z.object({
+        q: z.string().min(1)
+      }).parse(req.query);
+      
+      const allVehicles = await storage.getAllVehicles();
+      const publicVehicles = allVehicles.filter(vehicle => vehicle.isPublic);
+      
+      const results = publicVehicles.filter(vehicle => 
+        vehicle.make.toLowerCase().includes(q.toLowerCase()) ||
+        vehicle.model.toLowerCase().includes(q.toLowerCase()) ||
+        vehicle.year.toString().includes(q) ||
+        (vehicle.vin?.toLowerCase().includes(q.toLowerCase()) ?? false) ||
+        (vehicle.trim?.toLowerCase().includes(q.toLowerCase()) ?? false)
+      );
+      
+      res.json({ vehicles: results });
+    } catch (error) {
+      console.error("Global search error:", error);
+      res.status(500).json({ message: "Search failed" });
+    }
+  });
+
   // Search functionality
   app.get('/api/search', isAuthenticated, async (req: any, res) => {
     try {

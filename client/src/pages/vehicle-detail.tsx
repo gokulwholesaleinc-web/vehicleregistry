@@ -32,13 +32,66 @@ export default function VehicleDetailPage() {
   }
 
   if (error) {
+    const errorMessage = String((error as Error).message);
+    const isPrivateVehicle = errorMessage.includes('403') || errorMessage.includes('Forbidden') || errorMessage.includes('private');
+    
+    if (isPrivateVehicle) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-6">
+          <div className="max-w-6xl mx-auto">
+            {/* Header */}
+            <div className="flex items-center gap-4 mb-6">
+              <Link href="/vehicles">
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Vehicles
+                </Button>
+              </Link>
+            </div>
+
+            <Card className="border-orange-200 bg-orange-50 dark:bg-orange-900/20">
+              <CardHeader>
+                <CardTitle className="text-orange-800 dark:text-orange-200 flex items-center gap-2">
+                  <Car className="h-5 w-5" />
+                  Private Vehicle
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-orange-700 dark:text-orange-300">
+                  This vehicle profile is set to private. Only the owner can view the details.
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="border-orange-300 text-orange-700 hover:bg-orange-100"
+                    onClick={() => {
+                      // TODO: Implement contact owner functionality
+                      alert("Contact owner feature coming soon!");
+                    }}
+                    data-testid="button-contact-owner"
+                  >
+                    Contact Owner
+                  </Button>
+                  <Link href="/showcase">
+                    <Button variant="secondary">
+                      Browse Public Vehicles
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-6">
         <div className="max-w-6xl mx-auto">
           <Card className="border-red-200 bg-red-50 dark:bg-red-900/20">
             <CardContent className="p-6">
               <div className="text-red-600 dark:text-red-400">
-                {String((error as Error).message)}
+                {errorMessage}
               </div>
             </CardContent>
           </Card>

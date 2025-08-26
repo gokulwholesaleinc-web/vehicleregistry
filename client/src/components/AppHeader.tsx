@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import BellDropdown from "@/features/notifications/BellDropdown";
+import { SearchBar } from "./search-bar";
 
 function NavLink({ href, label }: { href: string; label: string }) {
   return (
@@ -48,13 +49,7 @@ export default function AppHeader() {
 
           {/* Search */}
           <div className="hidden md:flex items-center">
-            <label className="relative">
-              <input
-                placeholder="Search VIN or build…"
-                className="w-64 lg:w-72 rounded-xl border border-slate-300 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-              />
-              <svg className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-4.35-4.35m1.6-4.4a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
-            </label>
+            <SearchBar />
           </div>
 
           {/* Actions (single Admin chip) */}
