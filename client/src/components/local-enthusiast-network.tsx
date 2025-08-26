@@ -87,7 +87,8 @@ export default function LocalEnthusiastNetwork({ vehicleId }: LocalEnthusiastNet
   });
 
   // Convert community vehicles to local users format  
-  const vehicles = usersResponse?.data || usersResponse || [];
+  const vehicles = Array.isArray(usersResponse?.data) ? usersResponse.data : 
+                  Array.isArray(usersResponse) ? usersResponse : [];
   const users: LocalUser[] = vehicles.slice(0, 10).map((vehicle: any, index: number) => ({
     id: vehicle.id || `user-${index}`,
     name: vehicle.ownerName || 'Anonymous User',
