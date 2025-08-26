@@ -495,34 +495,21 @@ export default function VehicleDetailPage() {
                 </Card>
               )}
 
-              {/* Reliability */}
-              {aiInsights.reliability && (
+              {/* Maintenance Tips */}
+              {aiInsights.maintenanceTips && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Reliability</CardTitle>
+                    <CardTitle className="text-lg">Maintenance Tips</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {aiInsights.reliability.score && (
-                      <div>
-                        <div className="text-sm text-muted-foreground">Reliability Score</div>
-                        <div className="text-xl font-bold text-blue-600">
-                          {aiInsights.reliability.score}
-                        </div>
-                      </div>
-                    )}
-                    {aiInsights.reliability.commonIssues && (
-                      <div>
-                        <div className="text-sm text-muted-foreground mb-2">Common Issues</div>
-                        <ul className="space-y-1">
-                          {aiInsights.reliability.commonIssues.map((issue: string, i: number) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <div className="h-1.5 w-1.5 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
-                              <span className="text-sm">{issue}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    <ul className="space-y-2">
+                      {aiInsights.maintenanceTips.map((tip: string, i: number) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <div className="h-1.5 w-1.5 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                          <span className="text-sm">{tip}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </CardContent>
                 </Card>
               )}
