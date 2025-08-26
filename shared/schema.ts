@@ -55,6 +55,15 @@ export const vehicles = pgTable("vehicles", {
   currentMileage: integer("current_mileage"),
   lastServiceDate: text("last_service_date"),
   currentOwnerId: varchar("current_owner_id").notNull(),
+  
+  // Detailed vehicle specifications
+  transmission: text("transmission"),
+  driveType: text("drive_type"),
+  engine: text("engine"),
+  fuelType: text("fuel_type"),
+  plantCountry: text("plant_country"),
+  bodyClass: text("body_class"),
+  
   isPublic: boolean("is_public").default(false).notNull(),
   allowPreviousOwners: boolean("allow_previous_owners").default(true).notNull(),
   isDraft: boolean("is_draft").default(false).notNull(), // Track draft status
