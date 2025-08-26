@@ -13,7 +13,15 @@ interface VehicleSelectorProps {
 
 export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, onOpenVehicleDetails }: VehicleSelectorProps) {
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
-    queryKey: ["/api/vehicles"],
+    queryKey: ["/api/v1/vehicles"],
+    queryFn: async () => {
+      const response = await fetch('/api/v1/vehicles');
+      if (!response.ok) {
+        throw new Error('Failed to fetch vehicles');
+      }
+      const result = await response.json();
+      return result.ok ? result.data : [];
+    },
   });
 
   const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId);

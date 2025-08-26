@@ -1,0 +1,277 @@
+# Hotfix Pack — Drizzle Schema Guard (ai\_insights) + SPA Fallback + Vehicles Route
+
+This pack fixes the **`column "ai_insights" does not exist`** error across *all* queries, ensures client routes like `/vehicles` don't 404, and guarantees the Vehicles page is reachable.
+
+> Copy–paste these files/snippets into your Replit project. No restructuring required.
+
+---
+
+## 1) Drizzle feature probe (guards selects/inserts/updates)
+
+**File:** `server/db/featureFlags.ts`
+
+```ts
+import { sql } from 'drizzle-orm';
+
+// Single-runtime cache
+let checked = false;
+let hasAiInsights = false;
+
+export async function probeAiInsightsColumn(db: any, dialect: 'pg' | 'sqlite' = 'pg') {
+  if (checked) return { hasAiInsights };
+  try {
+    if (dialect === 'pg') {
+      // Postgres: information_schema
+      const r: any = await db.execute(sql`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'vehicles' AND column_name = 'ai_insights'
+        LIMIT 1;
+      `);
+      hasAiInsights = Boolean((r?.rows ?? r)?.length);
+    } else {
+      // SQLite: pragma
+      const r: any = await db.execute(sql`PRAGMA table_info('vehicles');`);
+      const rows = r?.rows ?? r;
+      hasAiInsights = Array.isArray(rows) && rows.some((x: any) => (x.name || x?.column_name) === 'ai_insights');
+    }
+  } catch {
+    hasAiInsights = false;
+  }
+  checked = true;
+  return { hasAiInsights };
+}
+
+export function features() {
+  return { hasAiInsights };
+}
+```
+
+> **Where to call this:** right after you initialize your DB (and before registering routes).
+
+**Example bootstrap:**
+
+```ts
+// server/index.ts or server/app.ts (where DB is created)
+import { probeAiInsightsColumn } from './db/featureFlags';
+
+// ... after you create `db`
+await probeAiInsightsColumn(db, process.env.DATABASE_URL?.startsWith('postgres') ? 'pg' : 'sqlite');
+```
+
+---
+
+## 2) Vehicles routes — safe SELECT/INSERT using the probe
+
+Update your existing vehicles routes to **only reference `ai_insights` if the column exists**.
+
+**File:** `server/routes/vehicles.ts` *(or wherever you handle vehicle CRUD)*
+
+```ts
+import { Router } from 'express';
+import { eq } from 'drizzle-orm';
+import { features } from '../db/featureFlags';
+// import { vehicles } from '../db/schema'; // your drizzle table
+// import db from '../db'; // your db instance
+
+const router = Router();
+
+// Helper that returns a field map safe for BOTH schemas
+function vehicleSelectFields(vehicles: any) {
+  const f: any = {
+    id: vehicles.id,
+    userId: vehicles.userId,
+    vin: vehicles.vin,
+    make: vehicles.make,
+    model: vehicles.model,
+    year: vehicles.year,
+    trim: vehicles.trim,
+    engine: vehicles.engine,
+    transmission: vehicles.transmission,
+    createdAt: vehicles.createdAt,
+    updatedAt: vehicles.updatedAt,
+  };
+  if (features().hasAiInsights && vehicles.aiInsights) {
+    f.aiInsights = vehicles.aiInsights; // only if the column exists in DB & schema
+  }
+  return f;
+}
+
+// GET /api/v1/vehicles (list)
+router.get('/', async (req: any, res) => {
+  try {
+    const fields = vehicleSelectFields((req as any).tables.vehicles || (global as any).tables?.vehicles || (req as any).vehicles);
+    const db = (req as any).db || (global as any).db; // adapt to your wiring
+    const vehiclesTbl = (req as any).tables?.vehicles || (global as any).tables?.vehicles; // adapt
+    const rows = await db.select(fields).from(vehiclesTbl).where(eq(vehiclesTbl.userId, req.user.id));
+    res.json({ ok: true, data: rows });
+  } catch (e: any) {
+    console.error('[vehicles:list] error', e?.message);
+    res.status(500).json({ ok: false, error: { message: 'Failed to load vehicles' } });
+  }
+});
+
+// POST /api/v1/vehicles/create-from-vin
+router.post('/create-from-vin', async (req: any, res) => {
+  const db = (req as any).db || (global as any).db;
+  const vehiclesTbl = (req as any).tables?.vehicles || (global as any).tables?.vehicles;
+  try {
+    const { vin, make, model, year, trim, engine, transmission, aiInsights } = req.body || {};
+    if (!vin || !make || !model || !year) {
+      return res.status(400).json({ ok: false, error: { message: 'Missing required fields' } });
+    }
+
+    const baseValues: any = {
+      userId: req.user.id,
+      vin,
+      make,
+      model,
+      year,
+      trim: trim ?? null,
+      engine: engine ?? null,
+      transmission: transmission ?? null,
+    };
+
+    // Insert path A: with ai_insights if the column exists
+    if (features().hasAiInsights && 'aiInsights' in vehiclesTbl) {
+      try {
+        await db.insert(vehiclesTbl).values({ ...baseValues, aiInsights: aiInsights ?? null } as any);
+      } catch (err: any) {
+        console.warn('[vehicles:create-from-vin] insert-with-ai failed, retrying without column', err?.message);
+        await db.insert(vehiclesTbl).values(baseValues as any);
+      }
+    } else {
+      // Insert path B: without ai_insights
+      await db.insert(vehiclesTbl).values(baseValues as any);
+    }
+
+    res.status(201).json({ ok: true, data: { vin, make, model, year, trim, engine, transmission } });
+  } catch (e: any) {
+    console.error('[vehicles:create-from-vin] error', e?.message);
+    res.status(500).json({ ok: false, error: { message: 'Failed to create vehicle' } });
+  }
+});
+
+export default router;
+```
+
+> **Why this works:** we never project or insert `ai_insights` unless the DB *actually has* that column. If your Drizzle schema already includes `aiInsights`, keeping the conditional and the `as any` cast prevents TS errors while avoiding runtime DB errors.
+
+---
+
+## 3) (Optional) Add the column when you’re ready
+
+Run a migration when convenient. Until then, the app works without it.
+
+### Postgres
+
+**File:** `server/db/migrations/2025-08-21-add-ai-insights.sql`
+
+```sql
+ALTER TABLE vehicles
+  ADD COLUMN IF NOT EXISTS ai_insights jsonb;
+```
+
+### SQLite
+
+**File:** `server/db/migrations/2025-08-21-add-ai-insights-sqlite.sql`
+
+```sql
+-- SQLite needs table rebuild; simplest is to allow the runtime guard to handle it now
+-- and add the column when you next reset DB. If you can recreate:
+-- CREATE TABLE vehicles_new (
+--   ... existing columns ...,
+--   ai_insights TEXT
+-- );
+-- INSERT INTO vehicles_new (existing_cols...) SELECT existing_cols... FROM vehicles;
+-- DROP TABLE vehicles;
+-- ALTER TABLE vehicles_new RENAME TO vehicles;
+```
+
+---
+
+## 4) SPA fallback — fix 404 on `/vehicles` (and other client routes)
+
+Add this **after** your static middleware and **after** all `/api` routes.
+
+**File:** `server/app.ts` (or your main Express file)
+
+```ts
+// Serve client routes (anything not starting with /api) from index.html
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  res.sendFile(path.join(clientDir, 'index.html'));
+});
+```
+
+---
+
+## 5) Ensure the client actually has a /vehicles route
+
+If you’re using Wouter:
+
+**File:** `client/src/App.tsx`
+
+```tsx
+import { Route, Switch } from 'wouter';
+import Dashboard from '@/pages/dashboard';
+import VehiclesPage from '@/pages/vehicles';
+// import VehicleDetail from '@/pages/vehicle-detail'; // when ready
+
+export default function App() {
+  return (
+    <Switch>
+      <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/vehicles" component={VehiclesPage} />
+      {/* <Route path="/vehicles/:id" component={VehicleDetail} /> */}
+      <Route> {/* 404 fallback inside SPA */}
+        <div className="p-8 text-center text-muted-foreground">404 Page Not Found</div>
+      </Route>
+    </Switch>
+  );
+}
+```
+
+If your page doesn’t exist yet, add a minimal stub so navigation works:
+
+**File:** `client/src/pages/vehicles.tsx`
+
+```tsx
+import { useEffect } from 'react';
+
+export default function VehiclesPage() {
+  useEffect(() => { document.title = 'My Vehicles — VINtageGarage'; }, []);
+  return (
+    <div className="container mx-auto max-w-6xl py-8">
+      <h1 className="text-2xl font-semibold mb-4">My Vehicles</h1>
+      <p className="text-sm text-muted-foreground">Your vehicles will appear here after creation.</p>
+    </div>
+  );
+}
+```
+
+---
+
+## 6) Bonus: clearer server logging (optional)
+
+**File:** `server/lib/log.ts`
+
+```ts
+export const log = {
+  info: (...a: any[]) => console.log('[info]', ...a),
+  warn: (...a: any[]) => console.warn('[warn]', ...a),
+  error: (...a: any[]) => console.error('[error]', ...a),
+};
+```
+
+Use it in routes to spot issues fast.
+
+---
+
+### After applying
+
+* Create-from-VIN succeeds whether or not the `ai_insights` column exists
+* Listing vehicles no longer throws on missing column
+* Direct navigation to `/vehicles` no longer 404s
+* You can add the `ai_insights` column later without breaking current users
+
+If your repo uses different file names for DB, schema, and route mounting, tell me the exact paths and I’ll tailor the imports to your tree verbatim.\`\`\`}
