@@ -72,13 +72,10 @@ router.post('/decode', limiter, async (req, res) => {
       }
     }
     
-    const vehicle = {
-      ...baseVehicle,
-      aiInsights
-    };
+    const data = { vehicle: baseVehicle, aiInsights };
     
-    cache.set(vin, { data: vehicle, exp: now + TTL });
-    res.json({ ok: true, data: vehicle });
+    cache.set(vin, { data, exp: now + TTL });
+    res.json({ ok: true, data });
   } catch (error) {
     console.error('Hybrid VIN decode error:', error);
     res.status(500).json({ ok: false, error: { message: 'VIN decode failed' } });

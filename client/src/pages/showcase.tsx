@@ -9,7 +9,7 @@ import { ExternalLink, Eye } from "lucide-react";
 
 export default function ShowcasePage() {
   const { data: vehicles, isLoading } = useQuery<any>({
-    queryKey: ["/api/v1/showcase/vehicles"],
+    queryKey: ["/showcase/vehicles"],
   });
 
   const handleAddEntry = () => {
@@ -19,7 +19,7 @@ export default function ShowcasePage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-        <AppHeader onAddEntry={handleAddEntry} />
+        <AppHeader />
         <div className="container mx-auto py-8">
           <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-page-title">
@@ -53,7 +53,7 @@ export default function ShowcasePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-      <AppHeader onAddEntry={handleAddEntry} />
+      <AppHeader />
       <div className="container mx-auto py-8">
         <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-page-title">

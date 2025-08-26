@@ -1,0 +1,287 @@
+# Partial Implementation Pack — API Prefix Fix + Normalized VIN Contract + Lint/Test Guard (Drop‑in)
+
+This pack fixes the **double `/api/v1` prefix** bug, normalizes the **VIN decode contract** to `{ vehicle, aiInsights }`, and adds **guardrails** (ESLint + CI grep + a vitest route test) so this never regresses. It assumes your current stack (Express + TS + Vite/React + React Query + Zod).
+
+---
+
+## 0) Client — unified API helper (same‑origin by default)
+
+**`client/src/lib/api.ts`** (replace)
+
+```ts
+// Client API helper: prefixes /api/v1 for you. Always call api('/path', ...)
+const base = (import.meta.env.VITE_API_BASE?.trim()) || `${location.origin}/api/v1`;
+
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t:string|null){ t?localStorage.setItem('vg.jwt',t):localStorage.removeItem('vg.jwt'); }
+
+export async function api(path:string, init:RequestInit = {}){
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`);
+  try{
+    const res = await fetch(`${base}${path}`, { ...init, headers, mode:'cors' });
+    if (res.status === 401){ setToken(null); throw new Error('Your session expired. Please sign in again.'); }
+    const json = await res.json().catch(()=>null);
+    if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+    return json;
+  }catch(err:any){
+    const msg = err?.message?.includes('Failed to fetch') ? 'Network error: API not reachable (CORS/base URL).' : (err?.message || 'Request failed');
+    throw new Error(msg);
+  }
+}
+```
+
+> **Rule of thumb:** in client code call `api('/vin/decode', …)` **not** `api('/api/v1/vin/decode', …)`.
+
+---
+
+## 1) Server — normalize VIN response `{ vehicle, aiInsights }`
+
+**`server/http/routes/vin.ts`** (replace with this normalized version)
+
+```ts
+import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { DecodeVINInput } from '../validators/schemas';
+import { enhanceVehicleData } from '../../services/openai';
+
+// Simple in-memory cache (swap with Redis if REDIS_URL present)
+const cache = new Map<string, { data: any; exp: number }>();
+const TTL = 24 * 60 * 60 * 1000; // 24h
+const limiter = rateLimit({ windowMs: 60_000, max: 20 });
+const Base = process.env.VIN_API_BASE || 'https://vpic.nhtsa.dot.gov/api/vehicles';
+
+const router = Router();
+
+router.post('/decode', limiter, async (req, res) => {
+  const parsed = DecodeVINInput.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const vin = parsed.data.vin.toUpperCase();
+
+  // Cache
+  const hit = cache.get(vin);
+  const now = Date.now();
+  if (hit && hit.exp > now) return res.json({ ok: true, data: hit.data });
+
+  try {
+    // 1) NHTSA canonical decode
+    const url = `${Base}/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
+    const response = await fetch(url);
+    if (!response.ok) return res.status(502).json({ ok: false, error: { message: 'VIN service unavailable' } });
+    const json: any = await response.json();
+    const row = json?.Results?.[0] || {};
+
+    const vehicle = {
+      vin,
+      make: row.Make || null,
+      model: row.Model || null,
+      modelYear: row.ModelYear ? Number(row.ModelYear) : null,
+      trim: row.Trim || null,
+      bodyClass: row.BodyClass || null,
+      engine: [row.EngineManufacturer, row.EngineModel].filter(Boolean).join(' '),
+      cylinders: row.EngineCylinders ? Number(row.EngineCylinders) : null,
+      displacement: row.DisplacementL ? Number(row.DisplacementL) : null,
+      transmission: row.TransmissionStyle || null,
+      driveType: row.DriveType || null,
+      plantCountry: row.PlantCountry || null,
+      fuelType: row.FuelTypePrimary || null,
+      mileage: parsed.data.mileage ?? null,
+    };
+
+    // 2) Optional AI enrichment
+    let aiInsights: any = null;
+    if (vehicle.make && vehicle.model && vehicle.modelYear) {
+      try {
+        aiInsights = await enhanceVehicleData({
+          make: vehicle.make, model: vehicle.model, modelYear: vehicle.modelYear,
+          trim: vehicle.trim || undefined, engine: vehicle.engine || undefined,
+          mileage: vehicle.mileage || undefined,
+        });
+      } catch (aiError) {
+        console.warn('AI enhancement failed; returning base data:', aiError);
+      }
+    }
+
+    const data = { vehicle, aiInsights };
+    cache.set(vin, { data, exp: now + TTL });
+    res.json({ ok: true, data });
+  } catch (error) {
+    console.error('Hybrid VIN decode error:', error);
+    res.status(500).json({ ok: false, error: { message: 'VIN decode failed' } });
+  }
+});
+
+export default router;
+```
+
+> Contract is now **always** `{ ok:true, data: { vehicle, aiInsights } }`.
+
+---
+
+## 2) Client — update calls & reads (VIN modal + hooks)
+
+**Change all client calls** from `api('/api/v1/...')` → `api('/...')` (without `/api/v1`).
+
+### Example: VIN modal handler (key diffs)
+
+```ts
+// before
+const result = await api('/api/v1/vin/decode', { method:'POST', body: JSON.stringify({ vin: data.vin, mileage: data.currentMileage }) });
+setVinData(result.data); // where your UI used data.year/make/etc
+
+// after
+const result = await api('/vin/decode', { method:'POST', body: JSON.stringify({ vin: data.vin, mileage: data.currentMileage }) });
+setVinData(result.data); // result.data = { vehicle, aiInsights }
+
+// then render from result.data.vehicle
+<p>{vinData.vehicle.modelYear}</p>
+<p>{vinData.vehicle.make}</p>
+<p>{vinData.vehicle.model}</p>
+<p>{vinData.vehicle.trim || 'Unknown'}</p>
+<p>{vinData.vehicle.engine}</p>
+<p>{vinData.vehicle.transmission}</p>
+
+// optional enrichment
+{vinData.aiInsights && (
+  <div>
+    <div>Estimated Auction Price: {vinData.aiInsights?.marketValue?.estimated || 'Unknown'}</div>
+    {/* fun facts list, etc. */}
+  </div>
+)}
+```
+
+### Example: React Query hook
+
+**`client/src/hooks/useVinDecoder.ts`**
+
+```ts
+import { useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
+export function useVinDecoder(){
+  return useMutation({
+    mutationFn: async (vin: string) => {
+      const res = await api('/vin/decode', { method:'POST', body: JSON.stringify({ vin }) });
+      return res.data as { vehicle:any; aiInsights:any };
+    }
+  });
+}
+```
+
+---
+
+## 3) Guardrails — ESLint rule + CI grep
+
+### A) ESLint: forbid `"/api/v1/"` string literals in **client**
+
+**`client/.eslintrc.cjs`** (add to rules)
+
+```js
+module.exports = {
+  // ...existing config
+  rules: {
+    // other rules...
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: "Literal[value='/api/v1/']",
+        message: 'Do not hardcode /api/v1 in client. Use api(\'/path\') and the helper will prefix it.'
+      }
+    ]
+  }
+};
+```
+
+> This catches the most common mistake. For extra safety, add a CI grep step below.
+
+### B) CI grep to block any `/api/v1/` string in client code
+
+**`.github/workflows/ci.yml`** (append step)
+
+```yml
+- name: Lint API paths (no hardcoded /api/v1 in client)
+  run: |
+    if grep -R "\/api\/v1\/" client/src --include=*.{ts,tsx,js,jsx}; then
+      echo "Found hardcoded /api/v1 in client. Use api('/path') helper." && exit 1
+    else
+      echo "OK: no hardcoded /api/v1 in client"
+    fi
+```
+
+---
+
+## 4) Vitest route test (mocks NHTSA) — ensures contract stays stable
+
+Install dev deps: `pnpm add -D vitest supertest` (and ensure tsconfig/test setup exists).
+
+**`server/tests/vin.spec.ts`**
+
+```ts
+import request from 'supertest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { buildApp } from '../http/app';
+
+// Mock global fetch to avoid hitting NHTSA in CI
+const mockNhtsa = {
+  Results: [{
+    Make: 'Honda', Model: 'Civic', ModelYear: '2019', Trim: 'EX', BodyClass: 'Sedan',
+    EngineManufacturer: 'Honda', EngineModel: 'L15B7', EngineCylinders: '4', DisplacementL: '1.5',
+    TransmissionStyle: 'Automatic', DriveType: 'FWD', PlantCountry: 'Canada', FuelTypePrimary: 'Gasoline'
+  }]
+};
+
+// @ts-ignore
+global.fetch = vi.fn(async () => ({ ok:true, json: async () => mockNhtsa }));
+
+let app: any;
+beforeAll(() => { app = buildApp(); });
+
+describe('POST /api/v1/vin/decode', () => {
+  it('returns normalized { vehicle, aiInsights }', async () => {
+    const res = await request(app)
+      .post('/api/v1/vin/decode')
+      .send({ vin: '2HGFC2F59KH512345' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.data.vehicle).toBeTruthy();
+    expect(res.body.data.vehicle.make).toBe('Honda');
+    expect(res.body.data.vehicle.modelYear).toBe(2019);
+    // aiInsights may be null in CI (no OPENAI_API_KEY) — do not assert
+  });
+});
+```
+
+Add script to root **package.json** (if not present):
+
+```json
+{
+  "scripts": {
+    "test": "vitest"
+  }
+}
+```
+
+---
+
+## 5) Quick QA checklist
+
+* [ ] No client call contains `"/api/v1/"` in source (lint + CI grep pass).
+* [ ] VIN modal calls `api('/vin/decode', …)` and reads `result.data.vehicle.*`.
+* [ ] `POST /api/v1/vin/decode` works in browser (no CORS / 404 due to double prefix).
+* [ ] Route test passes; contract `{ vehicle, aiInsights }` remains stable.
+
+---
+
+## 6) Optional polish (later)
+
+* Add a small **mapper** if any component still expects top‑level fields:
+
+  ```ts
+  const v = result.data.vehicle; const mapped = { year: v.modelYear, make:v.make, model:v.model, engine:v.engine, transmission:v.transmission, fuelType:v.fuelType, bodyStyle:v.bodyClass, drivetrain:v.driveType };
+  ```
+* Add a **Redis cache** for VIN responses and a `GET /vin/:vin` read‑only endpoint for public profile pages.

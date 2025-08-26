@@ -92,7 +92,7 @@ export function VinLookupModal() {
     mutationFn: async (data: z.infer<typeof vinLookupSchema>) => {
       setIsLookingUp(true);
       try {
-        const result = await api('/api/v1/vin/decode', { 
+        const result = await api('/vin/decode', { 
           method: 'POST', 
           body: JSON.stringify({ 
             vin: data.vin, 
@@ -108,7 +108,7 @@ export function VinLookupModal() {
       setVinData(data);
       toast({
         title: "VIN Decoded Successfully",
-        description: `Found ${data.modelYear} ${data.make} ${data.model}${data.aiInsights ? ' with AI insights' : ''}`,
+        description: `Found ${data.vehicle.modelYear} ${data.vehicle.make} ${data.vehicle.model}${data.aiInsights ? ' with AI insights' : ''}`,
       });
     },
     onError: (error) => {
@@ -288,39 +288,39 @@ export function VinLookupModal() {
                   </form>
                 </Form>
                 
-                {vinData && (
+                {vinData?.vehicle && (
                   <div className="mt-6 space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold">Decoded Vehicle Information</h3>
-                      <Badge variant={vinData.confidence > 0.8 ? "default" : "secondary"}>
-                        {Math.round(vinData.confidence * 100)}% Confidence
+                      <Badge variant={(vinData.vehicle.confidence || 0.9) > 0.8 ? "default" : "secondary"}>
+                        {Math.round((vinData.vehicle.confidence || 0.9) * 100)}% Confidence
                       </Badge>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <p className="font-medium text-muted-foreground">Year</p>
-                        <p data-testid="text-decoded-year">{vinData.year}</p>
+                        <p data-testid="text-decoded-year">{vinData.vehicle.modelYear}</p>
                       </div>
                       <div>
                         <p className="font-medium text-muted-foreground">Make</p>
-                        <p data-testid="text-decoded-make">{vinData.make}</p>
+                        <p data-testid="text-decoded-make">{vinData.vehicle.make}</p>
                       </div>
                       <div>
                         <p className="font-medium text-muted-foreground">Model</p>
-                        <p data-testid="text-decoded-model">{vinData.model}</p>
+                        <p data-testid="text-decoded-model">{vinData.vehicle.model}</p>
                       </div>
                       <div>
                         <p className="font-medium text-muted-foreground">Trim</p>
-                        <p data-testid="text-decoded-trim">{vinData.trim || "Unknown"}</p>
+                        <p data-testid="text-decoded-trim">{vinData.vehicle.trim || "Unknown"}</p>
                       </div>
                       <div>
                         <p className="font-medium text-muted-foreground">Engine</p>
-                        <p data-testid="text-decoded-engine">{vinData.engine}</p>
+                        <p data-testid="text-decoded-engine">{vinData.vehicle.engine}</p>
                       </div>
                       <div>
                         <p className="font-medium text-muted-foreground">Transmission</p>
-                        <p data-testid="text-decoded-transmission">{vinData.transmission}</p>
+                        <p data-testid="text-decoded-transmission">{vinData.vehicle.transmission}</p>
                       </div>
                     </div>
                     

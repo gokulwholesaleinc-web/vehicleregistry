@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 
 export interface VinDecodeResult {
   make: string;
@@ -45,23 +46,9 @@ export interface DuplicateCheckResult {
 
 export function useVinDecoder() {
   return useMutation({
-    mutationFn: async (vin: string): Promise<VinDecodeResult> => {
-      const response = await fetch('/api/v1/vin/decode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vin })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to decode VIN');
-      }
-      
-      const result = await response.json();
-      if (!result.ok) {
-        throw new Error(result.error?.message || 'VIN decode failed');
-      }
-      
-      return result.data;
+    mutationFn: async (vin: string) => {
+      const res = await api('/vin/decode', { method: 'POST', body: JSON.stringify({ vin }) });
+      return res.data as { vehicle: any; aiInsights: any };
     }
   });
 }

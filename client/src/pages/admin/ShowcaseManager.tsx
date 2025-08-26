@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Trash2, Plus, Save, GripVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-const API_BASE = '/api/v1/showcase';
+const API_BASE = '/showcase';
 
 type ShowcaseItem = {
   id: string;
