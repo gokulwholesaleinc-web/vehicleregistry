@@ -1,0 +1,203 @@
+# VIN Decode + Create Vehicle Fix Pack
+
+This pack addresses:
+
+1. **Transmission showing “Automatic”** when the VIN decodes to manual.
+2. **401 Unauthorized** (and red error toast *"can't access property 'message', data is null"*) when creating a vehicle.
+3. Makes client toasts resilient when the API returns an empty body.
+
+Drop these patches in as-is.
+
+---
+
+## 1) Server — Better transmission detection (NHTSA → normalized)
+
+**File:** `server/http/routes/vin.ts` (add the helper and replace the lines that set `transmission`)
+
+```ts
+// Add near the top of the file
+function normalizeTransmission(row: any): string | null {
+  // NHTSA sometimes fills different fields; pull from all plausible sources
+  const candidates: string[] = [
+    row.TransmissionDescriptor,
+    row.TransmissionStyle,
+    row.Transmission,
+  ].filter(Boolean);
+
+  // If nothing present, derive a guess from keywords in any engine/drive fields
+  const joined = candidates.join(' ').toLowerCase();
+  const hasManual = /(manual|m/t|6-speed manual|5-speed manual|stick|std)/.test(joined);
+  const hasDCT = /(dual\s*clutch|dct)/.test(joined);
+  const hasAMT = /(automated\s*manual|amt)/.test(joined);
+  const hasCVT = /(cvt|continuously\s*variable)/.test(joined);
+  const hasAuto = /(auto(?!matic?)|automatic|a\/t)/.test(joined);
+
+  if (hasDCT) return 'Dual Clutch';
+  if (hasAMT) return 'Automated Manual';
+  if (hasManual) return 'Manual';
+  if (hasCVT) return 'CVT';
+  if (hasAuto) return 'Automatic';
+
+  // Fallback: if NHTSA exposes TransmissionSpeeds + Style separately
+  const speeds = row.TransmissionSpeeds || row.NumberOfForwardGears;
+  const style = row.TransmissionStyle || row.TransmissionDescriptor;
+  if (speeds && style) return `${speeds}-Speed ${String(style).trim()}`;
+  return style || null;
+}
+```
+
+Now **use it** where you build the `vehicle` payload:
+
+```ts
+const vehicle = {
+  vin,
+  make: row.Make || null,
+  model: row.Model || null,
+  modelYear: row.ModelYear ? Number(row.ModelYear) : null,
+  trim: row.Trim || null,
+  bodyClass: row.BodyClass || null,
+  engine: [row.EngineManufacturer, row.EngineModel].filter(Boolean).join(' '),
+  cylinders: row.EngineCylinders ? Number(row.EngineCylinders) : null,
+  displacement: row.DisplacementL ? Number(row.DisplacementL) : null,
+  transmission: normalizeTransmission(row),   // <-- use the helper here
+  driveType: row.DriveType || null,
+  plantCountry: row.PlantCountry || null,
+  fuelType: row.FuelTypePrimary || null,
+  mileage: parsed.data.mileage ?? null,
+};
+```
+
+> This consolidates NHTSA’s inconsistent fields and promotes **Manual/DCT/AMT/CVT** ahead of generic “Automatic”.
+
+---
+
+## 2) Server — Consistent JSON for 401/4xx/5xx (no empty body)
+
+**File:** `server/http/app.ts` (or your main server bootstrap)
+
+Add a tiny auth guard response and a final error handler so the client always receives `{ ok:false, error:{ message } }`.
+
+```ts
+// Example auth middleware used by protected routes
+export function requireAuth(req: any, res: any, next: any){
+  if (!req.user) {
+    return res.status(401).json({ ok:false, error:{ message:'Unauthorized' } });
+  }
+  next();
+}
+
+// ... your routes
+
+// Final error handler (after all routes)
+app.use((err: any, _req: any, res: any, _next: any) => {
+  const status = err?.status || 500;
+  const message = err?.message || 'Internal Server Error';
+  res.status(status).json({ ok:false, error:{ message } });
+});
+```
+
+**Mount the auth guard** on routes like `/vehicles/create-from-vin` and any other endpoints that require login.
+
+```ts
+import { requireAuth } from './app';
+app.post('/api/v1/vehicles/create-from-vin', requireAuth, async (req,res)=>{
+  // ...create logic
+});
+```
+
+> With this, your client will never see `null` JSON on errors. It will always have an error message.
+
+---
+
+## 3) Client — Resilient toasts & 401 handling
+
+**File:** `client/src/lib/api.ts` (augment the helper you already installed)
+
+```ts
+export async function api(path: string, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`);
+
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, { ...init, headers, credentials: 'include' });
+
+  // Try to parse JSON even on errors
+  let json: any = null;
+  try { json = await res.json(); } catch {}
+
+  if (res.status === 401) {
+    // optional: broadcast logout event or redirect
+    setToken(null);
+    const msg = json?.error?.message || 'Unauthorized';
+    throw new Error(msg);
+  }
+
+  if (!res.ok) {
+    const msg = json?.error?.message || res.statusText || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return json ?? { ok:true };
+}
+```
+
+**File:** where you show the toast after `create-from-vin` failure (your modal)
+
+```ts
+onError: (error) => {
+  toast({
+    title: 'Failed to Create Vehicle',
+    description: error instanceof Error ? error.message : 'Unknown error',
+    variant: 'destructive',
+  });
+}
+```
+
+> The main fix is: we **always parse JSON**, and even if parsing fails we construct a meaningful message so your toast never tries to read `data.message` from `null`.
+
+---
+
+## 4) Client — Create-from-VIN mapping (matches normalized contract)
+
+Make sure you post what the server expects and read from the normalized VIN response `{ vehicle, aiInsights }` you already implemented.
+
+**In your VIN Modal (create button handler)**
+
+```ts
+const { vehicle } = vinData; // vinData comes from api('/vin/decode')
+await api('/vehicles/create-from-vin', {
+  method: 'POST',
+  body: JSON.stringify({
+    vin: vehicle.vin,
+    year: vehicle.modelYear,
+    make: vehicle.make,
+    model: vehicle.model,
+    trim: vehicle.trim,
+    engine: vehicle.engine,
+    transmission: vehicle.transmission,
+    fuelType: vehicle.fuelType,
+    bodyStyle: vehicle.bodyClass,
+    drivetrain: vehicle.driveType,
+    mileage: vehicle.mileage ?? 0,
+    aiInsights: vinData.aiInsights ?? null,
+  })
+});
+```
+
+If your server expects a different shape, adapt the keys here or add a small mapper on the server.
+
+---
+
+## 5) Quick QA
+
+* Decode the same VIN again → **Transmission** should now show **Manual**/**Dual Clutch** where applicable.
+* Create vehicle while **signed in** → no 401. If token expired, you’ll get a clean toast: *“Unauthorized”*.
+* No more *"can’t access property 'message', data is null"*.
+
+---
+
+## Notes
+
+* If your `notifications/unread/count` still shows 401 in the console, update that fetch to use the `api('/notifications/unread/count')` helper and ensure the notifications route also uses `requireAuth` + returns JSON errors.
+* If you want auto-redirect to `/signin` on 401 instead of a toast, do it where the helper throws 401.
