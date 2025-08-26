@@ -72,12 +72,16 @@ export const vehicles = pgTable("vehicles", {
   isDraft: boolean("is_draft").default(false).notNull(), // Track draft status
   autoFilled: boolean("auto_filled").default(false).notNull(), // Track if filled via AI
   aiInsights: text("ai_insights"), // JSON string from OpenAI analysis
+  archived: boolean("archived").default(false).notNull(), // For VIN uniqueness (archived vehicles can have duplicate VINs)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_vehicles_vin").on(table.vin),
   index("idx_vehicles_current_owner").on(table.currentOwnerId),
   index("idx_vehicles_draft").on(table.isDraft),
+  index("idx_vehicles_archived").on(table.archived),
+  // Unique VIN constraint for active (non-archived) vehicles only
+  index("vehicles_vin_unique_active").on(table.vin).where(sql`archived = false AND vin IS NOT NULL`),
 ]);
 
 // Vehicle ownership history for transfers

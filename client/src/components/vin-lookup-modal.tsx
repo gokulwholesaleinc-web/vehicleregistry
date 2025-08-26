@@ -31,9 +31,10 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Sparkles, Car, PlusCircle } from "lucide-react";
+import { Loader2, Sparkles, Car, PlusCircle, CheckCircle, XCircle } from "lucide-react";
 import { insertVehicleSchema, type InsertVehicle } from "@shared/schema";
 import { z } from "zod";
+import { useVinAvailability } from "@/hooks/useVinAvailability";
 
 const vinLookupSchema = z.object({
   vin: z.string().min(17, "VIN must be 17 characters").max(17, "VIN must be 17 characters"),
@@ -77,6 +78,10 @@ export function VinLookupModal() {
       currentMileage: 0
     }
   });
+
+  // Watch VIN field for availability checking
+  const watchedVin = vinForm.watch("vin");
+  const vinAvailability = useVinAvailability(watchedVin);
 
   const draftForm = useForm<z.infer<typeof draftVehicleSchema>>({
     resolver: zodResolver(draftVehicleSchema),
@@ -189,6 +194,17 @@ export function VinLookupModal() {
 
   const handleCreateFromVin = () => {
     const vinFormData = vinForm.getValues();
+    
+    // Check VIN availability before creating
+    if (vinAvailability.data && !vinAvailability.data.available) {
+      toast({
+        title: "VIN Unavailable",
+        description: vinAvailability.data.reason || "This VIN is not available for registration",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     createFromVinMutation.mutate(vinFormData);
   };
 
@@ -245,16 +261,36 @@ export function VinLookupModal() {
                         <FormItem>
                           <FormLabel>VIN Number</FormLabel>
                           <FormControl>
-                            <Input 
-                              placeholder="Enter 17-character VIN" 
-                              maxLength={17}
-                              className="uppercase"
-                              {...field}
-                              onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                              data-testid="input-vin"
-                            />
+                            <div className="relative">
+                              <Input 
+                                placeholder="Enter 17-character VIN" 
+                                maxLength={17}
+                                className="uppercase pr-10"
+                                {...field}
+                                onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                                data-testid="input-vin"
+                              />
+                              {/* VIN availability indicator */}
+                              {watchedVin.length === 17 && (
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                  {vinAvailability.isLoading ? (
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                  ) : vinAvailability.data?.available ? (
+                                    <CheckCircle className="h-4 w-4 text-green-600" data-testid="icon-vin-available" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-red-600" data-testid="icon-vin-unavailable" />
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </FormControl>
                           <FormMessage />
+                          {/* VIN availability message */}
+                          {watchedVin.length === 17 && vinAvailability.data && !vinAvailability.data.available && (
+                            <p className="text-sm text-red-600 mt-1" data-testid="text-vin-unavailable">
+                              {vinAvailability.data.reason || 'This VIN is not available'}
+                            </p>
+                          )}
                         </FormItem>
                       )}
                     />
@@ -281,7 +317,11 @@ export function VinLookupModal() {
                     
                     <Button 
                       type="submit" 
-                      disabled={isLookingUp || vinDecodeMutation.isPending}
+                      disabled={
+                        isLookingUp || 
+                        vinDecodeMutation.isPending || 
+                        (watchedVin.length === 17 && !vinAvailability.data?.available)
+                      }
                       className="w-full"
                       data-testid="button-decode-vin"
                     >

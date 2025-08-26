@@ -574,15 +574,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/v1/vehicles/create-from-vin', processJWT, requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { vin, currentMileage } = z.object({ 
+      const { vin: rawVin, currentMileage } = z.object({ 
         vin: z.string().min(17).max(17),
         currentMileage: z.number().optional()
       }).parse(req.body);
 
-      // Check if vehicle already exists
+      // Normalize VIN and validate
+      const { normalizeVIN, isValidVIN } = await import('../lib/vin');
+      const vin = normalizeVIN(rawVin);
+      
+      if (!isValidVIN(vin)) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: { code: 'INVALID_VIN', message: 'VIN must be 17 characters' } 
+        });
+      }
+
+      // Check if VIN is already claimed by another active (non-archived) vehicle
       const existingVehicle = await storage.getVehicleByVin(vin);
-      if (existingVehicle) {
-        return res.status(400).json({ message: 'Vehicle with this VIN already exists in the system' });
+      if (existingVehicle && !existingVehicle.archived) {
+        if (String(existingVehicle.currentOwnerId) === String(userId)) {
+          return res.status(409).json({
+            ok: false,
+            error: { code: 'VIN_DUPLICATE_SELF', message: 'This VIN is already in your garage.' }
+          });
+        }
+        return res.status(409).json({
+          ok: false,
+          error: { code: 'VIN_CLAIMED_BY_OTHER', message: 'This VIN is already registered to another user.' }
+        });
       }
 
       // Decode VIN using hybrid decoder (use internal call)
