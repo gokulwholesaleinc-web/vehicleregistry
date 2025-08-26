@@ -5,13 +5,14 @@ export function useAuth() {
   const token = getAuthToken();
   
   const { data: user, isLoading, error } = useQuery({
-    queryKey: ["/api/jwt/user"],
+    queryKey: ["/api/v1/auth/user"],
     queryFn: async () => {
       if (!token) return null;
       try {
-        const result = await api("/api/jwt/user");
+        const result = await api("/api/v1/auth/user");
         console.log("Auth query result:", result);
-        return result;
+        // Handle standardized response format { ok: true, data: user }
+        return result.data || result;
       } catch (err) {
         console.log("Auth query error:", err);
         // Token might be expired, remove it

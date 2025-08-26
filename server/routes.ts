@@ -142,39 +142,22 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Clean JWT-only auth endpoint (before any middleware)
-  app.get('/api/jwt/user', async (req: any, res) => {
+  // Single v1 auth endpoint - GET user profile
+  app.get('/api/v1/auth/user', processJWT, requireAuth, async (req: any, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      
-      const token = authHeader.slice(7);
-      const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET!;
-      
-      let claims;
-      try {
-        claims = jwt.verify(token, secret) as any;
-        console.log("JWT verified successfully, claims:", claims);
-      } catch (err) {
-        console.log("JWT verification failed:", err);
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      
-      console.log("Looking up user with ID:", claims.id);
-      const user = await storage.getUser(claims.id);
+      const userId = req.user.id;
+      console.log("Looking up user with ID:", userId);
+      const user = await storage.getUser(userId);
       console.log("Storage returned user:", user ? "found" : "not found");
       
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ ok: false, error: { message: "User not found" } });
       }
       
-      res.json(user);
+      res.json({ ok: true, data: user });
     } catch (error) {
       console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      res.status(500).json({ ok: false, error: { message: "Failed to fetch user" } });
     }
   });
 
@@ -215,69 +198,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   }, express.static(uploadsDir));
 
-  // JWT-only auth endpoint (bypasses passport session issues)  
-  app.get('/api/auth/user', async (req: any, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      
-      const token = authHeader.slice(7);
-      const jwt = require('jsonwebtoken');
-      const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET!;
-      
-      let claims;
-      try {
-        claims = jwt.verify(token, secret) as any;
-        console.log("JWT verified successfully, claims:", claims);
-      } catch (err) {
-        console.log("JWT verification failed:", err);
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      
-      console.log("Looking up user with ID:", claims.id);
-      const user = await storage.getUser(claims.id);
-      console.log("Storage returned user:", user ? "found" : "not found");
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
 
-  // User profile update - supports both JWT and Replit auth  
-  app.patch('/api/auth/user', async (req: any, res) => {
+  // Single v1 auth endpoint - PATCH user profile
+  app.patch('/api/v1/auth/user', processJWT, requireAuth, async (req: any, res) => {
     try {
-      let userId: string | undefined;
-      
-      // Try JWT first (local auth)
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.slice(7);
-        try {
-          const jwt = require('jsonwebtoken');
-          const claims = jwt.verify(token, process.env.JWT_SECRET || process.env.SESSION_SECRET!) as any;
-          userId = claims.id;
-        } catch (err) {
-          // JWT verification failed, try Replit auth
-        }
-      }
-      
-      // Fallback to Replit auth
-      if (!userId && req.isAuthenticated && req.isAuthenticated()) {
-        userId = req.user.claims?.sub;
-      }
-      
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
+      const userId = req.user.id;
       
       const updateData = z.object({
         firstName: z.string().optional(),
@@ -287,10 +212,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).parse(req.body);
       
       const updatedUser = await storage.updateUser(userId, updateData);
-      res.json(updatedUser);
+      res.json({ ok: true, data: updatedUser });
     } catch (error) {
       console.error("Error updating user:", error);
-      res.status(500).json({ message: "Failed to update user profile" });
+      res.status(500).json({ ok: false, error: { message: "Failed to update user profile" } });
     }
   });
 
