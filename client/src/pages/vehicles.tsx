@@ -13,6 +13,7 @@ import { Car, FileText, Sparkles, Plus, Calendar, Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { type Vehicle } from "@shared/schema";
 import { api } from "@/lib/api";
+import { Link } from "wouter";
 
 export default function VehiclesPage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
@@ -157,11 +158,22 @@ export default function VehiclesPage() {
                       </div>
 
                       <div className="flex gap-2 pt-2">
-                        <Button size="sm" variant="outline" className="flex-1">
-                          <Wrench className="h-4 w-4 mr-1" />
-                          Details
-                        </Button>
-                        <Button size="sm" variant="outline" className="flex-1">
+                        <Link href={`/vehicles/${vehicle.id}`} className="flex-1">
+                          <Button size="sm" variant="outline" className="w-full" data-testid={`button-details-${vehicle.id}`}>
+                            <Wrench className="h-4 w-4 mr-1" />
+                            Details
+                          </Button>
+                        </Link>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="flex-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddEntry();
+                          }}
+                          data-testid={`button-add-entry-${vehicle.id}`}
+                        >
                           <Plus className="h-4 w-4 mr-1" />
                           Add Entry
                         </Button>
