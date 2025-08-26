@@ -613,7 +613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).parse(req.body);
 
       // Normalize VIN and validate
-      const { normalizeVIN, isValidVIN } = await import('../lib/vin');
+      const { normalizeVIN, isValidVIN } = await import('../lib/vin.js');
       const vin = normalizeVIN(rawVin);
       
       if (!isValidVIN(vin)) {
@@ -843,7 +843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update vehicle with photos and editable fields (v1 API)
-  app.put('/api/v1/vehicles/:id', isAuthenticated, upload.fields([
+  app.put('/api/v1/vehicles/:id', processJWT, requireAuth, upload.fields([
     { name: 'photos', maxCount: 10 }
   ]), async (req: any, res) => {
     try {

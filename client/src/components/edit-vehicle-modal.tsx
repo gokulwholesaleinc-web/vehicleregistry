@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { CloudUpload, X, Camera } from "lucide-react";
 import { type Vehicle } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
 
 const editVehicleSchema = z.object({
   color: z.string().optional(),
@@ -71,16 +72,8 @@ export default function EditVehicleModal({ isOpen, onClose, vehicle }: EditVehic
         formData.append('photos', photo);
       });
 
-      const response = await fetch(`/api/v1/vehicles/${vehicle.id}`, {
-        method: 'PUT',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update vehicle');
-      }
-
-      return response.json();
+      const response = await apiRequest('PUT', `/api/v1/vehicles/${vehicle.id}`, formData);
+      return response;
     },
     onSuccess: () => {
       toast({

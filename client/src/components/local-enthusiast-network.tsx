@@ -86,8 +86,9 @@ export default function LocalEnthusiastNetwork({ vehicleId }: LocalEnthusiastNet
     queryFn: () => apiRequest('GET', '/api/community/vehicles'),
   });
 
-  // Convert community vehicles to local users format
-  const users: LocalUser[] = (usersResponse?.data || []).slice(0, 10).map((vehicle: any, index: number) => ({
+  // Convert community vehicles to local users format  
+  const vehicles = usersResponse?.data || usersResponse || [];
+  const users: LocalUser[] = vehicles.slice(0, 10).map((vehicle: any, index: number) => ({
     id: vehicle.id || `user-${index}`,
     name: vehicle.ownerName || 'Anonymous User',
     avatar: `https://images.unsplash.com/photo-${1472099645785 + index}-5658abf4ff4e?w=100`,
