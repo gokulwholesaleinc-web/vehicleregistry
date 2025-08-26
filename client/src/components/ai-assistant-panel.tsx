@@ -171,17 +171,17 @@ export default function AIAssistantPanel() {
   return (
     <Card className="card-modern">
       <CardHeader className="pb-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl flex-shrink-0">
             <Bot className="w-6 h-6 text-purple-600 dark:text-purple-400" />
           </div>
-          <div>
-            <CardTitle className="text-xl">AI Assistant</CardTitle>
-            <CardDescription>
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-xl truncate">AI Assistant</CardTitle>
+            <CardDescription className="text-sm leading-relaxed">
               Intelligent features powered by OpenAI
             </CardDescription>
           </div>
-          <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse-glow ml-auto" />
+          <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse-glow flex-shrink-0" />
         </div>
       </CardHeader>
       
