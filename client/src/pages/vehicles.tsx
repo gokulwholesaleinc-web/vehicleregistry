@@ -52,12 +52,12 @@ export default function VehiclesPage() {
   const togglePrivacyMutation = useMutation({
     mutationFn: async ({ vehicleId, isPublic }: { vehicleId: string; isPublic: boolean }) => {
       const response = await apiRequest('PATCH', `/api/v1/vehicles/${vehicleId}`, { isPublic });
-      return response.json();
+      return { data: await response.json(), vehicleId };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ vehicleId }) => {
       // Invalidate both list and individual vehicle caches
       queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles", data.vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles", vehicleId] });
       // Also invalidate community data since privacy affects public visibility
       queryClient.invalidateQueries({ queryKey: ["/api/v1/community"] });
       toast({
