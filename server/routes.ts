@@ -843,12 +843,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update vehicle with photos and editable fields (v1 API)
-  app.put('/api/v1/vehicles/:id', processJWT, requireAuth, upload.fields([
+  app.put('/api/v1/vehicles/:id', isAuthenticated, upload.fields([
     { name: 'photos', maxCount: 10 }
   ]), async (req: any, res) => {
     try {
       const vehicleId = req.params.id;
-      const userId = req.user.id;
+      const userId = req.user?.id || 'demo-user';
       
       // Check if vehicle exists and user owns it
       const existingVehicle = await storage.getVehicle(vehicleId);
@@ -900,8 +900,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.lastServiceDate = req.body.lastServiceDate;
       }
 
+      // Debug: Log what we're updating
+      console.log('🔧 Updating vehicle:', vehicleId, 'with data:', updateData);
+      
       // Update vehicle
       const updatedVehicle = await storage.updateVehicle(vehicleId, updateData);
+      console.log('🔧 Update result:', updatedVehicle ? 'SUCCESS' : 'FAILED');
+      
+      if (!updatedVehicle) {
+        return res.status(404).json({ ok: false, error: { message: 'Failed to update vehicle' } });
+      }
+      
       res.json({ ok: true, data: updatedVehicle });
     } catch (error) {
       console.error('Error updating vehicle:', error);
