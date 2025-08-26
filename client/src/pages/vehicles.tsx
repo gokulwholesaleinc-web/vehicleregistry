@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { type Vehicle } from "@shared/schema";
 import { api } from "@/lib/api";
+import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 
 export default function VehiclesPage() {
@@ -50,12 +51,8 @@ export default function VehiclesPage() {
   // Privacy toggle mutation
   const togglePrivacyMutation = useMutation({
     mutationFn: async ({ vehicleId, isPublic }: { vehicleId: string; isPublic: boolean }) => {
-      const response = await api(`/v1/vehicles/${vehicleId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPublic })
-      });
-      return response.data;
+      const response = await apiRequest('PATCH', `/api/v1/vehicles/${vehicleId}`, { isPublic });
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
