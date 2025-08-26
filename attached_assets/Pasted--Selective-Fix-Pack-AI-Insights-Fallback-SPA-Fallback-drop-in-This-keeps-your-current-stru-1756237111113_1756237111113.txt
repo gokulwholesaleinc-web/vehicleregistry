@@ -1,0 +1,209 @@
+# Selective Fix Pack — AI Insights Fallback + SPA Fallback (drop‑in)
+
+This keeps your **current structure** and implements only what we all agreed is necessary **right now**:
+
+* ✅ Fix the `500` when creating a vehicle (graceful **`ai_insights`** fallback)
+* ✅ Add **SPA fallback** so `/vehicles` (and any other client routes) don’t 404 on refresh
+* 🚫 No file re‑org, no registry system — drop into your existing files
+
+> If your routes live in a single file like `server/routes.ts` (or `server/index.ts`), paste the corresponding blocks below directly into those files. If you’re split by modules, use the same logic in the module that owns the endpoints.
+
+---
+
+## 1) Runtime **ai\_insights** Column Probe (one‑time on boot)
+
+**File:** `server/routes.ts` (or wherever you create/attach routes — put near the top after DB init)
+
+```ts
+// --- AI_INSIGHTS column probe (works for Postgres and SQLite) ---
+let VEHICLES_HAS_AI_INSIGHTS_COL = false;
+
+async function probeAiInsightsColumn(db: any) {
+  try {
+    // Try Postgres information_schema first
+    const pgCheck = await db.query?.(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'vehicles' AND column_name = 'ai_insights' LIMIT 1`
+    );
+    if (pgCheck && pgCheck.rows && pgCheck.rows.length > 0) {
+      VEHICLES_HAS_AI_INSIGHTS_COL = true;
+      return;
+    }
+  } catch (_) {}
+
+  try {
+    // Try SQLite PRAGMA fallback
+    const rows = await db.all?.(`PRAGMA table_info(vehicles);`);
+    if (Array.isArray(rows)) {
+      VEHICLES_HAS_AI_INSIGHTS_COL = rows.some((r: any) => (r.name || r?.cid?.name) === 'ai_insights' || r?.name === 'ai_insights');
+    }
+  } catch (_) {}
+}
+
+// Call this once after you establish the DB connection
+// await probeAiInsightsColumn(db)
+```
+
+> **How to wire:** After you connect your DB (pool/knex/sqlite handle), call `await probeAiInsightsColumn(db)` **before** you mount the routes. If your file isn’t async, call it in the boot strap that already uses `await`.
+
+---
+
+## 2) Create‑Vehicle endpoint (graceful fallback)
+
+**File:** `server/routes.ts` — find your **create vehicle** handler (e.g., `POST /api/v1/vehicles/create-from-vin`). Replace its DB insert section with the code below. **Do not change your auth logic — keep what you have.**
+
+```ts
+// Example shape — adapt to your handler variables
+app.post('/api/v1/vehicles/create-from-vin', requireAuth, async (req, res) => {
+  try {
+    const { vin, make, model, year, trim, engine, transmission, aiInsights } = req.body || {};
+    if (!vin || !make || !model || !year) {
+      return res.status(400).json({ ok: false, error: { message: 'Missing required fields' } });
+    }
+
+    // Prepare row
+    const row: any = {
+      user_id: req.user.id,
+      vin,
+      make,
+      model,
+      year: Number(year) || null,
+      trim: trim || null,
+      engine: engine || null,
+      transmission: transmission || null,
+    };
+
+    // Attach AI insights only if the column exists
+    if (VEHICLES_HAS_AI_INSIGHTS_COL && aiInsights) {
+      // Store JSON as string for SQLite; JSON for PG is also fine when stringified
+      row.ai_insights = typeof aiInsights === 'string' ? aiInsights : JSON.stringify(aiInsights);
+    }
+
+    // Insert (works for knex, pg, or sqlite with minor adjustments)
+    // --- Replace with your own DB layer ---
+    let created;
+    if (db.insert) {
+      // knex‑style
+      created = await db('vehicles').insert(row).returning('*');
+      created = Array.isArray(created) ? created[0] : created;
+    } else if (db.query) {
+      // node‑pg style
+      const cols = Object.keys(row);
+      const vals = Object.values(row);
+      const params = cols.map((_, i) => `$${i + 1}`).join(',');
+      const sql = `INSERT INTO vehicles (${cols.join(',')}) VALUES (${params}) RETURNING *`;
+      const r = await db.query(sql, vals);
+      created = r.rows[0];
+    } else if (db.prepare) {
+      // better‑sqlite3 style
+      const cols = Object.keys(row);
+      const placeholders = cols.map(() => '?').join(',');
+      db.prepare(`INSERT INTO vehicles (${cols.join(',')}) VALUES (${placeholders})`).run(Object.values(row));
+      const get = db.prepare('SELECT * FROM vehicles WHERE rowid = last_insert_rowid()');
+      created = get.get();
+    } else {
+      throw new Error('Unsupported DB client — wire your insert here');
+    }
+
+    return res.status(201).json({ ok: true, data: created });
+  } catch (err: any) {
+    // If the only failure is the missing column, retry without it (ultra‑guard)
+    const msg = String(err?.message || '');
+    const looksLikeMissingCol = /ai_insights/i.test(msg) && /column|no such column|does not exist/i.test(msg);
+    if (looksLikeMissingCol) {
+      try {
+        // Retry w/o ai_insights regardless of probe outcome
+        const { aiInsights, ...rest } = req.body || {};
+        const row: any = {
+          user_id: req.user.id,
+          vin: rest.vin,
+          make: rest.make,
+          model: rest.model,
+          year: Number(rest.year) || null,
+          trim: rest.trim || null,
+          engine: rest.engine || null,
+          transmission: rest.transmission || null,
+        };
+
+        let created;
+        if (db.insert) {
+          created = await db('vehicles').insert(row).returning('*');
+          created = Array.isArray(created) ? created[0] : created;
+        } else if (db.query) {
+          const cols = Object.keys(row);
+          const vals = Object.values(row);
+          const params = cols.map((_, i) => `$${i + 1}`).join(',');
+          const sql = `INSERT INTO vehicles (${cols.join(',')}) VALUES (${params}) RETURNING *`;
+          const r = await db.query(sql, vals);
+          created = r.rows[0];
+        } else if (db.prepare) {
+          const cols = Object.keys(row);
+          const placeholders = cols.map(() => '?').join(',');
+          db.prepare(`INSERT INTO vehicles (${cols.join(',')}) VALUES (${placeholders})`).run(Object.values(row));
+          const get = db.prepare('SELECT * FROM vehicles WHERE rowid = last_insert_rowid()');
+          created = get.get();
+        }
+
+        return res.status(201).json({ ok: true, data: created, warning: { message: 'Inserted without ai_insights (column missing)' } });
+      } catch (retryErr) {
+        return res.status(500).json({ ok: false, error: { message: 'Create vehicle failed (retry)', detail: String(retryErr?.message || retryErr) } });
+      }
+    }
+
+    return res.status(500).json({ ok: false, error: { message: 'Create vehicle failed', detail: String(err?.message || err) } });
+  }
+});
+```
+
+> **Why this works**: On boot we probe the schema. At insert time we include `ai_insights` only when safe. If a race/migration discrepancy still throws, we retry without that column.
+
+---
+
+## 3) **SPA Fallback** (fix `/vehicles` 404 on refresh)
+
+**File:** wherever you create the Express app (often `server/index.ts` or `server/app.ts`). Add this **after** your static middleware and **after** `/api` routes are mounted.
+
+```ts
+import path from 'path';
+
+// ... your existing middleware and /api routes here ...
+
+// Single‑Page‑App fallback — serve index.html for any non‑API route
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  // adjust path to where your built client index.html lives
+  const clientDir = path.join(process.cwd(), 'client', 'dist');
+  res.sendFile(path.join(clientDir, 'index.html'));
+});
+```
+
+> If you use Vite dev server proxy, you can still keep this fallback; it’s only hit in the same process that serves static files.
+
+---
+
+## 4) (Optional) SQL Migration — add `ai_insights` column later
+
+Run **one** of these depending on your DB, if/when you want to persist insights in the database.
+
+### Postgres
+
+```sql
+ALTER TABLE vehicles
+  ADD COLUMN IF NOT EXISTS ai_insights jsonb;
+```
+
+### SQLite
+
+```sql
+ALTER TABLE vehicles ADD COLUMN ai_insights TEXT;
+```
+
+---
+
+## 5) Quick sanity checklist
+
+* [ ] You called `await probeAiInsightsColumn(db)` **once** after DB connects
+* [ ] The **create-from-vin** endpoint now uses the guarded insert from above
+* [ ] SPA fallback is placed **after** your `/api` routes
+* [ ] Client still posts to `/api/v1/vehicles/create-from-vin`
+* [ ] (Optional) Run the migration to add `ai_insights`
+
+That’s it — minimal changes, maximal impact. If you want, we can add a tiny `/api/v1/health` route next so your Replit agent can automatically verify boot + DB schema probe on deploy.
