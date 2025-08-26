@@ -1,0 +1,294 @@
+# Owner Verification — Manual Review Only (Drop‑in Update Pack)
+
+Your request: **All verifications require manual admin approval.** OpenAI assists with extraction, matching, and a suggested decision, but **never auto‑approves**. This pack updates the earlier Verification spec/implementation accordingly and adds an admin review UI.
+
+---
+
+## 0) DB Updates — status model (no auto‑approve)
+
+> If you already created the earlier tables, you can run a migration to adjust the enum and defaults. Below is the target shape.
+
+```sql
+-- Replace the previous enum with one that never skips manual review
+CREATE TYPE verification_status AS ENUM ('pending_upload','submitted','processing','under_review','approved','rejected');
+
+-- vehicle_verifications (target columns)
+-- id (pk), user_id, vehicle_id, vin
+-- status: default 'pending_upload'
+-- risk_score: 0..100
+-- reason: text
+-- challenge_code: text
+-- created_at, updated_at
+
+-- If migrating, ensure default is 'pending_upload' and allow 'under_review'
+-- Example PostgreSQL migration sketch:
+-- ALTER TYPE verification_status ADD VALUE IF NOT EXISTS 'under_review';
+-- UPDATE vehicle_verifications SET status='under_review' WHERE status='approved';
+-- (From now on, server code will only set 'under_review', 'approved' or 'rejected' by an admin route.)
+```
+
+---
+
+## 1) Server — Vision helper unchanged (for extraction)
+
+> Keep `server/services/vision.ts` from the previous pack. It extracts doc fields/selfie/odometer.
+
+---
+
+## 2) Server — Verification routes (manual review only)
+
+**`server/http/routes/verification.ts`** (replace/patch with this behavior)
+
+```ts
+import { Router } from 'express';
+import { StartVerification, SubmitVerification, ExtractBundle } from '../validators/verification';
+import { db } from '../../db';
+import { extractFromImages } from '../../services/vision';
+
+// Table names are examples; adapt to your Drizzle schema exports
+// vehicle_verifications: verifs; verification_files: files; verification_extracts: extracts
+
+function randomChallenge(){ return `VG-${Math.random().toString(36).slice(2,7).toUpperCase()}`; }
+
+const router = Router();
+
+router.post('/start', async (req:any, res) => {
+  const u = req.user; if (!u) return res.status(401).json({ ok:false });
+  const body = StartVerification.safeParse(req.body);
+  if(!body.success) return res.status(400).json({ ok:false, error: body.error.flatten() });
+
+  const id = crypto.randomUUID();
+  const challenge = randomChallenge();
+  await db.execute(
+    `INSERT INTO vehicle_verifications (id,user_id,vehicle_id,vin,status,challenge_code)
+     VALUES ($1,$2,$3,$4,'pending_upload',$5)`,
+    [id, u.id, body.data.vehicleId, body.data.vin, challenge]
+  );
+
+  res.json({ ok:true, data:{ verificationId:id, challengeCode:challenge } });
+});
+
+router.post('/submit', async (req:any, res) => {
+  const u = req.user; if (!u) return res.status(401).json({ ok:false });
+  const body = SubmitVerification.safeParse(req.body);
+  if(!body.success) return res.status(400).json({ ok:false, error: body.error.flatten() });
+
+  for(const f of body.data.files){
+    await db.execute(
+      `INSERT INTO verification_files (id,verification_id,kind,object_key,mime)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [crypto.randomUUID(), body.data.verificationId, f.kind, f.objectKey, f.mime]
+    );
+  }
+  await db.execute(`UPDATE vehicle_verifications SET status='processing', updated_at=NOW() WHERE id=$1 AND user_id=$2`, [body.data.verificationId, u.id]);
+  res.json({ ok:true });
+});
+
+router.post('/process', async (req:any, res) => {
+  // Admin/worker endpoint (protect in production)
+  const { verificationId } = req.body as { verificationId:string };
+  const verif = (await db.execute(`SELECT * FROM vehicle_verifications WHERE id=$1`, [verificationId])) as any;
+  const row = verif.rows?.[0];
+  if(!row) return res.status(404).json({ ok:false, error:{ message:'not_found' } });
+
+  const fs = (await db.execute(`SELECT kind, object_key FROM verification_files WHERE verification_id=$1`, [verificationId])) as any;
+  const files = fs.rows as {kind:string,object_key:string}[];
+  const toUrl = (k:string)=> `https://your-private-bucket/${k}?signed=...`; // TODO: real presign
+
+  const docs = files.filter(f=>['title','registration','drivers_license'].includes(f.kind)).map(f=>({ url: toUrl(f.object_key), kind: f.kind as any }));
+  const selfie = files.find(f=>f.kind==='selfie');
+  const odo = files.find(f=>f.kind==='odometer');
+
+  const result = await extractFromImages({
+    docUrls: docs,
+    selfieUrl: selfie? toUrl(selfie.object_key): undefined,
+    challengeCode: row.challenge_code,
+    odoUrl: odo? toUrl(odo.object_key): undefined,
+  });
+
+  // Validate/shape result
+  const parsed = ExtractBundle.safeParse(result);
+  const E = parsed.success ? parsed.data : { extracts: [] } as any;
+
+  // Heuristic scoring for reviewer context (but DO NOT auto-approve)
+  const vinMatches = !!E.extracts.find((e:any)=> e.vin && e.vin.replace(/[^A-Z0-9]/ig,'') === row.vin);
+  const nameMatches = !!E.extracts.find((e:any)=> e.fullName && row.user_full_name && e.fullName.toLowerCase().includes(String(row.user_full_name).toLowerCase()));
+  const selfieOK = E.selfieCheck?.noteContainsChallenge && (E.selfieCheck?.confidence||0) > 0.5;
+  const mileageFound = !!E.odometer?.mileage;
+  let risk = 100; if (vinMatches) risk -= 40; if (nameMatches) risk -= 30; if (selfieOK) risk -= 20; if (mileageFound) risk -= 10; risk = Math.max(0, Math.min(100, risk));
+
+  // Store extracts + matches
+  await db.execute(
+    `INSERT INTO verification_extracts (verification_id, doc_summary, matched_fields)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (verification_id) DO UPDATE SET doc_summary=EXCLUDED.doc_summary, matched_fields=EXCLUDED.matched_fields`,
+    [verificationId, result, { vinMatches, nameMatches, selfieOK, mileageFound }]
+  );
+
+  // Move to under_review for human decision
+  await db.execute(`UPDATE vehicle_verifications SET status='under_review', risk_score=$1, updated_at=NOW() WHERE id=$2`, [risk, verificationId]);
+
+  res.json({ ok:true, data:{ status:'under_review', risk, matches:{ vinMatches, nameMatches, selfieOK, mileageFound } } });
+});
+
+router.post('/decision', async (req:any, res) => {
+  // Admin-only manual decision
+  const { verificationId, approve, reason } = req.body as { verificationId:string; approve:boolean; reason?:string };
+  await db.execute(`UPDATE vehicle_verifications SET status=$1, reason=$2, updated_at=NOW() WHERE id=$3`, [approve?'approved':'rejected', reason||null, verificationId]);
+  res.json({ ok:true });
+});
+
+export default router;
+```
+
+**Key change:** `/process` **never** returns `approved`. It always sets `status='under_review'` and sends the risk + matching hints to help the admin decide.
+
+---
+
+## 3) (Optional) Admin suggestion via OpenAI (text‑only)
+
+> If you want a short, structured suggestion for the reviewer, add this helper.
+
+**`server/services/verify_suggester.ts`**
+
+```ts
+import OpenAI from 'openai';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function suggestDecision(payload: {
+  vin: string; userName?: string;
+  matches: { vinMatches:boolean; nameMatches:boolean; selfieOK:boolean; mileageFound:boolean };
+  risk: number;
+}){
+  const sys = 'You assist human admins reviewing vehicle ownership verifications. Return strict JSON only.';
+  const user = JSON.stringify(payload);
+  const r = await openai.chat.completions.create({
+    model: 'gpt-4o-mini', temperature: 0,
+    messages: [ { role:'system', content: sys }, { role:'user', content: user } ],
+    response_format: { type:'json_object' } as any,
+  });
+  try{ return JSON.parse(r.choices?.[0]?.message?.content || '{}'); } catch { return { note:'no_suggestion' }; }
+}
+```
+
+You can call this in `/process` (after computing risk) to store a `review_hint` JSON alongside the extracts for admins to read.
+
+---
+
+## 4) Admin Review UI — Approve/Reject only
+
+**`client/src/pages/admin/VerificationReview.tsx`**
+
+```tsx
+import { useEffect, useState } from 'react';
+import { PageContainer, PageHeader } from '@/components/Page';
+import { api } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+
+export default function VerificationReview(){
+  const [items, setItems] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any|null>(null);
+
+  async function load(){
+    const r = await api('/admin/verification/list', { method:'GET' }); // implement server list query for under_review
+    setItems(r.data||[]);
+  }
+  useEffect(()=>{ load(); },[]);
+
+  async function decide(approve:boolean){
+    if(!selected) return;
+    await api('/verification/decision', { method:'POST', body: JSON.stringify({ verificationId: selected.id, approve }) });
+    setSelected(null); await load();
+  }
+
+  return (
+    <PageContainer>
+      <PageHeader title="Verification Review" subtitle="All verifications require admin approval." />
+      <div className="grid md:grid-cols-[320px_1fr] gap-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 h-[70vh] overflow-auto">
+          <div className="text-sm font-medium mb-2">Waiting for review</div>
+          <ul className="space-y-2">
+            {items.map(it => (
+              <li key={it.id}>
+                <button onClick={()=>setSelected(it)} className={`w-full text-left rounded-xl border px-3 py-2 ${selected?.id===it.id?'border-slate-900':'border-slate-200'}`}>
+                  <div className="text-sm font-medium">{it.vin}</div>
+                  <div className="text-xs text-slate-500">risk {it.risk_score}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 min-h-[70vh]">
+          {!selected ? (
+            <div className="text-sm text-slate-500">Select a verification to review.</div>
+          ) : (
+            <div className="grid gap-3">
+              <div className="text-sm">
+                <div className="font-medium">VIN</div>
+                <div className="font-mono">{selected.vin}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl border p-3">
+                  <div className="font-medium mb-1">Matches</div>
+                  <ul className="list-disc pl-5">
+                    <li>VIN on doc: {selected.matched?.vinMatches? 'yes':'no'}</li>
+                    <li>Name matches: {selected.matched?.nameMatches? 'yes':'no'}</li>
+                    <li>Selfie challenge: {selected.matched?.selfieOK? 'yes':'no'}</li>
+                    <li>Odometer found: {selected.matched?.mileageFound? 'yes':'no'}</li>
+                  </ul>
+                  <div className="mt-2 text-xs text-slate-500">Risk score: {selected.risk_score}</div>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <div className="font-medium mb-1">AI Summary (optional)</div>
+                  <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(selected.review_hint||{}, null, 2)}</pre>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" onClick={()=>decide(false)}>Reject</Button>
+                <Button onClick={()=>decide(true)}>Approve</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </PageContainer>
+  );
+}
+```
+
+> Add a server endpoint `/api/v1/admin/verification/list` that returns items with `status='under_review'` plus `risk_score` and `matched`/`review_hint` fields. Secure with admin auth middleware.
+
+---
+
+## 5) Client Wizard — small copy update
+
+> In your `VerifyVehicleWizard`, keep steps the same, but change the final step text to reflect **manual review**.
+
+```tsx
+// After submit -> process
+<Button onClick={process}>Analyze & Send to Review</Button>
+{status && <div className="text-sm">Status: under review • risk {status}</div>}
+```
+
+---
+
+## 6) Notifications (optional)
+
+* On `/verification/submit`: notify user “We’re processing your documents.”
+* On `/verification/process`: notify admins “New verification under review.”
+* On `/verification/decision`: notify user of decision.
+
+---
+
+## 7) Policy & PII checklist (unchanged)
+
+* Explicit consent checkbox, private storage, signed URLs, 30‑day purge of originals, retain only structured fields.
+* Log admin access to verification materials.
+
+---
+
+## 8) QA
+
+* Submissions always end in `under_review` after processing.
+* Admin must click **Approve** or **Reject** to change status.
+* OpenAI suggestions are advisory only; approval never happens automatically.
