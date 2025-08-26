@@ -1,0 +1,151 @@
+# VIN Decode “NetworkError + CSP” — One-Click Fix Pack
+
+Your console shows two issues during VIN lookup:
+
+1. **Browser is calling `http://localhost:5000/...`** from your Replit URL → blocked by CSP (`connect-src 'self' wss: ws:`).
+2. Because of (1), you get **NetworkError when attempting to fetch resource**.
+
+**Goal:** Always call the API on the **same origin** (`/api/v1/...`) in the browser, and (only in local dev) proxy `/api` to the Node server. Also relax CSP to allow same‑origin HTTPS + websockets.
+
+This pack includes: unified API helper, Vite proxy for local dev, and Helmet CSP tweak.
+
+---
+
+## 1) Client — Force same‑origin API calls
+
+**`client/src/lib/api.ts`** (drop‑in replacement)
+
+```ts
+// Use same-origin by default; never hardcode localhost in the browser
+const DEFAULT_BASE = `${location.origin}/api/v1`;
+export const API_BASE = (import.meta.env.VITE_API_BASE?.trim()) || DEFAULT_BASE;
+
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t:string|null){ t?localStorage.setItem('vg.jwt',t):localStorage.removeItem('vg.jwt'); }
+
+export async function api(path:string, init: RequestInit = {}){
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`);
+
+  const url = `${API_BASE}${path}`; // path like '/vin/decode'
+  const res = await fetch(url, { ...init, headers, credentials: 'include' });
+  const json = await res.json().catch(()=>null);
+  if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+  return json;
+}
+```
+
+> **Important:** all client calls must be `api('/vin/decode', …)` (no `/api/v1` in the call). The helper prefixes `/api/v1`.
+
+Search/replace across `client/src`: replace `api('/api/v1/` → `api('/`.
+
+---
+
+## 2) Client (dev only) — Vite proxy to Node server
+
+When you run locally (Vite at 5173, server at 5000), the browser still calls `/api/v1/...` on the Vite origin, and Vite proxies it to `http://localhost:5000`.
+
+**`vite.config.ts`** (add the `server.proxy` block if missing)
+
+```ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+        // keep the path, we already send /api/v1/...
+      }
+    }
+  }
+})
+```
+
+Result: in dev, browser → `http://localhost:5173/api/v1/...` → **Vite proxy** → `http://localhost:5000/api/v1/...`.
+
+On Replit/Prod, there is **no proxy**; both client and server live under the same origin, so `/api/v1/...` just works and passes CSP.
+
+---
+
+## 3) Server — Helmet CSP: allow same‑origin HTTPS + WS
+
+Your CSP currently shows `connect-src 'self' wss: ws:`. That blocks any absolute `http://localhost` call from your Replit origin. We’ll keep it strict, but make sure **HTTPS** and **WSS** are allowed (useful if you ever hit external HTTPS APIs from the browser) and keep self.
+
+**`server/http/security.ts`** (or where Helmet is configured)
+
+```ts
+import helmet from 'helmet';
+
+export const security = helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "connect-src": ["'self'", 'https:', 'wss:', 'ws:'],
+      // if you ever truly need localhost in the browser (not recommended), add:
+      // ...(process.env.NODE_ENV === 'development' ? ['http://localhost:5000'] : [])
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+});
+```
+
+> This **does not** permit the browser to talk to `http://localhost:5000` in production (which is what was happening) — instead, we fixed the client to **never do that**.
+
+Make sure your express app mounts this before routes: `app.use(security)`.
+
+---
+
+## 4) Server — Route mount check
+
+Ensure your server mounts the VIN router at `/api/v1/vin` and that it exports `/decode`.
+
+```ts
+// server/http/app.ts
+import vinRouter from './routes/vin';
+app.use('/api/v1/vin', vinRouter);
+```
+
+---
+
+## 5) ENV sanity
+
+**`.env`** (browser NEVER reads this; this is for server only)
+
+```
+# Do NOT point the client at localhost in production
+# VITE_API_BASE should normally be left unset so the client uses same-origin
+VITE_API_BASE=
+
+# Server
+PORT=5000
+NODE_ENV=production
+```
+
+> If you really need to override the client base in a staging environment, set `VITE_API_BASE` to an **absolute HTTPS URL** of the same site (e.g., `https://your-app.replit.app/api/v1`).
+
+---
+
+## 6) Quick regression checks
+
+* [ ] No client code calls `http://localhost:5000` or `'/api/v1/...'` directly — all go through `api('/path', …)`.
+* [ ] On Replit, VIN decode calls **`https://<your-app>/api/v1/vin/decode`** (check Network tab).
+* [ ] CSP console errors are gone.
+* [ ] VIN returns `{ ok:true, data:{ vehicle, aiInsights } }`.
+
+---
+
+## 7) Why your screenshot failed
+
+Your browser (Replit origin) tried to fetch **`http://localhost:5000/api/v1/vin/decode`** → CSP blocked it (not 'self'), so fetch threw `NetworkError`. After this pack, the browser calls **same origin** and Vite dev proxy handles local routing, so CSP is happy and the request succeeds.
+
+---
+
+## 8) Optional: add a guardrail test
+
+Add a tiny vitest to assert your client never hardcodes `/api/v1/` and doesn’t use `localhost:5000` in source. (We already provided a CI grep in the previous pack.)

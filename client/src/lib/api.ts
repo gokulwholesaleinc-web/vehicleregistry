@@ -14,7 +14,11 @@ export async function api(path: string, init: RequestInit = {}) {
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
   const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`);
   try {
-    const res = await fetch(`${base}${path}`, { ...init, headers, mode: 'cors' });
+    const res = await fetch(`${base}${path}`, { 
+      ...init, 
+      headers, 
+      credentials: 'include'  // Fixed: ensure credentials are included for CORS
+    });
     if (res.status === 401) { setToken(null); throw new Error('Your session expired. Please sign in again.'); }
     const json = await res.json().catch(() => null);
     if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);

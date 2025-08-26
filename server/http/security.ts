@@ -46,7 +46,7 @@ export function applySecurity(app: Express) {
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: false,
+    credentials: true,
     maxAge: 86400,
   }));
   
