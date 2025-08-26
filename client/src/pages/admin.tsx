@@ -98,25 +98,25 @@ export default function AdminDashboard() {
 
   // Queries
   const { data: stats } = useQuery<PlatformStats>({
-    queryKey: ['/api/admin/stats'],
+    queryKey: ['/api/v1/admin/stats'],
   });
 
   const { data: users } = useQuery<AdminUser[]>({
-    queryKey: ['/api/admin/users'],
+    queryKey: ['/api/v1/admin/users'],
   });
 
   const { data: vehicles } = useQuery<AdminVehicle[]>({
-    queryKey: ['/api/admin/vehicles'],
+    queryKey: ['/api/v1/admin/vehicles'],
   });
 
   const { data: actionLogs } = useQuery<AdminActionLog[]>({
-    queryKey: ['/api/admin/action-logs'],
+    queryKey: ['/api/v1/admin/action-logs'],
   });
 
   // Mutations
   const suspendUserMutation = useMutation({
     mutationFn: async ({ userId, reason }: { userId: string; reason: string }) => {
-      const response = await fetch(`/api/admin/users/${userId}/suspend`, {
+      const response = await fetch(`/api/v1/admin/users/${userId}/suspend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason })
@@ -125,8 +125,8 @@ export default function AdminDashboard() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/action-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/action-logs'] });
       setSelectedUser(null);
       setActionReason("");
     }
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
 
   const reactivateUserMutation = useMutation({
     mutationFn: async ({ userId, reason }: { userId: string; reason: string }) => {
-      const response = await fetch(`/api/admin/users/${userId}/reactivate`, {
+      const response = await fetch(`/api/v1/admin/users/${userId}/reactivate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason })
@@ -143,8 +143,8 @@ export default function AdminDashboard() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/action-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/action-logs'] });
       setSelectedUser(null);
       setActionReason("");
     }
@@ -152,7 +152,7 @@ export default function AdminDashboard() {
 
   const promoteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const response = await fetch(`/api/admin/users/${userId}/promote`, {
+      const response = await fetch(`/api/v1/admin/users/${userId}/promote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -160,14 +160,14 @@ export default function AdminDashboard() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/action-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/action-logs'] });
     }
   });
 
   const deleteVehicleMutation = useMutation({
     mutationFn: async ({ vehicleId, reason }: { vehicleId: string; reason: string }) => {
-      const response = await fetch(`/api/admin/vehicles/${vehicleId}`, {
+      const response = await fetch(`/api/v1/admin/vehicles/${vehicleId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason })
@@ -176,9 +176,9 @@ export default function AdminDashboard() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/vehicles'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/action-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/v1/admin/action-logs'] });
       setSelectedVehicle(null);
       setActionReason("");
     }

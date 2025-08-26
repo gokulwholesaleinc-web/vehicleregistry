@@ -50,7 +50,7 @@ export default function VehiclesPage() {
   // Privacy toggle mutation
   const togglePrivacyMutation = useMutation({
     mutationFn: async ({ vehicleId, isPublic }: { vehicleId: string; isPublic: boolean }) => {
-      const response = await api(`/vehicles/${vehicleId}`, {
+      const response = await api(`/v1/vehicles/${vehicleId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPublic })

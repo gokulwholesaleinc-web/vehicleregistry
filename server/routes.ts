@@ -324,7 +324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: 'demo@vintagegarage.dev',
           firstName: 'Demo',
           lastName: 'User',
-          role: 'user',
+          role: 'admin',
           location: 'Development',
           isPublic: true,
           createdAt: new Date(),
@@ -1298,7 +1298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Routes
-  app.get('/api/admin/stats', isAdmin, async (req, res) => {
+  app.get('/api/v1/admin/stats', isAdminJWT, async (req, res) => {
     try {
       const stats = await storage.getPlatformStats();
       res.json(stats);
@@ -1308,7 +1308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/users', isAdmin, async (req, res) => {
+  app.get('/api/v1/admin/users', isAdminJWT, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -1320,7 +1320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/users/:id/suspend', isAdmin, async (req: any, res) => {
+  app.post('/api/v1/admin/users/:id/suspend', isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const { reason } = req.body;
@@ -1337,7 +1337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/users/:id/reactivate', isAdmin, async (req: any, res) => {
+  app.post('/api/v1/admin/users/:id/reactivate', isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const { reason } = req.body;
@@ -1354,7 +1354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/users/:id/promote', isAdmin, async (req: any, res) => {
+  app.post('/api/v1/admin/users/:id/promote', isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const success = await storage.promoteUserToAdmin(req.params.id, adminId);
@@ -1370,7 +1370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/vehicles', isAdmin, async (req, res) => {
+  app.get('/api/v1/admin/vehicles', isAdminJWT, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -1382,7 +1382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/admin/vehicles/:id', isAdmin, async (req: any, res) => {
+  app.delete('/api/v1/admin/vehicles/:id', isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const { reason } = req.body;
@@ -1399,7 +1399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/action-logs', isAdmin, async (req, res) => {
+  app.get('/api/v1/admin/action-logs', isAdminJWT, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
