@@ -1,0 +1,187 @@
+# Vehicles Routes + SPA Fallback Fix (Drop‑in)
+
+This pack fixes your **404 on /vehicles and /vehicles/\:id** and makes sure new vehicles appear and can be opened. Copy the snippets into your project as indicated.
+
+---
+
+## 1) Server: SPA fallback (AFTER API routes)
+
+**File:** `server/http/app.ts` (or your main Express entry)
+
+```ts
+// ... your imports, middleware, API routes here
+
+// --- STATIC + SPA FALLBACK (put AFTER app.use('/api', ...) routes) ---
+import path from 'node:path';
+import express from 'express';
+
+const clientDir = path.join(process.cwd(), 'client', 'dist');
+app.use(express.static(clientDir));
+
+// Send index.html for any non-API route so the client router can handle it
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  res.sendFile(path.join(clientDir, 'index.html'));
+});
+```
+
+> Order matters: API first, then static, then this catch‑all `get`.
+
+---
+
+## 2) Client Router: add vehicles routes
+
+**File:** `client/src/App.tsx` (using wouter)
+
+```tsx
+import { Route, Switch } from 'wouter';
+import Dashboard from '@/pages/dashboard';
+import VehiclesPage from '@/pages/vehicles';
+import VehicleDetailPage from '@/pages/vehicle-detail';
+
+export default function App(){
+  return (
+    <Switch>
+      <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/vehicles" component={VehiclesPage} />
+      <Route path="/vehicles/:id" component={VehicleDetailPage} />
+      {/* 404 */}
+      <Route>
+        <div className="p-10 text-center">
+          <div className="text-2xl font-semibold">404 Page Not Found</div>
+          <div className="text-muted-foreground mt-2">Did you forget to add the page to the router?</div>
+        </div>
+      </Route>
+    </Switch>
+  );
+}
+```
+
+---
+
+## 3) Vehicles list page
+
+**File:** `client/src/pages/vehicles.tsx`
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'wouter';
+import { api } from '@/lib/api';
+
+export default function VehiclesPage(){
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['/api/v1/vehicles'],
+    queryFn: () => api('/vehicles').then(r => r.items ?? r.data),
+  });
+
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">{String((error as Error).message)}</div>;
+
+  const items = data ?? [];
+  return (
+    <div className="p-6 space-y-4">
+      <h1 className="text-2xl font-semibold">My Vehicles</h1>
+      {items.length === 0 && <div>No vehicles yet.</div>}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {items.map((v:any) => (
+          <Link key={v.id} href={`/vehicles/${v.id}`} className="block border rounded-xl p-4 hover:shadow">
+            <div className="text-sm text-muted-foreground">{v.vin}</div>
+            <div className="font-medium">{v.year} {v.make} {v.model}{v.trim?` ${v.trim}`:''}</div>
+            <div className="text-sm">{v.engine || '—'} • {v.transmission || '—'} • {v.fuelType || '—'}</div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 4) Vehicle detail page (shows AI insights if stored)
+
+**File:** `client/src/pages/vehicle-detail.tsx`
+
+```tsx
+import { useParams } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
+export default function VehicleDetailPage(){
+  const { id } = useParams<{id:string}>();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['/api/v1/vehicles', id],
+    queryFn: () => api(`/vehicles/${id}`).then(r => r.item ?? r.data),
+  });
+
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">{String((error as Error).message)}</div>;
+
+  const v = data;
+  const ai = v?.aiInsights ?? null;
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <div className="text-sm text-muted-foreground">{v.vin}</div>
+        <h1 className="text-2xl font-semibold">{v.year} {v.make} {v.model}{v.trim?` ${v.trim}`:''}</h1>
+        <div className="text-sm">{v.engine || '—'} • {v.transmission || '—'} • {v.fuelType || '—'} • {v.drivetrain || v.driveType || '—'}</div>
+      </div>
+      {ai && (
+        <div className="border rounded-xl p-4 bg-muted/30">
+          <div className="font-medium mb-2">AI Insights</div>
+          <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(ai, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## 5) Create‑from‑VIN: navigate and refresh list
+
+In your VIN modal create handler:
+
+```ts
+import { route } from 'wouter';
+
+const handleCreateFromVin = async () => {
+  if (!vinData) return;
+  const { vehicle, aiInsights } = vinData;
+  const resp = await api('/vehicles/create-from-vin', {
+    method: 'POST',
+    body: JSON.stringify({
+      vin: vehicle.vin,
+      year: vehicle.modelYear,
+      make: vehicle.make,
+      model: vehicle.model,
+      trim: vehicle.trim,
+      engine: vehicle.engine,
+      transmission: vehicle.transmission,
+      fuelType: vehicle.fuelType,
+      bodyStyle: vehicle.bodyClass,
+      drivetrain: vehicle.driveType,
+      mileage: vehicle.mileage ?? 0,
+      aiInsights,
+    })
+  });
+  queryClient.invalidateQueries({ queryKey: ['/api/v1/vehicles'] });
+  setOpen(false);
+  // Depending on server response shape: id may be in resp.id or resp.data.id
+  const id = resp.id ?? resp.data?.id;
+  if (id) route(`/vehicles/${id}`);
+};
+```
+
+---
+
+## 6) Common pitfalls checklist
+
+* **Server order**: API routes ➜ `express.static(client/dist)` ➜ SPA fallback `app.get(/^(?!/api/).*/)`.
+* **Client routing**: the two routes above must be present; otherwise your custom 404 renders.
+* **JWT**: ensure your `api('/vehicles')` uses the shared helper that sends `Authorization`.
+* **Links**: avoid nesting `<a>` inside a `<Link>`; use a `<span>` for the inner text.
+
+After this, refresh `/vehicles` or open `/vehicles/:id` directly—no more 404. Also, once you create a vehicle, you’ll be routed to its page and it will appear in the list.
