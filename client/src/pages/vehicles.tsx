@@ -10,8 +10,10 @@ import UserProfileModal from "@/components/user-profile-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import { Car, FileText, Sparkles, Plus, Calendar, Wrench, Edit, Camera } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Car, FileText, Sparkles, Plus, Calendar, Wrench, Edit, Camera, Globe, Lock } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { type Vehicle } from "@shared/schema";
 import { api } from "@/lib/api";
@@ -27,6 +29,8 @@ export default function VehiclesPage() {
   const [entryType, setEntryType] = useState<"modification" | "maintenance">("modification");
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const breadcrumbs = useBreadcrumbs();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
     queryKey: ["/api/v1/vehicles"],
@@ -41,6 +45,39 @@ export default function VehiclesPage() {
   const handleEditVehicle = (vehicle: Vehicle) => {
     setVehicleToEdit(vehicle);
     setIsEditVehicleModalOpen(true);
+  };
+
+  // Privacy toggle mutation
+  const togglePrivacyMutation = useMutation({
+    mutationFn: async ({ vehicleId, isPublic }: { vehicleId: string; isPublic: boolean }) => {
+      const response = await api(`/vehicles/${vehicleId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic })
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
+      toast({
+        title: "Privacy Updated",
+        description: "Vehicle privacy setting has been changed successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update privacy setting",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handlePrivacyToggle = (vehicle: Vehicle) => {
+    togglePrivacyMutation.mutate({
+      vehicleId: vehicle.id,
+      isPublic: !vehicle.isPublic
+    });
   };
 
   return (
@@ -174,6 +211,25 @@ export default function VehiclesPage() {
                         <span>
                           {format(new Date(vehicle.createdAt), 'MMM dd, yyyy')}
                         </span>
+                      </div>
+
+                      {/* Privacy Toggle */}
+                      <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <span className="text-gray-600 dark:text-gray-400 flex items-center">
+                          {vehicle.isPublic ? (
+                            <Globe className="h-3 w-3 mr-1" />
+                          ) : (
+                            <Lock className="h-3 w-3 mr-1" />
+                          )}
+                          {vehicle.isPublic ? 'Public' : 'Private'}
+                        </span>
+                        <Switch
+                          checked={vehicle.isPublic}
+                          onCheckedChange={() => handlePrivacyToggle(vehicle)}
+                          disabled={togglePrivacyMutation.isPending}
+                          data-testid={`switch-privacy-${vehicle.id}`}
+                          aria-label={`Toggle ${vehicle.year} ${vehicle.make} ${vehicle.model} privacy`}
+                        />
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 pt-2">
