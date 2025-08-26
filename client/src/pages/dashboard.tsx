@@ -13,7 +13,6 @@ import AIAssistantPanel from "@/components/ai-assistant-panel";
 import RealTimeClock from "@/components/real-time-clock";
 import VehicleDetailsModal from "@/components/vehicle-details-modal";
 import UserProfileModal from "@/components/user-profile-modal";
-import CommunitySlideshow from "@/components/community-slideshow";
 import { VinLookupModal } from "@/components/vin-lookup-modal";
 import { Breadcrumb, useBreadcrumbs } from "@/components/breadcrumb";
 import SmartMaintenancePredictions from "@/components/smart-maintenance-predictions";
@@ -87,24 +86,8 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 font-inter">
       <AppHeader onOpenProfile={() => setIsUserProfileModalOpen(true)} />
       
-      {/* Community Showcase - Hero Section */}
-      <div className="py-6 lg:py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-6">
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-2">
-              Community Showcase
-            </h1>
-            <p className="text-lg text-gray-600 dark:text-gray-300">
-              Explore amazing builds and get inspired for your next project
-            </p>
-          </div>
-          
-          <CommunitySlideshow />
-        </div>
-      </div>
-
       {/* Vehicle Dashboard Content */}
-      <div className="bg-white/30 dark:bg-gray-900/30 py-8">
+      <div className="py-8">
         <div className="container-responsive">
           <div className="mb-6">
             <Breadcrumb items={breadcrumbs} />

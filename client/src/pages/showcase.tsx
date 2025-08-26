@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { VehicleStatsDisplay } from "@/components/VehicleStatsDisplay";
 import { ExternalLink, Eye } from "lucide-react";
+import CommunitySlideshow from "@/components/community-slideshow";
 
 export default function ShowcasePage() {
   const { data: vehicles, isLoading } = useQuery<any>({
@@ -54,100 +55,120 @@ export default function ShowcasePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
       <AppHeader />
-      <div className="container mx-auto py-8">
-        <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-page-title">
-          Community Showcase
-        </h1>
-        <p className="text-muted-foreground">
-          Discover amazing builds from the VINtage Garage community
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {vehicles?.data?.map((vehicle: any) => (
-          <Card key={vehicle.id} className="overflow-hidden hover:shadow-lg transition-shadow" data-testid={`card-vehicle-${vehicle.id}`}>
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-lg" data-testid={`text-vehicle-title-${vehicle.id}`}>
-                    {vehicle.year} {vehicle.make} {vehicle.model}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    By {vehicle.currentOwner?.firstName} {vehicle.currentOwner?.lastName}
-                  </p>
-                </div>
-                {vehicle.isModified && (
-                  <Badge variant="secondary" className="ml-2">
-                    Modified
-                  </Badge>
-                )}
-              </div>
-            </CardHeader>
-
-            <CardContent className="pb-3">
-              {vehicle.thumbnailUrl ? (
-                <img
-                  src={vehicle.thumbnailUrl}
-                  alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-                  className="w-full h-48 object-cover rounded-md"
-                  data-testid={`img-vehicle-${vehicle.id}`}
-                />
-              ) : (
-                <div className="w-full h-48 bg-muted rounded-md flex items-center justify-center">
-                  <span className="text-muted-foreground">No image available</span>
-                </div>
-              )}
-
-              {vehicle.description && (
-                <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
-                  {vehicle.description}
-                </p>
-              )}
-            </CardContent>
-
-            <CardFooter className="pt-3 border-t">
-              <div className="w-full space-y-3">
-                <VehicleStatsDisplay
-                  stats={vehicle.stats || { likes: 0, follows: 0, comments: 0 }}
-                  showActions={false}
-                />
-                
-                <div className="flex gap-2">
-                  <Button asChild size="sm" className="flex-1">
-                    <Link to={`/public/${vehicle.vin}`} data-testid={`link-view-build-${vehicle.id}`}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Build
-                    </Link>
-                  </Button>
-                  
-                  <Button asChild variant="outline" size="sm">
-                    <a
-                      href={`/public/${vehicle.vin}/share`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      data-testid={`link-share-${vehicle.id}`}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </Button>
-                </div>
-              </div>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-
-      {(!vehicles?.data || vehicles.data.length === 0) && (
-        <div className="text-center py-12">
-          <h3 className="text-lg font-medium text-muted-foreground mb-2">
-            No public builds yet
-          </h3>
-          <p className="text-muted-foreground">
-            Be the first to share your build with the community!
-          </p>
+      
+      {/* Featured Community Builds Hero Section */}
+      <div className="py-6 lg:py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-6">
+            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-2" data-testid="text-page-title">
+              Featured Community Builds
+            </h1>
+            <p className="text-lg text-gray-600 dark:text-gray-300">
+              Discover incredible builds from automotive enthusiasts worldwide
+            </p>
+          </div>
+          
+          <CommunitySlideshow />
         </div>
-      )}
+      </div>
+      
+      {/* Individual Vehicle Showcase */}
+      <div className="bg-white/30 dark:bg-gray-900/30 py-8">
+        <div className="container mx-auto px-4">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              Community Builds
+            </h2>
+            <p className="text-gray-600 dark:text-gray-300">
+              Browse detailed builds from the VINtage Garage community
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {vehicles?.data?.map((vehicle: any) => (
+              <Card key={vehicle.id} className="overflow-hidden hover:shadow-lg transition-shadow" data-testid={`card-vehicle-${vehicle.id}`}>
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-lg" data-testid={`text-vehicle-title-${vehicle.id}`}>
+                      {vehicle.year} {vehicle.make} {vehicle.model}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      By {vehicle.currentOwner?.firstName} {vehicle.currentOwner?.lastName}
+                    </p>
+                  </div>
+                  {vehicle.isModified && (
+                    <Badge variant="secondary" className="ml-2">
+                      Modified
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+
+              <CardContent className="pb-3">
+                {vehicle.thumbnailUrl ? (
+                  <img
+                    src={vehicle.thumbnailUrl}
+                    alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                    className="w-full h-48 object-cover rounded-md"
+                    data-testid={`img-vehicle-${vehicle.id}`}
+                  />
+                ) : (
+                  <div className="w-full h-48 bg-muted rounded-md flex items-center justify-center">
+                    <span className="text-muted-foreground">No image available</span>
+                  </div>
+                )}
+
+                {vehicle.description && (
+                  <p className="text-sm text-muted-foreground mt-3 line-clamp-2">
+                    {vehicle.description}
+                  </p>
+                )}
+              </CardContent>
+
+              <CardFooter className="pt-3 border-t">
+                <div className="w-full space-y-3">
+                  <VehicleStatsDisplay
+                    stats={vehicle.stats || { likes: 0, follows: 0, comments: 0 }}
+                    showActions={false}
+                  />
+                  
+                  <div className="flex gap-2">
+                    <Button asChild size="sm" className="flex-1">
+                      <Link to={`/public/${vehicle.vin}`} data-testid={`link-view-build-${vehicle.id}`}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Build
+                      </Link>
+                    </Button>
+                    
+                    <Button asChild variant="outline" size="sm">
+                      <a
+                        href={`/public/${vehicle.vin}/share`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid={`link-share-${vehicle.id}`}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </CardFooter>
+              </Card>
+            ))}
+
+            {(!vehicles?.data || vehicles.data.length === 0) && (
+              <div className="text-center py-12 col-span-full">
+                <h3 className="text-lg font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  No public builds yet
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Be the first to share your build with the community!
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
