@@ -3,11 +3,11 @@ import { getAuthToken, api } from "@/lib/auth";
 
 export function useAuth() {
   const token = getAuthToken();
+  const isDev = import.meta.env.DEV;
   
   const { data: user, isLoading, error } = useQuery({
     queryKey: ["/api/v1/auth/user"],
     queryFn: async () => {
-      if (!token) return null;
       try {
         const result = await api("/api/v1/auth/user");
         console.log("Auth query result:", result);
@@ -23,11 +23,11 @@ export function useAuth() {
       }
     },
     retry: false,
-    enabled: !!token,
+    enabled: !!token || isDev, // In dev, try even without token thanks to dev auth shim
   });
 
-  const isAuthenticated = !!user && !!token;
-  const authLoading = !!token && isLoading;
+  const isAuthenticated = !!user && (!!token || isDev); // In dev, user presence is enough
+  const authLoading = (!!token || isDev) && isLoading;
   
   console.log("useAuth state:", { 
     token: token ? "present" : "missing", 
