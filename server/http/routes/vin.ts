@@ -11,32 +11,19 @@ const Base = process.env.VIN_API_BASE || 'https://vpic.nhtsa.dot.gov/api/vehicle
 
 // Helper: Better transmission detection from NHTSA's inconsistent fields
 function normalizeTransmission(row: any): string | null {
-  // NHTSA sometimes fills different fields; pull from all plausible sources
-  const candidates: string[] = [
-    row.TransmissionDescriptor,
-    row.TransmissionStyle,
-    row.Transmission,
-  ].filter(Boolean);
-
-  // If nothing present, derive a guess from keywords in any engine/drive fields
-  const joined = candidates.join(' ').toLowerCase();
-  const hasManual = /(manual|m\/t|6-speed manual|5-speed manual|stick|std)/.test(joined);
-  const hasDCT = /(dual\s*clutch|dct)/.test(joined);
-  const hasAMT = /(automated\s*manual|amt)/.test(joined);
-  const hasCVT = /(cvt|continuously\s*variable)/.test(joined);
-  const hasAuto = /(auto(?!matic?)|automatic|a\/t)/.test(joined);
-
-  if (hasDCT) return 'Dual Clutch';
-  if (hasAMT) return 'Automated Manual';
-  if (hasManual) return 'Manual';
-  if (hasCVT) return 'CVT';
-  if (hasAuto) return 'Automatic';
-
-  // Fallback: if NHTSA exposes TransmissionSpeeds + Style separately
+  const parts = [row.TransmissionDescriptor, row.TransmissionStyle, row.Transmission]
+    .filter(Boolean).map(String);
+  const txt = parts.join(' ').toLowerCase();
   const speeds = row.TransmissionSpeeds || row.NumberOfForwardGears;
-  const style = row.TransmissionStyle || row.TransmissionDescriptor;
-  if (speeds && style) return `${speeds}-Speed ${String(style).trim()}`;
-  return style || null;
+  const has = (re: RegExp) => re.test(txt);
+  
+  if (has(/dual\s*clutch|\bdct\b/)) return 'Dual Clutch';
+  if (has(/automated\s*manual|\bamt\b/)) return 'Automated Manual';
+  if (has(/continuously\s*variable|\bcvt\b/)) return 'CVT';
+  if (has(/manual|\bm\/t\b|\bstick\b/)) return speeds ? `${speeds}-Speed Manual` : 'Manual';
+  if (has(/automatic|\ba\/t\b/)) return speeds ? `${speeds}-Speed Automatic` : 'Automatic';
+  if (speeds && parts[0]) return `${speeds}-Speed ${parts[0]}`;
+  return parts[0] || null;
 }
 
 const router = Router();

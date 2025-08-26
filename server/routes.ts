@@ -45,6 +45,12 @@ export function processJWT(req: any, res: any, next: any) {
       // Token invalid, continue without setting user
     }
   }
+  
+  // Dev auth shim - auto-authenticate in development
+  if (process.env.NODE_ENV !== 'production' && !req.user) {
+    req.user = { id: 'demo-user' };
+  }
+  
   next();
 }
 
