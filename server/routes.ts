@@ -888,6 +888,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date()
       };
 
+      // Debug: Log the received data
+      console.log('🔍 PUT /api/v1/vehicles/:id - Received data:', {
+        vehicleId,
+        body: req.body,
+        files: files ? Object.keys(files) : 'none'
+      });
+
       // Only update provided fields
       if (req.body.color !== undefined && req.body.color !== '') {
         updateData.color = req.body.color;
@@ -899,8 +906,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.lastServiceDate = req.body.lastServiceDate;
       }
 
+      console.log('🔍 Update data being sent to storage:', updateData);
+
       // Update vehicle
       const updatedVehicle = await storage.updateVehicle(vehicleId, updateData);
+      
+      console.log('🔍 Vehicle after update:', updatedVehicle);
+      
       res.json({ ok: true, data: updatedVehicle });
     } catch (error) {
       console.error('Error updating vehicle:', error);
