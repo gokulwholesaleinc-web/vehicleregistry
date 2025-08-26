@@ -1,0 +1,407 @@
+# Unified Fix Pack — v1 API, Auth Cleanup, VIN Normalize, SPA Fallback (Single Drop‑in)
+
+This **single canvas** resolves BOTH concerns without creating duplicate systems:
+
+* Removes duplicate auth endpoints → keep **one**: `/api/v1/auth/user`.
+* Adds a tiny **dev auth shim** → no more 401s locally.
+* Keeps your existing structure (no parallel routers) but **standardizes responses** to `{ ok, data?, error? }`.
+* Improves **VIN transmission** normalization (Manual / Automatic / DCT / AMT / CVT; includes speed when available).
+* Ensures **/vehicles** and **/vehicles/\:id** don’t 404 (SPA fallback in dev & prod).
+* Client uses a single **/api/v1** base via helper.
+* Vehicles list & detail pages (minimal), with **AI insights** visible.
+
+> Copy/paste the blocks into your files. If your folders differ, adjust imports only.
+
+---
+
+## 1) Auth middleware — dev shim + unified guards
+
+**File:** `server/http/middleware/auth.ts`
+
+```ts
+import jwt from 'jsonwebtoken';
+
+const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+type Next = (err?: any) => void;
+
+export function processJWT(req: any, _res: any, next: Next) {
+  // Dev auto-auth shim so local runs never 401
+  if (process.env.NODE_ENV !== 'production' && !req.user) {
+    req.user = { id: 'demo-user', roles: ['user'] };
+  }
+  const h = req.headers?.authorization || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (token) {
+    try {
+      const payload: any = jwt.verify(token, SECRET);
+      req.user = { id: payload.sub || payload.id, roles: payload.roles || ['user'] };
+    } catch {
+      // ignore invalid token; route guards will 401
+    }
+  }
+  next();
+}
+
+export function requireAuth(req: any, res: any, next: Next) {
+  if (!req.user) return res.status(401).json({ ok: false, error: { message: 'Unauthorized' } });
+  next();
+}
+
+export function requireAdmin(req: any, res: any, next: Next) {
+  if (!req.user) return res.status(401).json({ ok: false, error: { message: 'Unauthorized' } });
+  if (!Array.isArray(req.user.roles) || !req.user.roles.includes('admin')) {
+    return res.status(403).json({ ok: false, error: { message: 'Forbidden' } });
+  }
+  next();
+}
+```
+
+---
+
+## 2) Single auth route — delete dupes; keep this
+
+**Delete/stop mounting:** any legacy `GET /api/jwt/user` and `GET /api/auth/user` routes.
+
+**Keep only this under v1:**
+
+**File:** `server/http/routes/auth.ts`
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../middleware/auth';
+
+const router = Router();
+
+// Single source of truth — /api/v1/auth/user
+router.get('/user', requireAuth, (req: any, res: any) => {
+  res.json({ ok: true, data: req.user });
+});
+
+export default router;
+```
+
+Mount it once in your server entry (below).
+
+---
+
+## 3) VIN decode — improved transmission normalization
+
+**File:** `server/http/routes/vin.ts`
+
+```ts
+import { Router } from 'express';
+
+const Base = 'https://vpic.nhtsa.dot.gov/api/vehicles';
+const router = Router();
+
+function normalizeTransmission(row: any): string | null {
+  const txt = [row.TransmissionDescriptor, row.TransmissionStyle, row.Transmission]
+    .filter(Boolean).join(' ').toLowerCase();
+  const speeds = row.TransmissionSpeeds || row.NumberOfForwardGears;
+  const has = (re: RegExp) => re.test(txt);
+  if (has(/dual\s*clutch|\bdct\b/)) return 'Dual Clutch';
+  if (has(/automated\s*manual|\bamt\b/)) return 'Automated Manual';
+  if (has(/continuously\s*variable|\bcvt\b/)) return 'CVT';
+  if (has(/manual|\bm\/t\b|\bstick\b/)) return speeds ? `${speeds}-Speed Manual` : 'Manual';
+  if (has(/automatic|\ba\/t\b/)) return speeds ? `${speeds}-Speed Automatic` : 'Automatic';
+  return row.TransmissionStyle || null;
+}
+
+// POST /api/v1/vin/decode { vin, mileage? }
+router.post('/decode', async (req: any, res: any) => {
+  const vin = String(req.body?.vin || '').trim().toUpperCase();
+  if (vin.length !== 17) return res.status(400).json({ ok: false, error: { message: 'VIN must be 17 characters' } });
+  try {
+    const rr = await fetch(`${Base}/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
+    if (!rr.ok) return res.status(502).json({ ok: false, error: { message: 'VIN service unavailable' } });
+    const json: any = await rr.json();
+    const row = json?.Results?.[0] || {};
+    const data = {
+      vin,
+      make: row.Make || null,
+      model: row.Model || null,
+      modelYear: row.ModelYear ? Number(row.ModelYear) : null,
+      trim: row.Trim || null,
+      engine: [row.EngineManufacturer, row.EngineModel].filter(Boolean).join(' ') || null,
+      transmission: normalizeTransmission(row),
+      fuelType: row.FuelTypePrimary || null,
+      driveType: row.DriveType || null,
+      bodyClass: row.BodyClass || null,
+      mileage: req.body?.mileage ?? null,
+    };
+    res.json({ ok: true, data });
+  } catch (e) {
+    console.error('VIN decode error', e);
+    res.status(500).json({ ok: false, error: { message: 'VIN decode failed' } });
+  }
+});
+
+export default router;
+```
+
+---
+
+## 4) Vehicles routes — unified responses (no duplicates)
+
+**File:** `server/http/routes/vehicles.ts`
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../middleware/auth';
+
+const router = Router();
+// Replace with your DB. This in-memory array is a dev stub.
+const vehiclesDB: any[] = [];
+
+// GET /api/v1/vehicles
+router.get('/', requireAuth, (req: any, res: any) => {
+  const uid = req.user.id;
+  res.json({ ok: true, data: vehiclesDB.filter(v => v.userId === uid) });
+});
+
+// GET /api/v1/vehicles/:id
+router.get('/:id', requireAuth, (req: any, res: any) => {
+  const uid = req.user.id;
+  const item = vehiclesDB.find(v => String(v.id) === req.params.id && v.userId === uid);
+  if (!item) return res.status(404).json({ ok: false, error: { message: 'Not found' } });
+  res.json({ ok: true, data: item });
+});
+
+// POST /api/v1/vehicles/create-from-vin
+router.post('/create-from-vin', requireAuth, (req: any, res: any) => {
+  const b = req.body || {};
+  for (const k of ['vin','make','model','year']) {
+    if (!b[k]) return res.status(400).json({ ok:false, error:{ message:`Missing ${k}` } });
+  }
+  if (vehiclesDB.find(v => v.userId === req.user.id && v.vin === b.vin)) {
+    return res.status(409).json({ ok:false, error:{ message:'Vehicle already exists' } });
+  }
+  const item = {
+    id: vehiclesDB.length + 1,
+    userId: req.user.id,
+    vin: b.vin,
+    make: b.make,
+    model: b.model,
+    year: b.year,
+    trim: b.trim || null,
+    engine: b.engine || null,
+    transmission: b.transmission || null,
+    fuelType: b.fuelType || null,
+    drivetrain: b.drivetrain || b.driveType || null,
+    bodyStyle: b.bodyStyle || null,
+    mileage: b.mileage ?? 0,
+    aiInsights: b.aiInsights ?? null,
+    createdAt: new Date(),
+  };
+  vehiclesDB.push(item);
+  res.status(201).json({ ok: true, data: { id: item.id } });
+});
+
+export default router;
+```
+
+---
+
+## 5) Express app — mount v1 routes + SPA fallback
+
+**File:** `server/http/app.ts`
+
+```ts
+import express from 'express';
+import path from 'node:path';
+import cookieParser from 'cookie-parser';
+import { processJWT } from './middleware/auth';
+import authRouter from './routes/auth';
+import vinRouter from './routes/vin';
+import vehiclesRouter from './routes/vehicles';
+
+export const app = express();
+
+app.use(express.json({ limit: '10mb' }));
+app.use(cookieParser());
+app.use(processJWT);
+
+// --- API v1 ---
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/vin', vinRouter);
+app.use('/api/v1/vehicles', vehiclesRouter);
+
+// --- Static + SPA fallback ---
+const clientDir = path.join(process.cwd(), 'client', 'dist');
+app.use(express.static(clientDir));
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  res.sendFile(path.join(clientDir, 'index.html'));
+});
+```
+
+---
+
+## 6) Client API helper — enforce v1 base
+
+**File:** `client/src/lib/api.ts`
+
+```ts
+export const API_BASE = `${location.origin}/api/v1`;
+
+export async function api(path: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Content-Type') && options.body) headers.set('Content-Type','application/json');
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    ...options,
+    headers,
+  });
+  const txt = await res.text();
+  const json = txt ? JSON.parse(txt) : null; // 204-safe
+  if (!res.ok) throw new Error(json?.error?.message || `${res.status} ${res.statusText}`);
+  return json ?? { ok: true, data: null };
+}
+```
+
+---
+
+## 7) Client routes — add vehicles pages (fix 404)
+
+**File:** `client/src/App.tsx`
+
+```tsx
+import { Switch, Route } from 'wouter';
+import Dashboard from '@/pages/dashboard';
+import VehiclesPage from '@/pages/vehicles';
+import VehicleDetailPage from '@/pages/vehicle-detail';
+
+export default function App(){
+  return (
+    <Switch>
+      <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/vehicles" component={VehiclesPage} />
+      <Route path="/vehicles/:id" component={VehicleDetailPage} />
+      <Route>
+        <div className="p-10 text-center">
+          <div className="text-2xl font-semibold">404 Page Not Found</div>
+          <div className="text-muted-foreground mt-2">Did you forget to add the page to the router?</div>
+        </div>
+      </Route>
+    </Switch>
+  );
+}
+```
+
+**File:** `client/src/pages/vehicles.tsx`
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'wouter';
+import { api } from '@/lib/api';
+
+export default function VehiclesPage(){
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['/api/v1/vehicles'],
+    queryFn: () => api('/vehicles').then(r => r.data),
+  });
+
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">{String((error as Error).message)}</div>;
+  const items = Array.isArray(data) ? data : [];
+
+  return (
+    <div className="p-6 space-y-4">
+      <h1 className="text-2xl font-semibold">My Vehicles</h1>
+      {items.length===0 && <div>No vehicles yet.</div>}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {items.map((v:any)=> (
+          <Link key={v.id} href={`/vehicles/${v.id}`} className="block border rounded-xl p-4 hover:shadow">
+            <div className="text-sm text-muted-foreground">{v.vin}</div>
+            <div className="font-medium">{v.year} {v.make} {v.model}{v.trim?` ${v.trim}`:''}</div>
+            <div className="text-sm">{v.engine || '—'} • {v.transmission || '—'} • {v.fuelType || '—'}</div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+**File:** `client/src/pages/vehicle-detail.tsx`
+
+```tsx
+import { useParams } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
+export default function VehicleDetailPage(){
+  const { id } = useParams<{id:string}>();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['/api/v1/vehicles', id],
+    queryFn: () => api(`/vehicles/${id}`).then(r => r.data),
+  });
+
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">{String((error as Error).message)}</div>;
+  const v = data;
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="text-sm text-muted-foreground">{v.vin}</div>
+      <h1 className="text-2xl font-semibold">{v.year} {v.make} {v.model}{v.trim?` ${v.trim}`:''}</h1>
+      <div className="text-sm">{v.engine||'—'} • {v.transmission||'—'} • {v.fuelType||'—'} • {v.drivetrain||v.driveType||'—'}</div>
+      {v.aiInsights && (
+        <div className="border rounded-xl p-4 bg-muted/30">
+          <div className="font-medium mb-2">AI Insights</div>
+          <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(v.aiInsights, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## 8) VIN modal — create → navigate (uses v1 + ok/data shape)
+
+**Snippet (inside your VIN modal component)**
+
+```ts
+import { route } from 'wouter';
+import { api } from '@/lib/api';
+
+async function handleCreateFromVin(vinData: any, queryClient: any, close: ()=>void){
+  const vehicle = vinData?.vehicle ?? vinData; // support either shape
+  const aiInsights = vinData?.aiInsights ?? null;
+  const resp = await api('/vehicles/create-from-vin', {
+    method: 'POST',
+    body: JSON.stringify({
+      vin: vehicle.vin,
+      year: vehicle.modelYear,
+      make: vehicle.make,
+      model: vehicle.model,
+      trim: vehicle.trim,
+      engine: vehicle.engine,
+      transmission: vehicle.transmission,
+      fuelType: vehicle.fuelType,
+      bodyStyle: vehicle.bodyClass,
+      drivetrain: vehicle.driveType,
+      mileage: vehicle.mileage ?? 0,
+      aiInsights,
+    })
+  });
+  const id = resp?.data?.id;
+  queryClient.invalidateQueries({ queryKey: ['/api/v1/vehicles'] });
+  close();
+  if (id) route(`/vehicles/${id}`);
+}
+```
+
+---
+
+## 9) Final quick checks
+
+* API endpoints mounted only under **/api/v1**; delete/stop mounting **/api/jwt/** and **/api/auth/** duplicates.
+* Dev **401s gone** (shim in `processJWT`).
+* VIN decode reflects **Manual/DCT/CVT/Automatic** expectations.
+* `/vehicles` and `/vehicles/:id` open directly (SPA fallback).
+* Every client call goes through `api('/…')` helper (no hardcoded `/api/v1` paths).
+* Vehicle detail renders **AI insights** if present.
