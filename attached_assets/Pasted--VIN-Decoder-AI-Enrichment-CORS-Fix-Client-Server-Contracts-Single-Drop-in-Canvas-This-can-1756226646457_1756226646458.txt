@@ -1,0 +1,286 @@
+# VIN Decoder + AI Enrichment — CORS Fix + Client/Server Contracts (Single Drop‑in Canvas)
+
+This canvas fixes your **CORS** error, unifies **client ↔ server paths**, normalizes the **VIN decode response shape**, and plugs in your **OpenAI enrichment** helpers. It’s designed to match the code you pasted (Express + TS, Vite/React, React Query, Zod, Tailwind).
+
+---
+
+## 0) ENV — set these
+
+**`.env.example` (root)**
+
+```env
+# Client
+VITE_API_BASE=
+
+# Server
+FRONTEND_BASE=                  # e.g. https://<your-frontend>.replit.dev (set in hosted env)
+JWT_SECRET=change_me_super_long_random
+VIN_API_BASE=https://vpic.nhtsa.dot.gov/api/vehicles
+OPENAI_API_KEY=                 # optional for enrichment
+```
+
+**Dev tip:** leave `VITE_API_BASE` **empty** so the client uses same‑origin `/api/v1` (no CORS locally). In hosted envs, set `FRONTEND_BASE`.
+
+---
+
+## 1) Server: CORS + Helmet (preflight for Authorization header)
+
+**`server/http/security.ts`**
+
+```ts
+import type { Express } from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+
+function allowlist(){
+  const out = new Set<string>();
+  if (process.env.FRONTEND_BASE) out.add(process.env.FRONTEND_BASE);
+  out.add('http://localhost:5173');
+  out.add('http://127.0.0.1:5173');
+  return Array.from(out);
+}
+
+export function applySecurity(app: Express){
+  app.use(helmet({ crossOriginOpenerPolicy:{ policy:'same-origin-allow-popups' } }));
+  const list = allowlist();
+  app.use(cors({
+    origin(origin, cb){ if (!origin) return cb(null, true); cb(null, list.includes(origin)); },
+    methods:['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders:['Content-Type','Authorization'],
+    credentials:false,
+    maxAge:86400,
+  }));
+  app.options('*', cors());
+}
+```
+
+Mount **before** routers:
+
+```ts
+// server/http/app.ts (excerpt)
+import express from 'express';
+import { applySecurity } from './security';
+
+export function buildApp(){
+  const app = express();
+  applySecurity(app);               // ← fixes CORS/preflight
+  app.use(express.json({ limit:'1mb' }));
+  // mount /api/v1 routes afterwards
+  return app;
+}
+```
+
+---
+
+## 2) Server: VIN route — normalized shape + cache + your AI enrichment
+
+> You pasted a great starting route + `enhanceVehicleData`. Two key tweaks below:
+>
+> 1. **Normalize response** to contain both `vehicle` and `aiInsights` consistently.
+> 2. Ensure **Node fetch** exists (Node 18+ OK) and add a tiny fallback type guard.
+
+**`server/http/routes/vin.ts`** (drop‑in)
+
+```ts
+import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { DecodeVINInput } from '../validators/schemas';
+import { enhanceVehicleData } from '../../services/openai';
+
+const cache = new Map<string, { data: any; exp: number }>();
+const TTL = 24*60*60*1000; // 24h
+const limiter = rateLimit({ windowMs: 60_000, max: 20 });
+const Base = process.env.VIN_API_BASE || 'https://vpic.nhtsa.dot.gov/api/vehicles';
+
+const router = Router();
+
+router.post('/decode', limiter, async (req, res) => {
+  const parsed = DecodeVINInput.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ok:false, error: parsed.error.flatten() });
+
+  const vin = parsed.data.vin.toUpperCase();
+  const hit = cache.get(vin); const now = Date.now();
+  if (hit && hit.exp > now) return res.json({ ok:true, data: hit.data });
+
+  try {
+    const url = `${Base}/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
+    const response = await fetch(url as any);
+    if (!response.ok) return res.status(502).json({ ok:false, error:{ message:'VIN service unavailable' } });
+    const json: any = await response.json();
+    const row = json?.Results?.[0] || {};
+
+    const vehicle = {
+      vin,
+      make: row.Make || null,
+      model: row.Model || null,
+      modelYear: row.ModelYear ? Number(row.ModelYear) : null,
+      trim: row.Trim || null,
+      bodyClass: row.BodyClass || null,
+      engine: [row.EngineManufacturer, row.EngineModel].filter(Boolean).join(' '),
+      cylinders: row.EngineCylinders ? Number(row.EngineCylinders) : null,
+      displacement: row.DisplacementL ? Number(row.DisplacementL) : null,
+      transmission: row.TransmissionStyle || null,
+      driveType: row.DriveType || null,
+      plantCountry: row.PlantCountry || null,
+      fuelType: row.FuelTypePrimary || null,
+      mileage: parsed.data.mileage ?? null,
+    };
+
+    let aiInsights: any = null;
+    if (vehicle.make && vehicle.model && vehicle.modelYear) {
+      try {
+        aiInsights = await enhanceVehicleData({
+          make: vehicle.make, model: vehicle.model, modelYear: vehicle.modelYear,
+          trim: vehicle.trim || undefined, engine: vehicle.engine || undefined,
+          mileage: vehicle.mileage || undefined
+        });
+      } catch (e) {
+        console.warn('AI enhancement failed (continuing):', e);
+      }
+    }
+
+    const data = { vehicle, aiInsights };
+    cache.set(vin, { data, exp: now + TTL });
+    res.json({ ok:true, data });
+  } catch (error) {
+    console.error('VIN decode error:', error);
+    res.status(500).json({ ok:false, error:{ message:'VIN decode failed' } });
+  }
+});
+
+export default router;
+```
+
+> **Contract:** the API always returns `{ ok:true, data: { vehicle, aiInsights } }`. The UI must read values from `data.vehicle.*` and `data.aiInsights`.
+
+Mount once:
+
+```ts
+// e.g., server/http/app.ts
+import vinRouter from './routes/vin';
+app.use('/api/v1/vin', vinRouter);
+```
+
+---
+
+## 3) Client: Base API helper (same‑origin by default) + fix path usage
+
+**Why you got CORS:** some places call `fetch('/api/v1/...')` and others use `api('/api/v1/...')` while your helper likely already prefixes `/api/v1`. That can create **double prefixes** and mixed origins.
+
+**`client/src/lib/api.ts`** (drop‑in)
+
+```ts
+const base = (import.meta.env.VITE_API_BASE?.trim()) || `${location.origin}/api/v1`;
+export function getToken(){ return localStorage.getItem('vg.jwt'); }
+export function setToken(t:string|null){ t?localStorage.setItem('vg.jwt',t):localStorage.removeItem('vg.jwt'); }
+export async function api(path:string, init:RequestInit={}){
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type','application/json');
+  const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`);
+  try{
+    const res = await fetch(`${base}${path}`, { ...init, headers, mode:'cors' });
+    if (res.status === 401){ setToken(null); throw new Error('Your session expired. Please sign in again.'); }
+    const json = await res.json().catch(()=>null);
+    if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+    return json;
+  }catch(err:any){
+    const msg = err?.message?.includes('Failed to fetch') ? 'Network error: API not reachable (CORS/base URL).' : (err?.message||'Request failed');
+    throw new Error(msg);
+  }
+}
+```
+
+**Important usage rule:** when calling `api()`, pass **paths without** `/api/v1`. Example: `api('/vin/decode', { ... })` ✅
+
+---
+
+## 4) Client: Update your hooks + modal to the new contract
+
+### A) Replace direct fetches with the helper and correct paths
+
+**`client/src/hooks/useVinDecoder.ts`** (new or update existing)
+
+```ts
+import { useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
+export function useVinDecoder(){
+  return useMutation({
+    mutationFn: async (vin: string) => {
+      const res = await api('/vin/decode', { method:'POST', body: JSON.stringify({ vin }) });
+      // API returns { vehicle, aiInsights }
+      return res.data as { vehicle: any; aiInsights: any };
+    }
+  });
+}
+```
+
+### B) Patch your VIN modal to read `data.vehicle.*` (not top‑level)
+
+Your pasted `VinLookupModal` already calls `api('/api/v1/vin/decode', ...)`. **Change to** `api('/vin/decode', ...)` and read from `res.data.vehicle`.
+
+**`client/src/components/VinLookupModal.tsx`** (key diffs only)
+
+```tsx
+// 1) call helper with correct path
+const result = await api('/vin/decode', { method:'POST', body: JSON.stringify({ vin: data.vin, mileage: data.currentMileage }) });
+// 2) set the entire payload so you can render
+setVinData(result.data); // where result.data = { vehicle, aiInsights }
+
+// ... later in render, reference vinData.vehicle
+<p data-testid="text-decoded-year">{vinData.vehicle.modelYear}</p>
+<p data-testid="text-decoded-make">{vinData.vehicle.make}</p>
+<p data-testid="text-decoded-model">{vinData.vehicle.model}</p>
+<p data-testid="text-decoded-trim">{vinData.vehicle.trim || 'Unknown'}</p>
+<p data-testid="text-decoded-engine">{vinData.vehicle.engine}</p>
+<p data-testid="text-decoded-transmission">{vinData.vehicle.transmission}</p>
+
+{/* Optional: show enrichment if present */}
+{vinData.aiInsights && (
+  <div className="mt-4 text-sm">
+    <div className="font-medium">Estimated Auction Price</div>
+    <div>{vinData.aiInsights?.marketValue?.estimated || 'Unknown'}</div>
+    {Array.isArray(vinData.aiInsights?.funFacts) && vinData.aiInsights.funFacts.length>0 && (
+      <ul className="list-disc pl-5 mt-2">
+        {vinData.aiInsights.funFacts.slice(0,3).map((f:string,i:number)=>(<li key={i}>{f}</li>))}
+      </ul>
+    )}
+    <div className="text-xs text-slate-500 mt-1">Estimates are informational only.</div>
+  </div>
+)}
+```
+
+> **Reason:** Your server returns `{ vehicle, aiInsights }`, but your old UI types expected `{ year, make, ... }` top‑level. This alignment prevents undefined fields and 404s caused by wrong paths (`/api/v1` duplication).
+
+---
+
+## 5) (Optional) Server validator for `DecodeVINInput`
+
+If your `../validators/schemas` doesn’t already include mileage/zip, expand it like this:
+
+```ts
+import { z } from 'zod';
+export const DecodeVINInput = z.object({
+  vin: z.string().trim().regex(/^[A-HJ-NPR-Z0-9]{17}$/i, 'Invalid VIN'),
+  mileage: z.number().int().min(0).optional(),
+  zip: z.string().regex(/^\d{5}$/).optional(),
+});
+```
+
+---
+
+## 6) QA checklist
+
+* [ ] **CORS**: No red errors; `POST /api/v1/vin/decode` succeeds from your hosted front‑end.
+* [ ] **Paths**: All client calls use `api('/…')` (no `/api/v1` duplication). The helper prefixes `/api/v1`.
+* [ ] **Contract**: UI reads `data.vehicle.*` and `data.aiInsights.*` without undefined fields.
+* [ ] **Enrichment**: When `OPENAI_API_KEY` is set, facts and a price estimate appear with a disclaimer; if not set, base specs still render.
+* [ ] **Rate‑limit/cache**: 429 after burst; subsequent same VIN returns fast (cache hit).
+
+---
+
+## 7) Future hooks (when ready)
+
+* Swap cache for **Redis** (use `REDIS_URL`) and persist VIN decodes.
+* Feed `aiInsights.marketValue.estimated` into your **Notifications** system (“price updated”) or buyer‑report PDF.
+* Add a `GET /vin/:vin` that only serves cached/spec data (no OpenAI call) for public pages.
