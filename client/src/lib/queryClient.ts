@@ -67,7 +67,7 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: true, // Enable refetch on focus for real-time updates
-      staleTime: 1000 * 60 * 5, // 5 minutes instead of Infinity for better cache invalidation
+      staleTime: 1000 * 60 * 2, // 2 minutes for better real-time feel
       gcTime: 1000 * 60 * 10, // 10 minutes garbage collection time
       retry: false,
     },

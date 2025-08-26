@@ -54,8 +54,12 @@ export default function VehiclesPage() {
       const response = await apiRequest('PATCH', `/api/v1/vehicles/${vehicleId}`, { isPublic });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Invalidate both list and individual vehicle caches
       queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles", data.vehicleId] });
+      // Also invalidate community data since privacy affects public visibility
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/community"] });
       toast({
         title: "Privacy Updated",
         description: "Vehicle privacy setting has been changed successfully.",
