@@ -205,32 +205,32 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
         </div>
       </CardHeader>
       
-      <CardContent>
+      <CardContent className="space-y-4">
         <Tabs defaultValue="vin-decode" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 gap-1">
-            <TabsTrigger value="vin-decode" className="text-xs">
-              <Search className="w-3 h-3 mr-1" />
-              <span className="hidden sm:inline">VIN</span>
+          <TabsList className="grid w-full grid-cols-5 gap-1 p-1">
+            <TabsTrigger value="vin-decode" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
+              <Search className="w-4 h-4 mb-1" />
+              <span className="leading-none">VIN</span>
             </TabsTrigger>
-            <TabsTrigger value="maintenance" className="text-xs">
-              <Wrench className="w-3 h-3 mr-1" />
-              <span className="hidden sm:inline">Maintenance</span>
+            <TabsTrigger value="maintenance" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
+              <Wrench className="w-4 h-4 mb-1" />
+              <span className="leading-none">Maint</span>
             </TabsTrigger>
-            <TabsTrigger value="photo" className="text-xs">
-              <Camera className="w-3 h-3 mr-1" />
-              <span className="hidden sm:inline">Photo</span>
+            <TabsTrigger value="photo" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
+              <Camera className="w-4 h-4 mb-1" />
+              <span className="leading-none">Photo</span>
             </TabsTrigger>
-            <TabsTrigger value="categorize" className="text-xs">
-              <Tag className="w-3 h-3 mr-1" />
-              <span className="hidden sm:inline">Categorize</span>
+            <TabsTrigger value="categorize" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
+              <Tag className="w-4 h-4 mb-1" />
+              <span className="leading-none">Cat</span>
             </TabsTrigger>
-            <TabsTrigger value="tools" className="text-xs">
-              <RefreshCw className="w-3 h-3 mr-1" />
-              <span className="hidden sm:inline">Tools</span>
+            <TabsTrigger value="tools" className="flex flex-col items-center justify-center p-2 text-xs h-auto min-h-[50px]">
+              <RefreshCw className="w-4 h-4 mb-1" />
+              <span className="leading-none">Tools</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="vin-decode" className="mt-4">
+          <TabsContent value="vin-decode" className="mt-6">
             {vehicle ? (
               <div className="space-y-3">
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -312,7 +312,7 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
             )}
           </TabsContent>
 
-          <TabsContent value="maintenance" className="mt-4">
+          <TabsContent value="maintenance" className="mt-6">
             <div className="space-y-3">
               {vehicle ? (
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
@@ -380,7 +380,7 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="photo" className="mt-4">
+          <TabsContent value="photo" className="mt-6">
             <div className="space-y-3">
               <div>
                 <label className="text-sm font-medium">Upload Photo</label>
@@ -429,7 +429,7 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="categorize" className="mt-4">
+          <TabsContent value="categorize" className="mt-6">
             <div className="space-y-3">
               <Input
                 placeholder="Entry title"
@@ -485,7 +485,7 @@ export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="tools" className="mt-4">
+          <TabsContent value="tools" className="mt-6">
             <div className="space-y-3">
               {vehicle && (
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
