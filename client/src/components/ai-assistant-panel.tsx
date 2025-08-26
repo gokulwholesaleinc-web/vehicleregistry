@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +16,7 @@ import {
   useDuplicateChecker,
   useCacheInvalidator
 } from "@/hooks/useAI";
+import type { Vehicle } from "@shared/schema";
 import { 
   Bot, 
   Search, 
@@ -27,9 +30,20 @@ import {
   Loader2
 } from "lucide-react";
 
-export default function AIAssistantPanel() {
+interface AIAssistantPanelProps {
+  vehicleId?: string;
+}
+
+export default function AIAssistantPanel({ vehicleId }: AIAssistantPanelProps) {
   const { toast } = useToast();
   
+  // Fetch vehicle data if vehicleId is provided
+  const { data: vehicle } = useQuery<Vehicle>({
+    queryKey: ['/api/v1/vehicles', vehicleId],
+    queryFn: () => api(`/vehicles/${vehicleId}`).then(r => r.data),
+    enabled: !!vehicleId,
+  });
+
   // State for different AI features
   const [vinInput, setVinInput] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -44,8 +58,9 @@ export default function AIAssistantPanel() {
   const duplicateChecker = useDuplicateChecker();
   const cacheInvalidator = useCacheInvalidator();
 
-  const handleVinDecode = async () => {
-    if (vinInput.length !== 17) {
+  const handleVinDecode = async (vin?: string) => {
+    const vinToUse = vin || vinInput;
+    if (vinToUse.length !== 17) {
       toast({
         title: "Invalid VIN",
         description: "VIN must be exactly 17 characters",
@@ -55,15 +70,15 @@ export default function AIAssistantPanel() {
     }
 
     try {
-      const result = await vinDecoder.mutateAsync(vinInput);
+      const result = await vinDecoder.mutateAsync(vinToUse);
       toast({
-        title: "VIN Decoded Successfully! 🚗",
+        title: "VIN Analyzed Successfully! 🚗",
         description: `${result.year} ${result.make} ${result.model} - ${result.engine}`,
       });
     } catch (error) {
       toast({
-        title: "VIN Decode Failed",
-        description: "Unable to decode this VIN. Please try again.",
+        title: "VIN Analysis Failed",
+        description: "Unable to analyze this VIN. Please try again.",
         variant: "destructive"
       });
     }
@@ -119,8 +134,13 @@ export default function AIAssistantPanel() {
     }
   };
 
-  const handleDuplicateCheck = async () => {
-    if (!duplicateCheck.identifier) {
+  const handleDuplicateCheck = async (identifier?: string, type?: "vin" | "license") => {
+    const checkData = {
+      identifier: identifier || duplicateCheck.identifier,
+      type: type || duplicateCheck.type
+    };
+    
+    if (!checkData.identifier) {
       toast({
         title: "Missing Information",
         description: "Please enter something to check for duplicates",
@@ -130,7 +150,7 @@ export default function AIAssistantPanel() {
     }
 
     try {
-      const result = await duplicateChecker.mutateAsync(duplicateCheck);
+      const result = await duplicateChecker.mutateAsync(checkData);
       if (result.exists) {
         toast({
           title: "Duplicate Found! ⚠️",
@@ -178,7 +198,7 @@ export default function AIAssistantPanel() {
           <div className="flex-1 min-w-0">
             <CardTitle className="text-xl truncate">AI Assistant</CardTitle>
             <CardDescription className="text-sm leading-relaxed">
-              Intelligent features powered by OpenAI
+              {vehicle ? `AI insights for your ${vehicle.year} ${vehicle.make} ${vehicle.model}` : "Intelligent features powered by OpenAI"}
             </CardDescription>
           </div>
           <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse-glow flex-shrink-0" />
@@ -211,62 +231,120 @@ export default function AIAssistantPanel() {
           </TabsList>
 
           <TabsContent value="vin-decode" className="mt-4">
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium">VIN Number</label>
-                <Input
-                  placeholder="Enter 17-character VIN"
-                  value={vinInput}
-                  onChange={(e) => setVinInput(e.target.value.toUpperCase())}
-                  maxLength={17}
-                  className="input-enhanced"
-                  data-testid="input-vin"
-                />
-              </div>
-              <Button 
-                onClick={handleVinDecode}
-                disabled={vinDecoder.isPending || vinInput.length !== 17}
-                className="btn-primary w-full"
-                data-testid="button-decode-vin"
-              >
-                {vinDecoder.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Search className="w-4 h-4 mr-2" />
-                )}
-                Decode VIN with AI
-              </Button>
-              
-              {vinDecoder.data && (
-                <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+            {vehicle ? (
+              <div className="space-y-3">
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="font-semibold text-green-800 dark:text-green-300">Decoded Successfully</span>
+                    <CheckCircle className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-blue-800 dark:text-blue-300">Current Vehicle VIN</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><strong>Make:</strong> {vinDecoder.data.make}</div>
-                    <div><strong>Model:</strong> {vinDecoder.data.model}</div>
-                    <div><strong>Year:</strong> {vinDecoder.data.year}</div>
-                    <div><strong>Engine:</strong> {vinDecoder.data.engine}</div>
+                  <div className="text-sm font-mono bg-white dark:bg-gray-800 p-2 rounded border">
+                    {vehicle.vin || "No VIN available"}
                   </div>
-                  <Badge variant="secondary" className="mt-2">
-                    Confidence: {Math.round(vinDecoder.data.confidence * 100)}%
-                  </Badge>
+                  <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                    <div><strong>Make:</strong> {vehicle.make}</div>
+                    <div><strong>Model:</strong> {vehicle.model}</div>
+                    <div><strong>Year:</strong> {vehicle.year}</div>
+                    <div><strong>Trim:</strong> {vehicle.trim || "Unknown"}</div>
+                  </div>
                 </div>
-              )}
-            </div>
+                {vehicle.vin && (
+                  <Button 
+                    onClick={() => handleVinDecode(vehicle.vin)}
+                    disabled={vinDecoder.isPending}
+                    className="btn-primary w-full"
+                    data-testid="button-decode-vehicle-vin"
+                  >
+                    {vinDecoder.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4 mr-2" />
+                    )}
+                    Analyze VIN with AI
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium">VIN Number</label>
+                  <Input
+                    placeholder="Enter 17-character VIN"
+                    value={vinInput}
+                    onChange={(e) => setVinInput(e.target.value.toUpperCase())}
+                    maxLength={17}
+                    className="input-enhanced"
+                    data-testid="input-vin"
+                  />
+                </div>
+                <Button 
+                  onClick={() => handleVinDecode(vinInput)}
+                  disabled={vinDecoder.isPending || vinInput.length !== 17}
+                  className="btn-primary w-full"
+                  data-testid="button-decode-vin"
+                >
+                  {vinDecoder.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4 mr-2" />
+                  )}
+                  Decode VIN with AI
+                </Button>
+              </div>
+            )}
+            
+            {vinDecoder.data && (
+              <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <span className="font-semibold text-green-800 dark:text-green-300">AI Analysis Results</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><strong>Make:</strong> {vinDecoder.data.make}</div>
+                  <div><strong>Model:</strong> {vinDecoder.data.model}</div>
+                  <div><strong>Year:</strong> {vinDecoder.data.year}</div>
+                  <div><strong>Engine:</strong> {vinDecoder.data.engine}</div>
+                </div>
+                <Badge variant="secondary" className="mt-2">
+                  Confidence: {Math.round(vinDecoder.data.confidence * 100)}%
+                </Badge>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="maintenance" className="mt-4">
             <div className="space-y-3">
+              {vehicle ? (
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
+                  <div className="text-sm">
+                    <div><strong>Vehicle:</strong> {vehicle.year} {vehicle.make} {vehicle.model}</div>
+                    <div><strong>Mileage:</strong> {vehicle.currentMileage?.toLocaleString() || "Unknown"} miles</div>
+                    <div><strong>Last Service:</strong> {vehicle.lastServiceDate ? new Date(vehicle.lastServiceDate).toLocaleDateString() : "Unknown"}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg border border-orange-200 dark:border-orange-800 mb-3">
+                  <div className="text-sm text-orange-700 dark:text-orange-300">
+                    Select a vehicle to get personalized maintenance recommendations
+                  </div>
+                </div>
+              )}
+              
               <Button 
-                onClick={() => maintenanceRecs.mutate({
-                  make: "Toyota",
-                  model: "Camry", 
+                onClick={() => maintenanceRecs.mutate(vehicle ? {
+                  make: vehicle.make,
+                  model: vehicle.model, 
+                  year: vehicle.year,
+                  mileage: vehicle.currentMileage || 0,
+                  modifications: [], // TODO: Fetch actual modifications
+                  lastMaintenance: [] // TODO: Fetch actual maintenance history
+                } : {
+                  make: "Unknown",
+                  model: "Unknown", 
                   year: 2020,
                   mileage: 50000,
-                  modifications: ["Cold Air Intake"],
-                  lastMaintenance: ["Oil Change"]
+                  modifications: [],
+                  lastMaintenance: []
                 })}
                 disabled={maintenanceRecs.isPending}
                 className="btn-primary w-full"
@@ -409,45 +487,76 @@ export default function AIAssistantPanel() {
 
           <TabsContent value="tools" className="mt-4">
             <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Button 
-                  onClick={handleDuplicateCheck}
-                  disabled={duplicateChecker.isPending}
-                  variant="outline"
-                  className="btn-secondary"
-                  data-testid="button-check-duplicates"
-                >
-                  {duplicateChecker.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 mr-2" />
-                  )}
-                  Check Duplicates
-                </Button>
-                
+              {vehicle && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800 mb-3">
+                  <div className="text-sm">
+                    <div><strong>Quick Checks for:</strong> {vehicle.year} {vehicle.make} {vehicle.model}</div>
+                    {vehicle.vin && (
+                      <div className="mt-2">
+                        <Button 
+                          onClick={() => handleDuplicateCheck(vehicle.vin, "vin")}
+                          disabled={duplicateChecker.isPending}
+                          size="sm"
+                          variant="outline"
+                          className="mr-2"
+                        >
+                          Check VIN Duplicates
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              <div>
+                <label className="text-sm font-medium">Manual Duplicate Check</label>
+                <div className="flex gap-2 mt-1">
+                  <select 
+                    value={duplicateCheck.type}
+                    onChange={(e) => setDuplicateCheck({...duplicateCheck, type: e.target.value as "vin" | "license"})}
+                    className="input-enhanced flex-shrink-0"
+                  >
+                    <option value="vin">VIN</option>
+                    <option value="license">License Plate</option>
+                  </select>
+                  <Input
+                    placeholder="Enter identifier"
+                    value={duplicateCheck.identifier}
+                    onChange={(e) => setDuplicateCheck({...duplicateCheck, identifier: e.target.value})}
+                    className="input-enhanced"
+                    data-testid="input-duplicate-check"
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={() => handleDuplicateCheck(duplicateCheck.identifier, duplicateCheck.type)}
+                disabled={duplicateChecker.isPending || !duplicateCheck.identifier}
+                className="btn-primary w-full"
+                data-testid="button-duplicate-check"
+              >
+                {duplicateChecker.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                )}
+                Check for Duplicates
+              </Button>
+              
+              <div className="border-t pt-3">
                 <Button 
                   onClick={handleCacheRefresh}
                   disabled={cacheInvalidator.isPending}
-                  variant="outline"
-                  className="btn-secondary"
-                  data-testid="button-refresh-cache"
+                  className="btn-secondary w-full"
+                  data-testid="button-cache-refresh"
                 >
                   {cacheInvalidator.isPending ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <RefreshCw className="w-4 h-4 mr-2" />
                   )}
-                  Refresh Cache
+                  Refresh Data Cache
                 </Button>
               </div>
-              
-              <Input
-                placeholder="Enter VIN/title to check for duplicates"
-                value={duplicateCheck.identifier}
-                onChange={(e) => setDuplicateCheck(prev => ({ ...prev, identifier: e.target.value }))}
-                className="input-enhanced"
-                data-testid="input-duplicate-check"
-              />
             </div>
           </TabsContent>
         </Tabs>

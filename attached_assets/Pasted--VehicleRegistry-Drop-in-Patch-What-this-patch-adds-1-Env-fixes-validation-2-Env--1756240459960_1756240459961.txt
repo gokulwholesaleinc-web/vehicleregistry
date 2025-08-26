@@ -1,0 +1,459 @@
+# VehicleRegistry — Drop‑in Patch
+
+> **What this patch adds**
+>
+> 1. Env fixes & validation, 2) Env‑driven CORS with robust preflights, 3) VIN global uniqueness guard (+ SQL unique index), 4) JWT secret consistency, 5) VIN decode caching + user‑scoped rate limiting, 6) Safer image uploads (size/type limits), 7) Security headers + unified error handler.
+>
+> **How to use:** Paste this whole canvas into your Replit AI Agent task. The agent can create/overwrite files as shown. If some paths differ in your repo, keep the code and adjust paths to match your layout.
+
+---
+
+## 0) Install/Confirm Dependencies
+
+```bash
+# server deps
+npm i cors helmet pino express-rate-limit zod dotenv multer sharp
+# types (if TS)
+npm i -D @types/cors @types/multer
+```
+
+> Assumes you already have: express, drizzle-orm, better-sqlite3 or sqlite driver (or pg), jsonwebtoken. If not, install them too.
+
+---
+
+## 1) Fix & Normalize Environment Variables
+
+### **.env.example** (replace your current content with this)
+
+```env
+# ---------------------------------
+# Server
+# ---------------------------------
+NODE_ENV=development
+PORT=5000
+VITE_API_BASE=http://localhost:5000/api
+
+# JWT/Auth
+JWT_SECRET=replace_me_with_strong_secret
+
+# External APIs
+OPENAI_API_KEY=sk-...
+NHTSA_API_BASE=https://vpic.nhtsa.dot.gov/api/vehicles
+
+# CORS (comma-separated list)
+CORS_ALLOW_ORIGINS=http://localhost:5173,https://your-prod-domain.com
+
+# Database (adjust if you use Postgres)
+DATABASE_URL=file:./data.sqlite
+```
+
+### **server/config/env.ts** (new)
+
+```ts
+import 'dotenv/config';
+import { z } from 'zod';
+
+const EnvSchema = z.object({
+  NODE_ENV: z.enum(['development','test','production']).default('development'),
+  PORT: z.string().default('5000'),
+  VITE_API_BASE: z.string().url().optional(),
+  JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 chars'),
+  OPENAI_API_KEY: z.string().optional(),
+  NHTSA_API_BASE: z.string().url().default('https://vpic.nhtsa.dot.gov/api/vehicles'),
+  CORS_ALLOW_ORIGINS: z.string().default('http://localhost:5173'),
+  DATABASE_URL: z.string().optional(),
+});
+
+export const env = EnvSchema.parse(process.env);
+export const isProd = env.NODE_ENV === 'production';
+export const PORT = Number(env.PORT);
+```
+
+---
+
+## 2) Security & CORS Middleware (env-driven)
+
+### **server/middleware/security.ts** (new)
+
+```ts
+import helmet from 'helmet';
+import type { RequestHandler } from 'express';
+
+export const security: RequestHandler = helmet({
+  // You can enable a stricter CSP later if you eliminate inline scripts.
+  referrerPolicy: { policy: 'no-referrer' },
+});
+```
+
+### **server/middleware/cors.ts** (new)
+
+```ts
+import cors from 'cors';
+import type { RequestHandler } from 'express';
+import { env } from '../config/env';
+
+const allowlist = env.CORS_ALLOW_ORIGINS.split(',').map(s => s.trim());
+
+export const corsMiddleware: RequestHandler = cors({
+  origin(origin, cb) {
+    // Allow same-origin or tools (curl/server-side) with no Origin header
+    if (!origin || allowlist.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS: origin not allowed'));
+  },
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  credentials: false, // set true only if you move to httpOnly cookies
+});
+```
+
+### **server/middleware/errorHandler.ts** (new)
+
+```ts
+import type { ErrorRequestHandler } from 'express';
+
+export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  const status = (err as any)?.statusCode || 500;
+  const code = (err as any)?.code || 'INTERNAL_ERROR';
+  const message = err?.message || 'Unexpected server error';
+  if (process.env.NODE_ENV !== 'test') {
+    console.error('[error]', { status, code, message, stack: err?.stack });
+  }
+  res.status(status).json({ ok: false, error: { code, message } });
+};
+```
+
+---
+
+## 3) App Bootstrap Wiring
+
+### **server/index.ts** (edit — or `server/app.ts` depending on your layout)
+
+```ts
+import express from 'express';
+import { PORT } from './config/env';
+import { security } from './middleware/security';
+import { corsMiddleware } from './middleware/cors';
+import { errorHandler } from './middleware/errorHandler';
+import routes from './routes';
+
+const app = express();
+app.disable('x-powered-by');
+
+app.use(security);
+app.use(corsMiddleware);
+app.options('*', corsMiddleware); // preflight
+
+app.use(express.json({ limit: '1mb' }));
+app.use('/api/v1', routes);
+
+app.use(errorHandler);
+
+app.listen(PORT, () => {
+  console.log(`[server] listening on http://localhost:${PORT}`);
+});
+
+export default app;
+```
+
+### **server/routes/index.ts** (new — central router)
+
+```ts
+import { Router } from 'express';
+import auth from './modules/auth';
+import vehicles from './modules/vehicles';
+import vin from './modules/vin';
+import uploads from './modules/uploads';
+
+const router = Router();
+router.use('/auth', auth);
+router.use('/vehicles', vehicles);
+router.use('/vin', vin);
+router.use('/uploads', uploads);
+
+export default router;
+```
+
+---
+
+## 4) JWT Consistency (single secret)
+
+### **server/modules/auth/middleware.ts** (edit)
+
+```ts
+import jwt from 'jsonwebtoken';
+import type { Request, Response, NextFunction } from 'express';
+import { env } from '../../config/env';
+
+export interface AuthUser { id: number; email: string; role?: string }
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return res.status(401).json({ ok: false, error: { code: 'NO_TOKEN', message: 'Missing token' } });
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as AuthUser & { iat: number; exp: number };
+    (req as any).user = { id: payload.id, email: payload.email, role: payload.role };
+    return next();
+  } catch {
+    return res.status(401).json({ ok: false, error: { code: 'BAD_TOKEN', message: 'Invalid token' } });
+  }
+}
+```
+
+> Ensure any sign() calls also use `env.JWT_SECRET` only.
+
+---
+
+## 5) Database: VIN Uniqueness & Cache
+
+> Adjust imports for your Drizzle dialect (sqlite vs pg). Below uses **sqlite** style.
+
+### **server/db/schema/vehicles.ts** (edit or create)
+
+```ts
+import { sqliteTable, integer, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+
+export const vehicles = sqliteTable('vehicles', {
+  id: integer('id').primaryKey(),
+  ownerUserId: integer('owner_user_id').notNull(),
+  vin: text('vin').notNull(), // store uppercase only
+  make: text('make'),
+  model: text('model'),
+  year: integer('year'),
+  // ... other columns
+}, (t) => ({
+  vinUnique: uniqueIndex('vehicles_vin_unique').on(t.vin),
+}));
+```
+
+### **server/db/schema/vinCache.ts** (new)
+
+```ts
+import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+
+export const vinCache = sqliteTable('vin_cache', {
+  vin: text('vin').primaryKey(),
+  json: text('json').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+```
+
+### **server/db/migrations/2025\_08\_26\_add\_vin\_unique\_and\_cache.sql** (new)
+
+```sql
+-- Ensure unique VIN and create VIN cache
+CREATE UNIQUE INDEX IF NOT EXISTS vehicles_vin_unique ON vehicles(vin);
+
+CREATE TABLE IF NOT EXISTS vin_cache (
+  vin TEXT PRIMARY KEY,
+  json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+```
+
+---
+
+## 6) Vehicles Route: Prevent Duplicate VINs
+
+### **server/routes/modules/vehicles.ts** (new or edit existing vehicles router)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../modules/auth/middleware';
+import { db } from '../../db/client';
+import { vehicles } from '../../db/schema/vehicles';
+import { eq } from 'drizzle-orm';
+
+const router = Router();
+
+router.post('/', requireAuth, async (req, res) => {
+  const vinRaw = String(req.body?.vin || '').trim().toUpperCase();
+  if (!/^[A-HJ-NPR-Z0-9]{11,17}$/.test(vinRaw)) {
+    return res.status(400).json({ ok: false, error: { code: 'BAD_VIN', message: 'Invalid VIN' } });
+  }
+
+  const exists = await db.select({ id: vehicles.id })
+    .from(vehicles)
+    .where(eq(vehicles.vin, vinRaw))
+    .limit(1);
+
+  if (exists.length) {
+    return res.status(409).json({ ok: false, error: { code: 'VIN_TAKEN', message: 'This VIN is already registered.' } });
+  }
+
+  const ownerUserId = (req as any).user.id as number;
+  // Add whatever other fields you support
+  await db.insert(vehicles).values({ ownerUserId, vin: vinRaw }).run?.();
+
+  return res.status(201).json({ ok: true });
+});
+
+export default router;
+```
+
+---
+
+## 7) VIN Decode Route: Cache + User‑Scoped Rate Limit
+
+### **server/routes/modules/vin.ts** (new or edit your current vin route)
+
+```ts
+import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { requireAuth } from '../modules/auth/middleware';
+import { env } from '../../config/env';
+import { db } from '../../db/client';
+import { vinCache } from '../../db/schema/vinCache';
+import { eq } from 'drizzle-orm';
+
+const router = Router();
+
+const limiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyGenerator: (req) => (req as any).user?.id ? `u:${(req as any).user.id}` : (req.ip || 'ip:unknown'),
+  standardHeaders: true,
+});
+
+router.get('/decode/:vin', requireAuth, limiter, async (req, res, next) => {
+  try {
+    const vin = String(req.params.vin || '').trim().toUpperCase();
+    if (!/^[A-HJ-NPR-Z0-9]{11,17}$/.test(vin)) {
+      return res.status(400).json({ ok: false, error: { code: 'BAD_VIN', message: 'Invalid VIN' } });
+    }
+
+    // 1) cache
+    const cached = await db.select().from(vinCache).where(eq(vinCache.vin, vin)).limit(1);
+    if (cached.length) {
+      const payload = JSON.parse(cached[0].json);
+      return res.json({ ok: true, data: payload, cached: true });
+    }
+
+    // 2) fetch NHTSA
+    const url = `${env.NHTSA_API_BASE}/DecodeVin/${encodeURIComponent(vin)}?format=json`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      return res.status(502).json({ ok: false, error: { code: 'VIN_UPSTREAM', message: 'NHTSA error' } });
+    }
+    const raw = await r.json();
+    const normalized = normalizeNhtsa(raw);
+
+    // 3) store cache
+    await db.insert(vinCache).values({ vin, json: JSON.stringify(normalized), updatedAt: Date.now() }).run?.();
+
+    return res.json({ ok: true, data: normalized, cached: false });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+export default router;
+
+// --- helpers ---
+function normalizeNhtsa(raw: any) {
+  const rec = Object.fromEntries((raw?.Results || []).map((r: any) => [r.Variable, r.Value]));
+  const year = Number(rec['Model Year'] || rec['ModelYear'] || 0) || undefined;
+  return {
+    year,
+    make: rec['Make'] || undefined,
+    model: rec['Model'] || undefined,
+    bodyClass: rec['Body Class'] || rec['BodyClass'] || undefined,
+    engine: rec['Engine Model'] || rec['Engine Model'] || undefined,
+    series: rec['Series'] || undefined,
+    trim: rec['Trim'] || undefined,
+    plantCountry: rec['Plant Country'] || undefined,
+    raw,
+  };
+}
+```
+
+---
+
+## 8) Safer Image Uploads
+
+### **server/routes/modules/uploads.ts** (new)
+
+```ts
+import { Router } from 'express';
+import multer from 'multer';
+import sharp from 'sharp';
+import { requireAuth } from '../modules/auth/middleware';
+
+const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.mimetype)) {
+      return cb(new Error('Only PNG/JPG/WEBP images are allowed'));
+    }
+    cb(null, true);
+  }
+});
+
+router.post('/photos', requireAuth, upload.single('photo'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ ok:false, error:{ code:'NO_FILE', message:'No file uploaded' } });
+    const out = await sharp(req.file.buffer).resize(1600, 1600, { fit: 'inside' }).toFormat('webp').toBuffer();
+    // TODO: Persist to your storage (disk, S3, etc.) and return a URL/key
+    return res.status(201).json({ ok:true, size: out.length });
+  } catch (err) { next(err); }
+});
+
+export default router;
+```
+
+---
+
+## 9) Frontend API Helper (ensure Authorization & base URL)
+
+### **web/src/lib/api.ts** (edit path to match your app)
+
+```ts
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+
+export async function api(path: string, opts: RequestInit = {}) {
+  const token = localStorage.getItem('token');
+  const headers = new Headers(opts.headers || {});
+  headers.set('Content-Type', 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  if (res.status === 401) {
+    // Optionally route to /login
+  }
+  return res;
+}
+```
+
+---
+
+## 10) Optional: Pino Logger (plug-in quickly if you want logs)
+
+### **server/utils/logger.ts** (new, optional)
+
+```ts
+import pino from 'pino';
+export const logger = pino({ level: process.env.NODE_ENV === 'production' ? 'info' : 'debug' });
+```
+
+Use `logger.info({ route:'/vin/decode' , userId })` inside handlers if you want structured logs.
+
+---
+
+## 11) Quick Smoke Tests (Optional, Vitest)
+
+Create a couple of tiny tests later to avoid regressions (e.g., /auth/whoami, /vin/decode with mock).
+
+---
+
+### Done 🎉
+
+**Summary of behavioral changes:**
+
+* CORS now honors `CORS_ALLOW_ORIGINS` and supports proper preflights.
+* VINs are enforced unique; attempts to reuse return `409`.
+* JWTs consistently verified with `JWT_SECRET`.
+* VIN decoding caches results and rate-limits per user.
+* Uploads limited to 5MB and safe image types; images normalized to WEBP.
+* Security headers on by default; unified JSON error responses.

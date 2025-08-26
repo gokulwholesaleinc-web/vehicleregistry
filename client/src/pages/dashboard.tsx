@@ -37,7 +37,7 @@ export default function Dashboard() {
   if (!selectedVehicleId) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-        <AppHeader unread={3} onAddEntry={() => handleAddEntry("modification")} />
+        <AppHeader onOpenProfile={() => setIsUserProfileModalOpen(true)} />
         
         {/* Community Showcase - Hero Section */}
         <div className="py-6 lg:py-8">
@@ -85,7 +85,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 font-inter">
-      <AppHeader unread={3} onAddEntry={() => handleAddEntry("modification")} />
+      <AppHeader onOpenProfile={() => setIsUserProfileModalOpen(true)} />
       
       {/* Community Showcase - Hero Section */}
       <div className="py-6 lg:py-8">
@@ -127,7 +127,7 @@ export default function Dashboard() {
 
           {/* AI Assistant Panel - Full width on mobile, dedicated column on desktop */}
           <div className="xl:col-span-1 space-y-6 lg:space-y-8">
-            <AIAssistantPanel />
+            <AIAssistantPanel vehicleId={selectedVehicleId} />
             {/* Mobile-only clock widget */}
             <div className="block lg:hidden">
               <RealTimeClock variant="full" />

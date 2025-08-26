@@ -1,0 +1,389 @@
+# Admin Audit Log — Drop‑in Patch
+
+> **What you get**
+>
+> 1. Append‑only `audit_events` table (with tamper‑evident hash chain), 2) Request context middleware (request id, actor, ip, ua), 3) Central `audit.log()` helper with safe redaction, 4) Auto‑events for mutating HTTP verbs, 5) Admin API with filtering + pagination, 6) Indexes for fast queries, 7) Example instrumentation calls in routes.
+>
+> **How to use**: Paste this entire patch into Replit AI agent. Adjust file paths to your layout if needed (this assumes the server structure from your last patch: `server/…`).
+
+---
+
+## 0) Dependencies
+
+```bash
+npm i nanoid
+```
+
+---
+
+## 1) DB Schema & Migration
+
+### **server/db/schema/auditEvents.ts** (new)
+
+```ts
+import { sqliteTable, integer, text, index } from 'drizzle-orm/sqlite-core';
+
+export const auditEvents = sqliteTable('audit_events', {
+  id: integer('id').primaryKey(),
+  ts: integer('ts').notNull(), // epoch ms
+  requestId: text('request_id').notNull(),
+  actorUserId: integer('actor_user_id'), // nullable for unauth
+  actorRole: text('actor_role'),
+  ip: text('ip'),
+  userAgent: text('user_agent'),
+  method: text('method').notNull(),
+  path: text('path').notNull(),
+  statusCode: integer('status_code'),
+  action: text('action').notNull(), // e.g. VEHICLE_CREATE, AUTH_LOGIN, VIN_DECODE
+  resourceType: text('resource_type'), // e.g. vehicle, user, vin, photo
+  resourceId: text('resource_id'),
+  metadata: text('metadata'), // JSON string — redacted
+  prevHash: text('prev_hash'),
+  hash: text('hash').notNull(),
+}, (t) => ({
+  idxTs: index('audit_idx_ts').on(t.ts),
+  idxActor: index('audit_idx_actor').on(t.actorUserId),
+  idxAction: index('audit_idx_action').on(t.action),
+  idxRes: index('audit_idx_res').on(t.resourceType, t.resourceId),
+}));
+```
+
+### **server/db/migrations/2025\_08\_26\_create\_audit\_events.sql** (new)
+
+```sql
+CREATE TABLE IF NOT EXISTS audit_events (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  request_id TEXT NOT NULL,
+  actor_user_id INTEGER,
+  actor_role TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  method TEXT NOT NULL,
+  path TEXT NOT NULL,
+  status_code INTEGER,
+  action TEXT NOT NULL,
+  resource_type TEXT,
+  resource_id TEXT,
+  metadata TEXT,
+  prev_hash TEXT,
+  hash TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS audit_idx_ts ON audit_events(ts);
+CREATE INDEX IF NOT EXISTS audit_idx_actor ON audit_events(actor_user_id);
+CREATE INDEX IF NOT EXISTS audit_idx_action ON audit_events(action);
+CREATE INDEX IF NOT EXISTS audit_idx_res ON audit_events(resource_type, resource_id);
+```
+
+> Run your migration step the same way you do for other Drizzle migrations.
+
+---
+
+## 2) Request Context (request id, ip, ua)
+
+### **server/middleware/requestContext.ts** (new)
+
+```ts
+import type { RequestHandler } from 'express';
+import { customAlphabet } from 'nanoid';
+
+const nano = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 16);
+
+export const requestContext: RequestHandler = (req, _res, next) => {
+  // trust proxy set in app bootstrap
+  (req as any).requestId = nano();
+  (req as any).clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip;
+  (req as any).userAgent = req.headers['user-agent'] || '';
+  next();
+};
+```
+
+> In `server/index.ts` (or `app.ts`), add `app.set('trust proxy', 1)` and `app.use(requestContext)` **before** routes.
+
+---
+
+## 3) Redaction helper
+
+### **server/utils/redact.ts** (new)
+
+```ts
+export function redact(input: any) {
+  const s = JSON.stringify(input, (_k, v) => {
+    if (typeof v === 'string') {
+      if (/bearer\s+[\w-]+\.[\w-]+\.[\w-]+/i.test(v)) return '[REDACTED_TOKEN]';
+      if (/^sk-[A-Za-z0-9]/.test(v)) return '[REDACTED_KEY]';
+      if (/password|secret|token|apiKey/i.test(_k as string)) return '[REDACTED]';
+    }
+    return v;
+  });
+  return s;
+}
+```
+
+---
+
+## 4) Audit helper (append‑only, hash chain)
+
+### **server/utils/audit.ts** (new)
+
+```ts
+import crypto from 'crypto';
+import { db } from '../db/client';
+import { auditEvents } from '../db/schema/auditEvents';
+import { desc, eq } from 'drizzle-orm';
+import { redact } from './redact';
+
+export type AuditInput = {
+  req: any;
+  action: string; // e.g. 'VEHICLE_CREATE'
+  resourceType?: string;
+  resourceId?: string | number;
+  statusCode?: number;
+  metadata?: Record<string, any>;
+};
+
+function sha256(s: string) {
+  return crypto.createHash('sha256').update(s).digest('hex');
+}
+
+async function getPrevHash() {
+  const last = await db.select({ hash: auditEvents.hash })
+    .from(auditEvents)
+    .orderBy(desc(auditEvents.id))
+    .limit(1);
+  return last[0]?.hash || '';
+}
+
+export async function log({ req, action, resourceType, resourceId, statusCode, metadata }: AuditInput) {
+  const ts = Date.now();
+  const requestId = req?.requestId || 'UNKNOWN';
+  const actor = (req as any).user || undefined;
+  const actorUserId = actor?.id ?? null;
+  const actorRole = actor?.role ?? null;
+  const ip = req?.clientIp || req?.ip || '';
+  const userAgent = req?.userAgent || req?.headers?.['user-agent'] || '';
+  const method = req?.method || '';
+  const path = req?.originalUrl || req?.url || '';
+  const redactedMeta = redact(metadata || {});
+
+  const prevHash = await getPrevHash();
+  const material = JSON.stringify({ ts, requestId, actorUserId, actorRole, ip, userAgent, method, path, statusCode, action, resourceType, resourceId, redactedMeta, prevHash });
+  const hash = sha256(material);
+
+  await db.insert(auditEvents).values({
+    ts,
+    requestId,
+    actorUserId,
+    actorRole,
+    ip,
+    userAgent,
+    method,
+    path,
+    statusCode: statusCode ?? null,
+    action,
+    resourceType: resourceType ?? null,
+    resourceId: resourceId != null ? String(resourceId) : null,
+    metadata: redactedMeta,
+    prevHash,
+    hash,
+  }).run?.();
+}
+```
+
+---
+
+## 5) Auto‑events for mutating requests
+
+### **server/middleware/autoAudit.ts** (new)
+
+```ts
+import type { RequestHandler } from 'express';
+import { log } from '../utils/audit';
+
+const MUTATING = new Set(['POST','PUT','PATCH','DELETE']);
+
+export const autoAudit: RequestHandler = (req, res, next) => {
+  if (!MUTATING.has(req.method)) return next();
+
+  // capture after response is sent, so we know status code
+  res.on('finish', () => {
+    const status = res.statusCode;
+    const action = `HTTP_${req.method}`; // generic; add explicit logs in routes for richer actions
+    log({ req, action, resourceType: 'http', resourceId: req.path, statusCode: status, metadata: { query: req.query } })
+      .catch(err => console.error('[audit:auto] failed', err));
+  });
+
+  next();
+};
+```
+
+> This gives you baseline coverage automatically; you’ll still add **explicit** audit events in important routes (login, vehicle create/update, photo upload, admin changes).
+
+---
+
+## 6) Admin API for browsing audit logs
+
+### **server/modules/auth/requireAdmin.ts** (new)
+
+```ts
+import type { Request, Response, NextFunction } from 'express';
+
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  if (user?.role === 'admin') return next();
+  return res.status(403).json({ ok:false, error:{ code:'FORBIDDEN', message:'Admin only' } });
+}
+```
+
+### **server/routes/modules/audit.ts** (new)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../../modules/auth/middleware';
+import { requireAdmin } from '../../modules/auth/requireAdmin';
+import { db } from '../../../db/client';
+import { auditEvents } from '../../../db/schema/auditEvents';
+import { and, between, desc, eq, like, sql } from 'drizzle-orm';
+
+const router = Router();
+
+router.get('/', requireAuth, requireAdmin, async (req, res) => {
+  const {
+    q, // free text (action, path, resource)
+    action,
+    resourceType,
+    resourceId,
+    actorUserId,
+    from, // epoch ms
+    to,   // epoch ms
+    page = '1',
+    limit = '50',
+  } = req.query as Record<string, string>;
+
+  const p = Math.max(1, parseInt(page));
+  const l = Math.min(200, Math.max(1, parseInt(limit)));
+  const offset = (p - 1) * l;
+
+  const where = [sql`1=1`];
+  if (action) where.push(eq(auditEvents.action, action));
+  if (resourceType) where.push(eq(auditEvents.resourceType, resourceType));
+  if (resourceId) where.push(eq(auditEvents.resourceId, resourceId));
+  if (actorUserId) where.push(eq(auditEvents.actorUserId, Number(actorUserId)));
+  if (from && to) where.push(between(auditEvents.ts, Number(from), Number(to)));
+  if (q) {
+    const likeQ = `%${q}%`;
+    where.push(sql`(action LIKE ${likeQ} OR path LIKE ${likeQ} OR resource_type LIKE ${likeQ} OR resource_id LIKE ${likeQ})`);
+  }
+
+  const rows = await db.select().from(auditEvents)
+    .where(and(...where))
+    .orderBy(desc(auditEvents.ts))
+    .limit(l)
+    .offset(offset);
+
+  res.json({ ok:true, data: rows, page: p, limit: l });
+});
+
+export default router;
+```
+
+> Wire this router under `/api/v1/audit` in your central router.
+
+---
+
+## 7) App bootstrap updates
+
+### **server/index.ts** (additions around existing code)
+
+```ts
+// ... existing imports
+import { requestContext } from './middleware/requestContext';
+import { autoAudit } from './middleware/autoAudit';
+
+// before routes
+app.set('trust proxy', 1);
+app.use(requestContext);
+app.use(autoAudit);
+
+// after routes, you already have error handler
+```
+
+### **server/routes/index.ts** (add audit router)
+
+```ts
+import audit from './modules/audit';
+// ... existing
+router.use('/audit', audit);
+```
+
+---
+
+## 8) Example: explicit audit calls inside important routes
+
+### **server/routes/modules/vehicles.ts** (add inside POST handler after insert)
+
+```ts
+import { log as auditLog } from '../../utils/audit';
+
+// after successful insert
+await auditLog({
+  req,
+  action: 'VEHICLE_CREATE',
+  resourceType: 'vehicle',
+  resourceId: vinRaw,
+  statusCode: 201,
+  metadata: { ownerUserId, vin: vinRaw }
+});
+```
+
+### **server/routes/modules/vin.ts** (add after successful decode)
+
+```ts
+import { log as auditLog } from '../../utils/audit';
+
+await auditLog({
+  req,
+  action: 'VIN_DECODE',
+  resourceType: 'vin',
+  resourceId: vin,
+  statusCode: 200,
+  metadata: { cached: !!cached?.length }
+});
+```
+
+### **server/modules/auth/login.ts** (where you handle login)
+
+```ts
+import { log as auditLog } from '../../utils/audit';
+
+// on success
+await auditLog({ req, action: 'AUTH_LOGIN', resourceType: 'user', resourceId: user.id, statusCode: 200, metadata: { ok:true } });
+
+// on failure
+await auditLog({ req, action: 'AUTH_LOGIN_FAIL', resourceType: 'user', resourceId: req.body?.email, statusCode: 401, metadata: { ok:false } });
+```
+
+---
+
+## 9) Verifying tamper evidence
+
+Each row stores `prev_hash` and `hash = sha256(all_fields + prev_hash)`. To verify, stream rows by `id`, recompute hashes, and check equality. If any row is altered or deleted, the chain breaks.
+
+> For stronger guarantees, export nightly snapshots of `hash` of the last row to S3 or an external location.
+
+---
+
+## 10) Frontend (Admin) — lightweight table (optional)
+
+Create a simple admin page that calls `/api/v1/audit` with filters (action, actor, time range) and renders a paginated table with `ts`, `action`, `path`, `actorUserId`, `resource`, `statusCode`. (Can be added later — API is ready.)
+
+---
+
+### Done
+
+* Append‑only audit log with hash chain ✅
+* Automatic coverage for mutating endpoints ✅
+* Explicit, rich events for sensitive actions ✅
+* Admin API for search & pagination ✅
+* Redaction of sensitive fields ✅
+* Indexes for speed ✅
