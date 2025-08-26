@@ -1,0 +1,27 @@
+SES Removing unpermitted intrinsics lockdown-install.js:1:203117
+  Removing intrinsics.%DatePrototype%.toTemporalInstant lockdown-install.js:1:202962
+[vite] connecting... client:733:9
+[vite] connected. client:827:12
+Warning: validateDOMNesting(...): <a> cannot appear as a descendant of <a>.
+a
+a
+Link<@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=ea103065:336:18
+li
+ol
+nav
+Breadcrumb@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/src/components/breadcrumb.tsx:21:27
+div
+div
+div
+VehiclesPage@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/src/pages/vehicles.tsx?t=1756249106473:38:61
+Route@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=ea103065:322:13
+Switch@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=ea103065:378:14
+Router@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/src/App.tsx?t=1756249106473:42:42
+Provider@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-C6BJTAFJ.js?v=ea103065:37:47
+TooltipProvider@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=ea103065:67:7
+QueryClientProvider@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=ea103065:2746:27
+App
+ErrorBoundary@https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/src/components/ErrorBoundary.tsx:7:5 chunk-NXESFFTV.js:521:38
+[vite] hot updated: /src/pages/vehicles.tsx client:810:29
+[vite] hot updated: /src/index.css client:810:29
+Content-Security-Policy: The page’s settings blocked a worker script (worker-src) at blob:https://c80ec43d-be2a-40ad-ac88-090375a910b6-00-2tnk3izv6tf1o.riker.replit.dev/1e7cd1bf-57b7-40e9-b4a5-218ed0b80e5c from being executed because it violates the following directive: “script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://replit.com” vehicles

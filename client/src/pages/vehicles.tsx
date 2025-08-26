@@ -37,12 +37,8 @@ export default function VehiclesPage() {
     queryKey: ["/api/v1/vehicles"],
   });
 
-  const vehicles = vehiclesResponse?.data || [];
-  
-  // Debug logging
-  console.log("Debug - vehiclesResponse:", vehiclesResponse);
-  console.log("Debug - vehicles array:", vehicles);
-  console.log("Debug - vehicles length:", vehicles.length);
+  // Extract vehicles from API response format: {ok: true, data: [...]}
+  const vehicles = (vehiclesResponse?.data || []) as Vehicle[];
 
   const handleAddEntry = (vehicle: Vehicle) => {
     setVehicleForEntry(vehicle);

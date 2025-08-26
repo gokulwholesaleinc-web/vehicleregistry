@@ -6,6 +6,9 @@ import { ChevronLeft, ChevronRight, Heart, Eye, User, Calendar, Play, Pause, X, 
 import ShowcaseSlide from "./ShowcaseSlide";
 import Modal from "./Modal";
 import useClickIntent from "@/lib/useClickIntent";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import type { Vehicle } from "@shared/schema";
 import bmwImage1 from "@assets/FB_IMG_1751951510231_1755750547262.jpg";
 import bmwImage2 from "@assets/FB_IMG_1751951504094_1755750547274.jpg";
 import bmwMeetImage from "@assets/DSC_1899_1755751395846.jpg";
@@ -96,23 +99,56 @@ export default function CommunitySlideshow() {
   // Minimum swipe distance (in px)
   const minSwipeDistance = 50;
 
+  // Fetch real vehicle photos
+  const { data: vehiclesResponse } = useQuery({
+    queryKey: ["/api/v1/vehicles"],
+  });
+
+  // Transform vehicle data to photos format
+  const realPhotos: VehiclePhoto[] = [];
+  const vehicles = (vehiclesResponse as any)?.data || [];
+  
+  vehicles.forEach((vehicle: Vehicle) => {
+    if (vehicle.isPublic && vehicle.photos && vehicle.photos.length > 0) {
+      vehicle.photos.forEach((photoUrl: string, index: number) => {
+        realPhotos.push({
+          id: `${vehicle.id}-${index}`,
+          imageUrl: photoUrl,
+          vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+          year: vehicle.year,
+          make: vehicle.make,
+          model: vehicle.model,
+          ownerName: "Vehicle Owner", // You can get this from user data if available
+          location: "Unknown", // Add location field to vehicle schema if needed
+          likes: Math.floor(Math.random() * 300), // Placeholder until you add likes system
+          views: Math.floor(Math.random() * 2000), // Placeholder until you add views system
+          uploadDate: new Date(vehicle.updatedAt || vehicle.createdAt).toLocaleDateString(),
+          tags: vehicle.trim ? [vehicle.trim] : []
+        });
+      });
+    }
+  });
+
+  // Use real photos if available, fallback to sample photos
+  const photosToShow = realPhotos.length > 0 ? realPhotos : samplePhotos;
+
   useEffect(() => {
     if (!isAutoPlaying || isModalOpen) return; // Pause when modal is open
     
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % samplePhotos.length);
+      setCurrentIndex((prev) => (prev + 1) % photosToShow.length);
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [isAutoPlaying, isModalOpen]);
+  }, [isAutoPlaying, isModalOpen, photosToShow.length]);
 
   const nextSlide = () => {
-    setCurrentIndex((prev) => (prev + 1) % samplePhotos.length);
+    setCurrentIndex((prev) => (prev + 1) % photosToShow.length);
     setIsAutoPlaying(false);
   };
 
   const prevSlide = () => {
-    setCurrentIndex((prev) => (prev - 1 + samplePhotos.length) % samplePhotos.length);
+    setCurrentIndex((prev) => (prev - 1 + photosToShow.length) % photosToShow.length);
     setIsAutoPlaying(false);
   };
 
@@ -171,7 +207,16 @@ export default function CommunitySlideshow() {
     }
   };
 
-  const currentPhoto = samplePhotos[currentIndex];
+  const currentPhoto = photosToShow[currentIndex];
+
+  // Return loading state if no photos available
+  if (photosToShow.length === 0) {
+    return (
+      <div className="relative w-full h-[400px] bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center">
+        <p className="text-gray-500">No photos to display</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -313,7 +358,7 @@ export default function CommunitySlideshow() {
           <div className="bg-gray-50 dark:bg-gray-800 p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div className="flex space-x-2">
-                {samplePhotos.map((_, index) => (
+                {photosToShow.map((_, index) => (
                   <button
                     key={index}
                     onClick={() => goToSlide(index)}
