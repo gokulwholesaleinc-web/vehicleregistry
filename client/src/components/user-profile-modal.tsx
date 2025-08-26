@@ -19,7 +19,7 @@ export default function UserProfileModal({ isOpen, onClose }: UserProfileModalPr
   const [activeTab, setActiveTab] = useState("profile");
 
   const { data: vehicles = [] } = useQuery<any[]>({
-    queryKey: ["/api/vehicles"],
+    queryKey: ["/api/v1/vehicles"],
     enabled: isOpen && isAuthenticated,
   });
 

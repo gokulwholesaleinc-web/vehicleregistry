@@ -52,7 +52,7 @@ export default function VehicleTransferModal({ isOpen, onClose, vehicle }: Vehic
   const initiateTransfer = useMutation({
     mutationFn: async (data: TransferForm) => {
       if (!vehicle) throw new Error("No vehicle selected");
-      return apiRequest("POST", `/api/vehicles/${vehicle.id}/transfer`, data);
+      return apiRequest("POST", `/api/v1/vehicles/${vehicle.id}/transfer`, data);
     },
     onSuccess: () => {
       toast({
@@ -83,7 +83,7 @@ export default function VehicleTransferModal({ isOpen, onClose, vehicle }: Vehic
         description: "Vehicle ownership has been transferred successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transfers"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
     },
     onError: (error: Error) => {
       toast({

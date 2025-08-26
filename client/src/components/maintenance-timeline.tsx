@@ -9,7 +9,7 @@ interface MaintenanceTimelineProps {
 
 export default function MaintenanceTimeline({ vehicleId }: MaintenanceTimelineProps) {
   const { data: records = [], isLoading } = useQuery<MaintenanceRecord[]>({
-    queryKey: ["/api/vehicles", vehicleId, "maintenance"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "maintenance"],
     enabled: !!vehicleId,
   });
 

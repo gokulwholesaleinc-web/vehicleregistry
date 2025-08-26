@@ -9,7 +9,7 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { googleAuthRouter } from "./auth/google";
 import { optionalAuth } from "./auth/middleware";
 import localAuthRouter from "./auth/localAuth";
-import { showcaseRouter } from "./routes/showcase";
+// showcaseRouter will be imported dynamically below
 import { mileageVerificationRouter } from "./routes/mileageVerification";
 import { pdfReportsRouter } from "./routes/pdfReports";
 import { csvImportExportRouter } from "./routes/csvImportExport";
@@ -367,8 +367,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Local auth routes
   app.use("/api/auth", localAuthRouter);
   
-  // Community showcase routes
-  app.use("/api/v1/showcase", showcaseRouter);
+  // Community showcase routes (already registered above)
   
   // Mileage verification routes
   app.use("/api/v1/mileage", mileageVerificationRouter);
@@ -1222,8 +1221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Mount VIN router
-  app.use('/api/v1/vin', vinRouter);
+  // VIN router (already mounted above)
 
   app.post('/api/ai/maintenance-recommendations', isAuthenticated, async (req, res) => {
     try {

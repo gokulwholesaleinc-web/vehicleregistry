@@ -66,7 +66,7 @@ export default function AddEntryModal({
 
   const createModificationMutation = useMutation({
     mutationFn: async (data: { formData: FormData }) => {
-      const response = await fetch(`/api/vehicles/${vehicleId}/modifications`, {
+      const response = await fetch(`/api/v1/vehicles/${vehicleId}/modifications`, {
         method: "POST",
         body: data.formData,
       });
@@ -74,7 +74,7 @@ export default function AddEntryModal({
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles", vehicleId] });
       onClose();
       resetForms();
       toast({
@@ -93,7 +93,7 @@ export default function AddEntryModal({
 
   const createMaintenanceMutation = useMutation({
     mutationFn: async (data: { formData: FormData }) => {
-      const response = await fetch(`/api/vehicles/${vehicleId}/maintenance`, {
+      const response = await fetch(`/api/v1/vehicles/${vehicleId}/maintenance`, {
         method: "POST",
         body: data.formData,
       });
@@ -101,7 +101,7 @@ export default function AddEntryModal({
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles", vehicleId] });
       onClose();
       resetForms();
       toast({

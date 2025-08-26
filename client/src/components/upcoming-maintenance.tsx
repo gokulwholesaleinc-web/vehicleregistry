@@ -9,12 +9,12 @@ interface UpcomingMaintenanceProps {
 
 export default function UpcomingMaintenance({ vehicleId }: UpcomingMaintenanceProps) {
   const { data: upcomingItems = [] } = useQuery<UpcomingMaintenanceType[]>({
-    queryKey: ["/api/vehicles", vehicleId, "upcoming-maintenance"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "upcoming-maintenance"],
     enabled: !!vehicleId,
   });
 
   const { data: vehicle } = useQuery<Vehicle>({
-    queryKey: ["/api/vehicles", vehicleId],
+    queryKey: ["/api/v1/vehicles", vehicleId],
     enabled: !!vehicleId,
   });
 

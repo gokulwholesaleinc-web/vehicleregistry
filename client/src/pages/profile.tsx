@@ -30,7 +30,7 @@ export default function ProfilePage() {
   const breadcrumbs = useBreadcrumbs();
 
   const { data: vehicles = [] } = useQuery<Vehicle[]>({
-    queryKey: ["/api/vehicles"],
+    queryKey: ["/api/v1/vehicles"],
   });
 
   const handleAddEntry = () => {

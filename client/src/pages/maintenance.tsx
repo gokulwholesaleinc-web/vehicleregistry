@@ -23,13 +23,13 @@ export default function MaintenancePage() {
 
   // Get real maintenance data for the selected vehicle
   const { data: maintenanceRecords = [] } = useQuery({
-    queryKey: ['/api/vehicles', selectedVehicleId, 'maintenance'],
+    queryKey: ['/api/v1/vehicles', selectedVehicleId, 'maintenance'],
     queryFn: () => selectedVehicleId ? api(`/vehicles/${selectedVehicleId}/maintenance`).then(r => r.data) : [],
     enabled: !!selectedVehicleId,
   });
 
   const { data: upcomingMaintenance = [] } = useQuery({
-    queryKey: ['/api/vehicles', selectedVehicleId, 'upcoming-maintenance'],
+    queryKey: ['/api/v1/vehicles', selectedVehicleId, 'upcoming-maintenance'],
     queryFn: () => selectedVehicleId ? api(`/vehicles/${selectedVehicleId}/upcoming-maintenance`).then(r => r.data) : [],
     enabled: !!selectedVehicleId,
   });

@@ -32,17 +32,17 @@ export default function VehicleDetailsModal({ isOpen, onClose, vehicleId }: Vehi
   const queryClient = useQueryClient();
 
   const { data: vehicle, isLoading } = useQuery<Vehicle>({
-    queryKey: ["/api/vehicles", vehicleId],
+    queryKey: ["/api/v1/vehicles", vehicleId],
     enabled: isOpen && !!vehicleId,
   });
 
   const { data: modifications = [] } = useQuery<any[]>({
-    queryKey: ["/api/vehicles", vehicleId, "modifications"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "modifications"],
     enabled: isOpen && !!vehicleId,
   });
 
   const { data: maintenanceRecords = [] } = useQuery<any[]>({
-    queryKey: ["/api/vehicles", vehicleId, "maintenance"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "maintenance"],
     enabled: isOpen && !!vehicleId,
   });
 
@@ -60,11 +60,11 @@ export default function VehicleDetailsModal({ isOpen, onClose, vehicleId }: Vehi
 
   const updateVehicleMutation = useMutation({
     mutationFn: async (data: UpdateVehicleData) => {
-      const response = await apiRequest("PATCH", `/api/vehicles/${vehicleId}`, data);
+      const response = await apiRequest("PATCH", `/api/v1/vehicles/${vehicleId}`, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/vehicles"] });
       setIsEditing(false);
       toast({
         title: "Vehicle updated successfully",

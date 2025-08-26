@@ -10,7 +10,7 @@ interface RecentModificationsProps {
 
 export default function RecentModifications({ vehicleId }: RecentModificationsProps) {
   const { data: modifications = [], isLoading } = useQuery<Modification[]>({
-    queryKey: ["/api/vehicles", vehicleId, "modifications"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "modifications"],
     enabled: !!vehicleId,
   });
 

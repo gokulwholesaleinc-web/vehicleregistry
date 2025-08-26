@@ -16,7 +16,7 @@ interface VehicleStats {
 
 export default function CostSummary({ vehicleId }: CostSummaryProps) {
   const { data: stats, isLoading } = useQuery<VehicleStats>({
-    queryKey: ["/api/vehicles", vehicleId, "stats"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "stats"],
     enabled: !!vehicleId,
   });
 

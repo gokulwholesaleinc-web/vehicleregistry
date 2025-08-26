@@ -10,12 +10,12 @@ interface PhotoGalleryProps {
 
 export default function PhotoGallery({ vehicleId }: PhotoGalleryProps) {
   const { data: modifications = [] } = useQuery<Modification[]>({
-    queryKey: ["/api/vehicles", vehicleId, "modifications"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "modifications"],
     enabled: !!vehicleId,
   });
 
   const { data: maintenanceRecords = [] } = useQuery<MaintenanceRecord[]>({
-    queryKey: ["/api/vehicles", vehicleId, "maintenance"],
+    queryKey: ["/api/v1/vehicles", vehicleId, "maintenance"],
     enabled: !!vehicleId,
   });
 
