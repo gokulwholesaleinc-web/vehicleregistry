@@ -34,9 +34,24 @@ export async function api(path: string, init: RequestInit = {}) {
 
   const url = `${API_BASE}${path}`; // path like '/vin/decode'
   const res = await fetch(url, { ...init, headers, credentials: 'include' });
-  const json = await res.json().catch(()=>null);
-  if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
-  return json;
+
+  // Try to parse JSON even on errors - prevents "data is null" issues
+  let json: any = null;
+  try { json = await res.json(); } catch {}
+
+  if (res.status === 401) {
+    // Clear invalid token and provide clean error message
+    setToken(null);
+    const msg = json?.error?.message || 'Unauthorized';
+    throw new Error(msg);
+  }
+
+  if (!res.ok) {
+    const msg = json?.error?.message || res.statusText || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return json ?? { ok: true };
 }
 
 // Debug: confirm in console this is not localhost

@@ -9,6 +9,36 @@ const TTL = 24 * 60 * 60 * 1000; // 24h
 const limiter = rateLimit({ windowMs: 60_000, max: 20 });
 const Base = process.env.VIN_API_BASE || 'https://vpic.nhtsa.dot.gov/api/vehicles';
 
+// Helper: Better transmission detection from NHTSA's inconsistent fields
+function normalizeTransmission(row: any): string | null {
+  // NHTSA sometimes fills different fields; pull from all plausible sources
+  const candidates: string[] = [
+    row.TransmissionDescriptor,
+    row.TransmissionStyle,
+    row.Transmission,
+  ].filter(Boolean);
+
+  // If nothing present, derive a guess from keywords in any engine/drive fields
+  const joined = candidates.join(' ').toLowerCase();
+  const hasManual = /(manual|m\/t|6-speed manual|5-speed manual|stick|std)/.test(joined);
+  const hasDCT = /(dual\s*clutch|dct)/.test(joined);
+  const hasAMT = /(automated\s*manual|amt)/.test(joined);
+  const hasCVT = /(cvt|continuously\s*variable)/.test(joined);
+  const hasAuto = /(auto(?!matic?)|automatic|a\/t)/.test(joined);
+
+  if (hasDCT) return 'Dual Clutch';
+  if (hasAMT) return 'Automated Manual';
+  if (hasManual) return 'Manual';
+  if (hasCVT) return 'CVT';
+  if (hasAuto) return 'Automatic';
+
+  // Fallback: if NHTSA exposes TransmissionSpeeds + Style separately
+  const speeds = row.TransmissionSpeeds || row.NumberOfForwardGears;
+  const style = row.TransmissionStyle || row.TransmissionDescriptor;
+  if (speeds && style) return `${speeds}-Speed ${String(style).trim()}`;
+  return style || null;
+}
+
 const router = Router();
 
 router.post('/decode', limiter, async (req, res) => {
@@ -48,7 +78,7 @@ router.post('/decode', limiter, async (req, res) => {
       engine: [row.EngineManufacturer, row.EngineModel].filter(Boolean).join(' '),
       cylinders: row.EngineCylinders ? Number(row.EngineCylinders) : null,
       displacement: row.DisplacementL ? Number(row.DisplacementL) : null,
-      transmission: row.TransmissionStyle || null,
+      transmission: normalizeTransmission(row),
       driveType: row.DriveType || null,
       plantCountry: row.PlantCountry || null,
       fuelType: row.FuelTypePrimary || null,

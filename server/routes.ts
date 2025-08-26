@@ -7,7 +7,7 @@ import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { googleAuthRouter } from "./auth/google";
-import { requireAuth, optionalAuth } from "./auth/middleware";
+import { optionalAuth } from "./auth/middleware";
 import localAuthRouter from "./auth/localAuth";
 import { showcaseRouter } from "./routes/showcase";
 import { mileageVerificationRouter } from "./routes/mileageVerification";
@@ -30,24 +30,32 @@ import { vehicleTransfers } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
+// Consistent auth middleware for protected routes
+export function requireAuth(req: any, res: any, next: any){
+  if (!req.user) {
+    return res.status(401).json({ ok: false, error: { message: 'Unauthorized' } });
+  }
+  next();
+}
+
 // Admin middleware for JWT auth
 export const isAdminJWT: RequestHandler = async (req: any, res, next) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({ ok: false, error: { message: "Unauthorized" } });
     }
 
     const userId = req.user.id;
     const user = await storage.getUser(userId);
     
     if (!user || user.role !== "admin") {
-      return res.status(403).json({ message: "Admin access required" });
+      return res.status(403).json({ ok: false, error: { message: "Admin access required" } });
     }
 
     req.adminUser = user;
     next();
   } catch (error) {
-    res.status(500).json({ message: "Admin verification failed" });
+    res.status(500).json({ ok: false, error: { message: "Admin verification failed" } });
   }
 };
 
@@ -428,7 +436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Enhanced VIN-based vehicle creation
-  app.post('/api/vehicles/create-from-vin', isAuthenticated, async (req: any, res) => {
+  app.post('/api/vehicles/create-from-vin', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { vin, currentMileage } = z.object({ 
@@ -442,26 +450,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Vehicle with this VIN already exists in the system' });
       }
 
-      // Decode VIN using hybrid decoder
-      const vinResponse = await fetch(`http://localhost:5000/api/v1/vin/decode`, {
+      // Decode VIN using hybrid decoder (use internal call)
+      const vinResponse = await fetch(`${req.protocol}://${req.get('host')}/api/v1/vin/decode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vin })
       });
       
       if (!vinResponse.ok) {
-        throw new Error('VIN decode service unavailable');
+        return res.status(502).json({ ok: false, error: { message: 'VIN decode service unavailable' } });
       }
       
       const vinResult = await vinResponse.json();
       if (!vinResult.ok) {
-        throw new Error('VIN decode failed');
+        return res.status(400).json({ ok: false, error: { message: 'VIN decode failed' } });
       }
       
-      const vinData = vinResult.data;
+      const { vehicle: vinData } = vinResult.data;
       
       if (!vinData.make || !vinData.model || !vinData.modelYear) {
-        return res.status(400).json({ message: 'Unable to decode VIN. Please enter vehicle details manually.' });
+        return res.status(400).json({ ok: false, error: { message: 'Unable to decode VIN. Please enter vehicle details manually.' } });
       }
 
       // Create vehicle with hybrid-decoded data
@@ -479,19 +487,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const vehicle = await storage.createVehicle(vehicleData as any, userId);
 
-      res.json({ 
-        vehicle, 
-        vinData,
-        message: 'Vehicle created successfully using hybrid VIN decoding'
+      res.status(201).json({ 
+        ok: true, 
+        data: { 
+          vehicle, 
+          vinData,
+          message: 'Vehicle created successfully using hybrid VIN decoding'
+        }
       });
     } catch (error) {
       console.error('VIN vehicle creation error:', error);
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to create vehicle from VIN' });
+      res.status(500).json({ ok: false, error: { message: error instanceof Error ? error.message : 'Failed to create vehicle from VIN' } });
     }
   });
 
   // Create draft vehicle (without VIN)
-  app.post('/api/vehicles/create-draft', isAuthenticated, async (req: any, res) => {
+  app.post('/api/vehicles/create-draft', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicleData = insertVehicleSchema.parse({
@@ -1160,6 +1171,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching action logs:", error);
       res.status(500).json({ message: "Failed to fetch action logs" });
     }
+  });
+
+  // Final error handler (after all routes) - ensures consistent JSON responses
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    const status = err?.status || 500;
+    const message = err?.message || 'Internal Server Error';
+    res.status(status).json({ ok: false, error: { message } });
   });
 
   const httpServer = createServer(app);

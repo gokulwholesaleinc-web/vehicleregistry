@@ -130,14 +130,14 @@ export function VinLookupModal() {
         body: JSON.stringify(data) 
       });
     },
-    onSuccess: (data) => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       setOpen(false);
       setVinData(null);
       vinForm.reset();
       toast({
         title: "Vehicle Created",
-        description: data.message || "Vehicle created successfully with AI data",
+        description: response?.data?.message || "Vehicle created successfully with AI data",
       });
     },
     onError: (error) => {
@@ -156,13 +156,13 @@ export function VinLookupModal() {
         body: JSON.stringify(data) 
       });
     },
-    onSuccess: (data) => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
       setOpen(false);
       draftForm.reset();
       toast({
         title: "Draft Vehicle Created",
-        description: data.message || "Draft vehicle created successfully",
+        description: response?.data?.message || "Draft vehicle created successfully",
       });
     },
     onError: (error) => {
