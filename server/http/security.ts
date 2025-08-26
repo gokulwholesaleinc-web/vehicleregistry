@@ -16,6 +16,17 @@ function buildAllowlist() {
     list.add(`http://${env.REPLIT_HOST}`);
   }
   
+  // Replit domains (comma-separated list)
+  if (env.REPLIT_DOMAINS) {
+    env.REPLIT_DOMAINS.split(',').forEach(domain => {
+      const trimmedDomain = domain.trim();
+      if (trimmedDomain) {
+        list.add(`https://${trimmedDomain}`);
+        list.add(`http://${trimmedDomain}`);
+      }
+    });
+  }
+  
   // Custom CORS origins from environment
   if (env.CORS_ALLOWED_ORIGINS) {
     env.CORS_ALLOWED_ORIGINS.split(',').forEach(origin => {

@@ -14,6 +14,7 @@ const envSchema = z.object({
   // Optional environment variables
   FRONTEND_BASE: z.string().url().optional(),
   REPLIT_HOST: z.string().optional(),
+  REPLIT_DOMAINS: z.string().optional(),
   
   // Rate limiting configuration
   RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).default('900000'), // 15 minutes
