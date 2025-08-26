@@ -35,7 +35,6 @@ export default function VehiclesPage() {
 
   const { data: vehicles = [], isLoading } = useQuery<Vehicle[]>({
     queryKey: ["/api/v1/vehicles"],
-    queryFn: () => api('/vehicles').then(r => r.data),
   });
 
   const handleAddEntry = (vehicle: Vehicle) => {
