@@ -401,7 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Enhanced VIN-based vehicle creation
+  // Enhanced VIN-based vehicle creation with AI insights fallback
   app.post('/api/v1/vehicles/create-from-vin', processJWT, requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -432,14 +432,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ ok: false, error: { message: 'VIN decode failed' } });
       }
       
-      const { vehicle: vinData } = vinResult.data;
+      const { vehicle: vinData, aiInsights } = vinResult.data;
       
       if (!vinData.make || !vinData.model || !vinData.modelYear) {
         return res.status(400).json({ ok: false, error: { message: 'Unable to decode VIN. Please enter vehicle details manually.' } });
       }
 
-      // Create vehicle with hybrid-decoded data
-      const vehicleData = {
+      // Build base vehicle data
+      const baseVehicleData = {
         vin,
         year: vinData.modelYear,
         make: vinData.make,
@@ -451,16 +451,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isDraft: false
       };
 
-      const vehicle = await storage.createVehicle(vehicleData as any, userId);
+      // Build vehicle data with AI insights if available
+      const vehicleDataWithAI = {
+        ...baseVehicleData,
+        aiInsights: aiInsights ? JSON.stringify(aiInsights) : null
+      };
 
-      res.status(201).json({ 
+      let vehicle: any;
+      let warning: string | undefined;
+
+      try {
+        // Try to create with AI insights first
+        vehicle = await storage.createVehicle(vehicleDataWithAI as any, userId);
+      } catch (error: any) {
+        const errorMsg = String(error?.message || error);
+        const isPgMissing = error?.code === '42703'; // PostgreSQL undefined_column
+        const isMissingColumn = /column.*ai_insights.*does not exist/i.test(errorMsg);
+
+        if (isPgMissing || isMissingColumn) {
+          console.warn('[vehicles] ai_insights column missing — creating without it. Database migration needed.');
+          try {
+            // Fallback: create without AI insights
+            vehicle = await storage.createVehicle(baseVehicleData as any, userId);
+            warning = 'ai_insights not stored (column missing)';
+          } catch (fallbackError) {
+            console.error('Fallback vehicle creation failed:', fallbackError);
+            throw new Error('Vehicle creation failed after fallback');
+          }
+        } else {
+          // Re-throw other errors
+          throw error;
+        }
+      }
+
+      const response: any = { 
         ok: true, 
         data: { 
           vehicle, 
           vinData,
           message: 'Vehicle created successfully using hybrid VIN decoding'
         }
-      });
+      };
+
+      if (warning) {
+        response.data.warning = { message: warning };
+      }
+
+      res.status(201).json(response);
     } catch (error) {
       console.error('VIN vehicle creation error:', error);
       res.status(500).json({ ok: false, error: { message: error instanceof Error ? error.message : 'Failed to create vehicle from VIN' } });
