@@ -1122,7 +1122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // SPA fallback - only in production mode (development uses Vite dev server)
+  // SPA fallback - only in production (development uses Vite dev server)
   if (process.env.NODE_ENV === 'production') {
     const clientDir = path.join(process.cwd(), 'client', 'dist');
     app.use(express.static(clientDir));
