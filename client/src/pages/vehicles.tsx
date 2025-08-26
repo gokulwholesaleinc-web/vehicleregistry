@@ -38,6 +38,11 @@ export default function VehiclesPage() {
   });
 
   const vehicles = vehiclesResponse?.data || [];
+  
+  // Debug logging
+  console.log("Debug - vehiclesResponse:", vehiclesResponse);
+  console.log("Debug - vehicles array:", vehicles);
+  console.log("Debug - vehicles length:", vehicles.length);
 
   const handleAddEntry = (vehicle: Vehicle) => {
     setVehicleForEntry(vehicle);
