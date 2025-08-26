@@ -9,11 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
       - name: Use Node
         uses: actions/setup-node@v4
-        with: { node-version: 20, cache: 'pnpm' }
-      - run: pnpm i --frozen-lockfile
-      - run: pnpm -w run typecheck || true
-      - run: pnpm -w run build
+        with: { node-version: 20, cache: 'npm' }
+      - run: npm ci
+      - run: npm run typecheck || true
+      - run: npm run build
