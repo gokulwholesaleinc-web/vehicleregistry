@@ -1,10 +1,11 @@
 import { useParams } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Car, Gauge, Calendar, Fuel, Cog, MapPin, Wrench, Camera, Share2 } from 'lucide-react';
+import { ArrowLeft, Car, Gauge, Calendar, Fuel, Cog, MapPin, Wrench, Camera, Share2, Zap, Shield, Info, Star } from 'lucide-react';
 import { Link } from 'wouter';
 import RecentModifications from '@/components/recent-modifications';
 import MaintenanceTimeline from '@/components/maintenance-timeline';
@@ -17,11 +18,68 @@ import PublicVehicleShare from '@/components/PublicVehicleShare';
 
 export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [engineData, setEngineData] = useState<any>(null);
+  const [reliabilityData, setReliabilityData] = useState<any>(null);
   
   const { data: vehicle, isLoading, error } = useQuery({
     queryKey: ['/api/v1/vehicles', id],
     queryFn: () => api(`/vehicles/${id}`).then(r => r.data),
   });
+
+  // AI-powered engine name lookup
+  const engineLookupMutation = useMutation({
+    mutationFn: async (vehicleData: any) => {
+      const response = await fetch('/api/v1/ai/engine-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          make: vehicleData.make,
+          model: vehicleData.model,
+          modelYear: vehicleData.year,
+          trim: vehicleData.trim,
+          engine: vehicleData.engine
+        })
+      });
+      return response.json();
+    },
+    onSuccess: (response) => {
+      if (response.ok) {
+        setEngineData(response.data);
+      }
+    }
+  });
+
+  // AI-powered reliability score
+  const reliabilityMutation = useMutation({
+    mutationFn: async (vehicleData: any) => {
+      const response = await fetch('/api/v1/ai/reliability-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          make: vehicleData.make,
+          model: vehicleData.model,
+          modelYear: vehicleData.year,
+          trim: vehicleData.trim
+        })
+      });
+      return response.json();
+    },
+    onSuccess: (response) => {
+      if (response.ok) {
+        setReliabilityData(response.data);
+      }
+    }
+  });
+
+  // Trigger AI lookups when vehicle data is available
+  useEffect(() => {
+    if (vehicle && !engineData) {
+      engineLookupMutation.mutate(vehicle);
+    }
+    if (vehicle && !reliabilityData) {
+      reliabilityMutation.mutate(vehicle);
+    }
+  }, [vehicle]);
 
   if (isLoading) {
     return (
@@ -167,7 +225,7 @@ export default function VehicleDetailPage() {
         </Card>
 
         {/* Technical Specs */}
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -195,10 +253,38 @@ export default function VehicleDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div>
-                <div className="text-sm text-muted-foreground">Type</div>
-                <div className="font-medium">{vehicle?.engine || '—'}</div>
-              </div>
+              {engineData ? (
+                <div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Zap className="h-3 w-3" />
+                    Factory Code (AI-Enhanced)
+                  </div>
+                  <div className="font-bold text-lg text-blue-600 dark:text-blue-400">
+                    {engineData.factoryEngineName}
+                  </div>
+                  {engineData.engineCode && engineData.engineCode !== engineData.factoryEngineName && (
+                    <div className="text-xs text-muted-foreground">
+                      Code: {engineData.engineCode}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Confidence: {engineData.confidence} • Sources: {engineData.sources?.slice(0,2).join(', ')}
+                  </div>
+                </div>
+              ) : engineLookupMutation.isPending ? (
+                <div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Zap className="h-3 w-3 animate-pulse" />
+                    Analyzing Factory Code...
+                  </div>
+                  <div className="h-6 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              ) : (
+                <div>
+                  <div className="text-sm text-muted-foreground">Type</div>
+                  <div className="font-medium">{vehicle?.engine || '—'}</div>
+                </div>
+              )}
               <div>
                 <div className="text-sm text-muted-foreground">Fuel</div>
                 <div className="font-medium">{vehicle?.fuelType || '—'}</div>
@@ -222,6 +308,55 @@ export default function VehicleDetailPage() {
                 <div className="text-sm text-muted-foreground">Body Style</div>
                 <div className="font-medium">{vehicle?.bodyClass || '—'}</div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Reliability
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {reliabilityData ? (
+                <>
+                  <div>
+                    <div className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Star className="h-3 w-3" />
+                      Critics Score (AI-Enhanced)
+                    </div>
+                    <div className="font-bold text-lg text-green-600 dark:text-green-400 flex items-center gap-2">
+                      {reliabilityData.overallScore}
+                      <span className="text-sm bg-green-100 dark:bg-green-900 px-2 py-1 rounded">
+                        {reliabilityData.scoreOutOf10}/10
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Critics Consensus</div>
+                    <div className="text-sm">{reliabilityData.criticsConsensus}</div>
+                  </div>
+                  {reliabilityData.recommendedForBuying && (
+                    <div className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                      ✓ Recommended Purchase
+                    </div>
+                  )}
+                </>
+              ) : reliabilityMutation.isPending ? (
+                <div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Shield className="h-3 w-3 animate-pulse" />
+                    Analyzing Reliability...
+                  </div>
+                  <div className="h-6 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              ) : (
+                <div>
+                  <div className="text-sm text-muted-foreground">Status</div>
+                  <div className="font-medium">Analysis Pending</div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -279,6 +414,52 @@ export default function VehicleDetailPage() {
                             </li>
                           ))}
                         </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Enhanced Reliability Analysis */}
+              {reliabilityData && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Shield className="h-5 w-5" />
+                      Reliability Analysis
+                    </CardTitle>
+                    <CardDescription>Based on critics and owner reviews</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {reliabilityData.strengthAreas && reliabilityData.strengthAreas.length > 0 && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-2 text-green-700 dark:text-green-400">✓ Strengths</div>
+                        <ul className="space-y-1">
+                          {reliabilityData.strengthAreas.map((strength: string, i: number) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <div className="h-1.5 w-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                              <span className="text-sm">{strength}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {reliabilityData.weaknessAreas && reliabilityData.weaknessAreas.length > 0 && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-2 text-orange-700 dark:text-orange-400">⚠ Known Issues</div>
+                        <ul className="space-y-1">
+                          {reliabilityData.weaknessAreas.map((weakness: string, i: number) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <div className="h-1.5 w-1.5 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
+                              <span className="text-sm">{weakness}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {reliabilityData.sources && reliabilityData.sources.length > 0 && (
+                      <div className="text-xs text-muted-foreground pt-2 border-t">
+                        Sources: {reliabilityData.sources.slice(0,3).join(', ')}
                       </div>
                     )}
                   </CardContent>

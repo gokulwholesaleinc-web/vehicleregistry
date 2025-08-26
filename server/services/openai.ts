@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 
@@ -55,7 +55,7 @@ export async function enhanceVehicleData(vehicleData: {
 }): Promise<VehicleInsights> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5",
       messages: [
         {
           role: "system",
@@ -135,7 +135,7 @@ export async function generateMaintenanceRecommendations(
 ): Promise<MaintenanceRecommendation[]> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5",
       messages: [
         {
           role: "system",
@@ -180,7 +180,7 @@ export async function analyzeModificationPhoto(base64Image: string): Promise<{
 }> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5",
       messages: [
         {
           role: "system",
@@ -242,7 +242,7 @@ export async function smartCategorizeEntry(
 }> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5",
       messages: [
         {
           role: "system",
@@ -279,5 +279,144 @@ export async function smartCategorizeEntry(
   } catch (error) {
     console.error("Smart categorization error:", error);
     throw new Error("Failed to categorize entry with AI");
+  }
+}
+
+// Get factory engine name from manufacturer sources and forums
+export async function getEngineFactoryName(vehicleData: {
+  make: string;
+  model: string;
+  modelYear: number;
+  trim?: string;
+  engine?: string;
+}): Promise<{
+  factoryEngineName: string;
+  engineCode: string;
+  confidence: string;
+  sources: string[];
+}> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content: `You are an automotive technical expert with access to manufacturer specifications, service manuals, and automotive forums. Your task is to find the exact factory engine name and engine code as specified by the manufacturer.
+
+          Search through your knowledge of:
+          - Official manufacturer service manuals and specifications
+          - Automotive enthusiast forums (BMW forums, Audi forums, etc.)
+          - Technical databases and VIN decoding resources
+          - Performance enthusiast communities
+          - Manufacturer press releases and technical documentation
+
+          Respond with JSON in this exact format: {
+            "factoryEngineName": "Official engine name/code from manufacturer (e.g., 'S58', 'EA888', 'LS3')",
+            "engineCode": "Internal engine code if different from name",
+            "confidence": "High|Medium|Low based on source reliability",
+            "sources": ["List of source types consulted (e.g., 'BMW Service Manual', 'M3 Forum Technical Database')"]
+          }
+
+          Be precise and only return verified information from reliable sources.`
+        },
+        {
+          role: "user",
+          content: `Find the factory engine name and code for:
+          ${vehicleData.modelYear} ${vehicleData.make} ${vehicleData.model}
+          ${vehicleData.trim ? `Trim: ${vehicleData.trim}` : ''}
+          ${vehicleData.engine ? `Current engine spec: ${vehicleData.engine}` : ''}
+          
+          Search manufacturer documentation, service manuals, and enthusiast forums for the exact factory engine designation.`
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || '{}');
+    
+    return {
+      factoryEngineName: result.factoryEngineName || 'Unknown',
+      engineCode: result.engineCode || '',
+      confidence: result.confidence || 'Low',
+      sources: result.sources || []
+    };
+  } catch (error) {
+    console.error("Engine name lookup error:", error);
+    throw new Error("Failed to lookup factory engine name");
+  }
+}
+
+// Get comprehensive reliability score from critics and online reviews
+export async function getReliabilityScore(vehicleData: {
+  make: string;
+  model: string;
+  modelYear: number;
+  trim?: string;
+}): Promise<{
+  overallScore: string;
+  scoreOutOf10: number;
+  criticsConsensus: string;
+  strengthAreas: string[];
+  weaknessAreas: string[];
+  recommendedForBuying: boolean;
+  sources: string[];
+}> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content: `You are an automotive reliability analyst with access to comprehensive review data from major automotive critics, consumer reports, and owner feedback databases.
+
+          Analyze reliability based on data from:
+          - Consumer Reports reliability ratings
+          - J.D. Power quality studies
+          - Automotive journalist long-term reviews (Car and Driver, Motor Trend, etc.)
+          - Owner forums and complaint databases
+          - NHTSA reliability data
+          - Manufacturer recall information
+          - Independent mechanic feedback
+
+          Respond with JSON in this exact format: {
+            "overallScore": "Descriptive rating (e.g., 'Above Average', 'Excellent', 'Poor')",
+            "scoreOutOf10": number from 1-10,
+            "criticsConsensus": "Summary of what automotive critics generally say",
+            "strengthAreas": ["List of reliable components/systems"],
+            "weaknessAreas": ["List of problematic areas"],
+            "recommendedForBuying": boolean,
+            "sources": ["Types of sources analyzed"]
+          }
+
+          Base ratings on actual critic reviews and owner experiences, not general assumptions.`
+        },
+        {
+          role: "user",
+          content: `Analyze the reliability score for:
+          ${vehicleData.modelYear} ${vehicleData.make} ${vehicleData.model}
+          ${vehicleData.trim ? `Trim: ${vehicleData.trim}` : ''}
+          
+          Provide a comprehensive reliability assessment based on automotive critics, consumer reports, and real owner experiences.`
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || '{}');
+    
+    return {
+      overallScore: result.overallScore || 'Unknown',
+      scoreOutOf10: result.scoreOutOf10 || 5,
+      criticsConsensus: result.criticsConsensus || 'No consensus available',
+      strengthAreas: result.strengthAreas || [],
+      weaknessAreas: result.weaknessAreas || [],
+      recommendedForBuying: result.recommendedForBuying || false,
+      sources: result.sources || []
+    };
+  } catch (error) {
+    console.error("Reliability score error:", error);
+    throw new Error("Failed to analyze reliability score");
   }
 }

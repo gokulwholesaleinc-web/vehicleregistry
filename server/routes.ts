@@ -1221,6 +1221,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Engine factory name lookup endpoint
+  app.post('/api/v1/ai/engine-name', processJWT, requireAuth, async (req: any, res) => {
+    try {
+      const { make, model, modelYear, trim, engine } = z.object({
+        make: z.string(),
+        model: z.string(),
+        modelYear: z.number(),
+        trim: z.string().optional(),
+        engine: z.string().optional()
+      }).parse(req.body);
+
+      const { getEngineFactoryName } = await import('../services/openai');
+      const engineData = await getEngineFactoryName({
+        make,
+        model,
+        modelYear,
+        trim,
+        engine
+      });
+
+      res.json({ ok: true, data: engineData });
+    } catch (error) {
+      console.error('Engine name lookup error:', error);
+      res.status(500).json({ 
+        ok: false, 
+        error: { message: error instanceof Error ? error.message : 'Failed to lookup engine name' } 
+      });
+    }
+  });
+
+  // Enhanced reliability score endpoint
+  app.post('/api/v1/ai/reliability-score', processJWT, requireAuth, async (req: any, res) => {
+    try {
+      const { make, model, modelYear, trim } = z.object({
+        make: z.string(),
+        model: z.string(),
+        modelYear: z.number(),
+        trim: z.string().optional()
+      }).parse(req.body);
+
+      const { getReliabilityScore } = await import('../services/openai');
+      const reliabilityData = await getReliabilityScore({
+        make,
+        model,
+        modelYear,
+        trim
+      });
+
+      res.json({ ok: true, data: reliabilityData });
+    } catch (error) {
+      console.error('Reliability score error:', error);
+      res.status(500).json({ 
+        ok: false, 
+        error: { message: error instanceof Error ? error.message : 'Failed to analyze reliability' } 
+      });
+    }
+  });
+
   // VIN router (already mounted above)
 
   app.post('/api/ai/maintenance-recommendations', isAuthenticated, async (req, res) => {
