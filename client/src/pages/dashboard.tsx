@@ -37,7 +37,7 @@ export default function Dashboard() {
   if (!selectedVehicleId) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-        <AppHeader onOpenProfile={() => setIsUserProfileModalOpen(true)} />
+        <AppHeader />
         
         <div className="py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -81,7 +81,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 font-inter">
-      <AppHeader onOpenProfile={() => setIsUserProfileModalOpen(true)} />
+      <AppHeader />
       
       {/* Vehicle Dashboard Content */}
       <div className="py-8">

@@ -379,6 +379,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // CSV import/export routes
   app.use("/api/v1/csv", csvImportExportRouter);
 
+  // Parts, Media, and Sharing routes  
+  const partsRouter = (await import('./routes/parts')).default;
+  const mediaRouter = (await import('./routes/media')).default;
+  const sharesRouter = (await import('./routes/shares')).default;
+  app.use("/api/v1/parts", partsRouter);
+  app.use("/api/v1/media", mediaRouter);
+  app.use("/api/v1/shares", sharesRouter);
+
   // Serve uploaded files
   app.use('/uploads', (req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');

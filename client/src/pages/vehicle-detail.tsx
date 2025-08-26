@@ -3,13 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Car, Gauge, Calendar, Fuel, Cog, MapPin } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Car, Gauge, Calendar, Fuel, Cog, MapPin, Wrench, Camera, Share2 } from 'lucide-react';
 import { Link } from 'wouter';
 import RecentModifications from '@/components/recent-modifications';
 import MaintenanceTimeline from '@/components/maintenance-timeline';
 import PhotoGallery from '@/components/photo-gallery';
 import UpcomingMaintenance from '@/components/upcoming-maintenance';
 import CostSummary from '@/components/cost-summary';
+import VehiclePartsLedger from '@/components/VehiclePartsLedger';
+import VehicleMediaPipeline from '@/components/VehicleMediaPipeline';
+import PublicVehicleShare from '@/components/PublicVehicleShare';
 
 export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -361,21 +365,56 @@ export default function VehicleDetailPage() {
           </Card>
         )}
 
-        {/* Vehicle Activity & Data */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Left Column */}
-          <div className="space-y-6">
-            <RecentModifications vehicleId={id!} />
-            <MaintenanceTimeline vehicleId={id!} />
-            <UpcomingMaintenance vehicleId={id!} />
-          </div>
+        {/* Vehicle Data Tabs */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview" className="flex items-center gap-2">
+              <Car className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="parts" className="flex items-center gap-2">
+              <Wrench className="h-4 w-4" />
+              Parts Ledger
+            </TabsTrigger>
+            <TabsTrigger value="media" className="flex items-center gap-2">
+              <Camera className="h-4 w-4" />
+              Photos
+            </TabsTrigger>
+            <TabsTrigger value="sharing" className="flex items-center gap-2">
+              <Share2 className="h-4 w-4" />
+              Sharing
+            </TabsTrigger>
+          </TabsList>
           
-          {/* Right Column */}
-          <div className="space-y-6">
-            <PhotoGallery vehicleId={id!} />
-            <CostSummary vehicleId={id!} />
-          </div>
-        </div>
+          <TabsContent value="overview" className="mt-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Left Column */}
+              <div className="space-y-6">
+                <RecentModifications vehicleId={id!} />
+                <MaintenanceTimeline vehicleId={id!} />
+                <UpcomingMaintenance vehicleId={id!} />
+              </div>
+              
+              {/* Right Column */}
+              <div className="space-y-6">
+                <PhotoGallery vehicleId={id!} />
+                <CostSummary vehicleId={id!} />
+              </div>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="parts" className="mt-6">
+            <VehiclePartsLedger vehicleId={id!} />
+          </TabsContent>
+          
+          <TabsContent value="media" className="mt-6">
+            <VehicleMediaPipeline vehicleId={id!} />
+          </TabsContent>
+          
+          <TabsContent value="sharing" className="mt-6">
+            <PublicVehicleShare vehicleId={id!} />
+          </TabsContent>
+        </Tabs>
 
         {/* Public Notice */}
         <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/20">
