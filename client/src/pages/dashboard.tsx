@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import AppHeader from "@/components/AppHeader";
 import VehicleSelector from "@/components/vehicle-selector";
 import QuickStats from "@/components/quick-stats";
