@@ -1,0 +1,281 @@
+# VIN Uniqueness & Transfer Guard — Drop‑in Pack (Drop‑in for Replit)
+
+This pack prevents duplicate VINs across users, adds a quick VIN-availability API, guards the create-from-VIN route, and includes an optional transfer-request stub. It’s **DB-first** (hard guarantee) + **API guard** + **nice UX**.
+
+> **Paths assume your repo layout.** If a path differs in your project, keep the file contents but place them in your equivalent folder.
+
+---
+
+## 0) Database Migration — enforce VIN uniqueness for *active* vehicles
+
+Create a new migration file, e.g. **`server/db/migrations/2025_08_uniq_vin.sql`**
+
+```sql
+-- Add archived flag if you don't have it yet
+ALTER TABLE vehicles
+  ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
+
+-- Normalize existing VINs to uppercase and trimmed
+UPDATE vehicles SET vin = UPPER(TRIM(vin));
+
+-- Enforce uniqueness for ACTIVE records only (archived vehicles are exempt)
+DROP INDEX IF EXISTS vehicles_vin_unique_active;
+CREATE UNIQUE INDEX vehicles_vin_unique_active
+  ON vehicles (vin)
+  WHERE archived = false;
+```
+
+> **SQLite note:** If you use SQLite and partial indexes are unavailable, create a BEFORE INSERT trigger that aborts when an active row exists with the same VIN. (See the comment block at the bottom of this doc.)
+
+Run your migrations as you normally do.
+
+---
+
+## 1) VIN normalizer helper
+
+**`server/lib/vin.ts`** (new file)
+
+```ts
+export function normalizeVIN(raw: string): string {
+  return (raw || '').toUpperCase().replace(/\s+/g, '');
+}
+```
+
+---
+
+## 2) VIN Availability endpoint
+
+**`server/routes/vin-availability.ts`** (new file)
+
+```ts
+import { Router } from 'express';
+import { normalizeVIN } from '../lib/vin';
+import { db } from '../db/client'; // <- adjust to your DB client
+
+const router = Router();
+
+/**
+ * GET /api/v1/vin/availability?vin=17chars
+ * -> { ok: true, data: { available: boolean } }
+ */
+router.get('/availability', async (req, res) => {
+  const vin = normalizeVIN(String(req.query.vin || ''));
+  if (vin.length !== 17) {
+    return res.status(400).json({ ok: false, error: { message: 'VIN must be 17 characters' } });
+  }
+
+  try {
+    // Replace with your ORM/Query Builder
+    const row = await db.query(
+      `SELECT id FROM vehicles WHERE vin = $1 AND archived = false LIMIT 1`,
+      [vin]
+    );
+
+    const inUse = Array.isArray(row) ? row.length > 0 : !!row;
+    return res.json({ ok: true, data: { available: !inUse } });
+  } catch (e) {
+    console.error('[VIN availability] error', e);
+    return res.status(500).json({ ok: false, error: { message: 'Lookup failed' } });
+  }
+});
+
+export default router;
+```
+
+**Mount it** where you register routes (e.g., in `server/routes.ts` or `server/http/app.ts`):
+
+```ts
+import vinAvailability from './routes/vin-availability';
+
+app.use('/api/v1/vin', vinAvailability);
+```
+
+---
+
+## 3) Create-vehicle server guard
+
+Update your vehicles router’s **create-from-vin** handler to block duplicates. If you already have this route, replace the body with the version below. Otherwise, add it to **`server/routes/vehicles.ts`**.
+
+```ts
+import { Router } from 'express';
+import { normalizeVIN } from '../lib/vin';
+import { requireAuth } from '../http/middleware/auth'; // adjust path to your auth
+import { db } from '../db/client';
+
+const router = Router();
+
+// ... other vehicle routes
+
+router.post('/create-from-vin', requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const vin = normalizeVIN(req.body?.vin || '');
+
+    if (vin.length !== 17) {
+      return res.status(400).json({ ok: false, error: { message: 'VIN must be 17 characters' } });
+    }
+
+    // 1) Is VIN already claimed by another active (non-archived) vehicle?
+    const existing = await db.query(
+      `SELECT id, user_id FROM vehicles WHERE vin = $1 AND archived = false LIMIT 1`,
+      [vin]
+    );
+
+    const taken = Array.isArray(existing) ? existing[0] : existing;
+    if (taken) {
+      if (String(taken.user_id) === String(userId)) {
+        return res.status(409).json({
+          ok: false,
+          error: { code: 'VIN_DUPLICATE_SELF', message: 'This VIN is already in your garage.' }
+        });
+      }
+      return res.status(409).json({
+        ok: false,
+        error: { code: 'VIN_CLAIMED_BY_OTHER', message: 'This VIN is already registered to another user.' }
+      });
+    }
+
+    // 2) Insert new vehicle
+    const { make, model, year, trim, engine, transmission, aiInsights } = req.body || {};
+    const row = await db.query(
+      `INSERT INTO vehicles (user_id, vin, make, model, year, trim, engine, transmission, archived, ai_insights)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9)
+       RETURNING *`,
+      [userId, vin, make, model, year, trim, engine, transmission, aiInsights ?? null]
+    );
+
+    return res.status(201).json({ ok: true, data: Array.isArray(row) ? row[0] : row });
+  } catch (e: any) {
+    const msg = (e?.message || '').toLowerCase();
+    if (msg.includes('vin') && msg.includes('unique')) {
+      return res.status(409).json({
+        ok: false,
+        error: { code: 'VIN_DUPLICATE_DB', message: 'This VIN is already registered to another user.' }
+      });
+    }
+    console.error('[create-from-vin] error', e);
+    return res.status(500).json({ ok: false, error: { message: 'Failed to create vehicle' } });
+  }
+});
+
+export default router;
+```
+
+> If your schema **doesn’t** have the `ai_insights` column yet, keep using `... , ai_insights)` with `$9` as `NULL` as shown; Postgres will accept it if the column exists. If it does **not** exist, remove the column + value from the INSERT or add the column via migration.
+
+---
+
+## 4) Frontend — VIN availability hook (optional but recommended)
+
+**`client/src/hooks/useVinAvailability.ts`** (new)
+
+```ts
+import { useQuery } from '@tanstack/react-query';
+import { API_BASE } from '@/lib/api';
+
+export function useVinAvailability(vin?: string) {
+  return useQuery({
+    queryKey: ['vin-availability', vin],
+    enabled: !!vin && vin.length === 17,
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/vin/availability?vin=${encodeURIComponent(vin!)}`, {
+        credentials: 'include'
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error?.message || 'VIN availability failed');
+      return json.data as { available: boolean };
+    }
+  });
+}
+```
+
+In your VIN modal component, after decoding the VIN:
+
+```tsx
+const normalizedVin = vinForm.watch('vin')?.toUpperCase().replace(/\s+/g, '') || '';
+const { data: availability, isLoading: checking } = useVinAvailability(normalizedVin);
+
+<Button
+  onClick={handleCreateFromVin}
+  disabled={!availability?.available || checking || createFromVinMutation.isPending}
+  className="w-full mt-4"
+>
+  {availability?.available ? 'Create Vehicle with AI Data' : 'VIN Already Registered'}
+</Button>
+
+{availability && !availability.available && (
+  <p className="text-sm text-red-500 mt-2">This VIN is already registered to another user.</p>
+)}
+```
+
+---
+
+## 5) (Optional) Transfer Request stub
+
+**`server/routes/transfers.ts`** (new file)
+
+```ts
+import { Router } from 'express';
+import { requireAuth } from '../http/middleware/auth';
+import { db } from '../db/client';
+
+const router = Router();
+
+/**
+ * POST /api/v1/vehicles/transfer-requests
+ * body: { vin: string }
+ */
+router.post('/transfer-requests', requireAuth, async (req: any, res) => {
+  const vin = (req.body?.vin || '').toUpperCase().trim();
+  if (vin.length !== 17) return res.status(400).json({ ok:false, error:{ message:'VIN must be 17 characters' }});
+
+  await db.query(
+    `INSERT INTO transfer_requests (vin, requester_user_id, status, created_at)
+     VALUES ($1, $2, 'pending', NOW())`,
+    [vin, req.user.id]
+  );
+
+  return res.json({ ok: true, data: { message: 'Transfer request submitted' } });
+});
+
+export default router;
+```
+
+Mount it:
+
+```ts
+import transfersRouter from './routes/transfers';
+app.use('/api/v1/vehicles', transfersRouter);
+```
+
+---
+
+## 6) Quick QA checklist
+
+* [ ] Migration applied successfully (unique index on `vehicles(vin) WHERE archived = false`).
+* [ ] `/api/v1/vin/availability?vin=...` returns `{ ok: true, data: { available: true|false } }`.
+* [ ] Attempting to create a vehicle with an already-claimed VIN returns **409** with a friendly error.
+* [ ] VIN modal disables the create button when VIN is already registered.
+
+---
+
+### (Appendix) SQLite trigger alternative
+
+```sql
+-- Only if partial indexes aren’t available in your SQLite build
+DROP TRIGGER IF EXISTS trg_vin_unique_active;
+CREATE TRIGGER trg_vin_unique_active
+BEFORE INSERT ON vehicles
+FOR EACH ROW
+BEGIN
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM vehicles
+    WHERE UPPER(TRIM(vin)) = UPPER(TRIM(NEW.vin))
+      AND archived = 0
+  ) THEN RAISE(ABORT, 'VIN already registered by an active vehicle') END;
+END;
+```
+
+---
+
+**Done!** This gives you a hard guarantee at the DB, clear server messages, and a smooth UX in the modal. If you want me to tailor any query/ORM calls to your exact Drizzle/Prisma/SQL flavor, just say which you’re using and I’ll swap the calls precisely.

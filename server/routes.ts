@@ -30,6 +30,124 @@ import { vehicleTransfers } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
+// Route Registry System for Conflict Detection
+interface RouteInfo {
+  method: string;
+  path: string;
+  version: string;
+  registeredAt: string;
+}
+
+class ApiRouteRegistry {
+  private routes = new Map<string, RouteInfo>();
+  private conflicts: string[] = [];
+
+  register(method: string, path: string, version: string = 'v1'): void {
+    const normalizedMethod = method.toUpperCase();
+    const normalizedPath = this.normalizePath(path);
+    const routeKey = `${normalizedMethod}:${normalizedPath}`;
+    
+    // Check for exact conflicts
+    if (this.routes.has(routeKey)) {
+      const existing = this.routes.get(routeKey)!;
+      const conflict = `Duplicate route: ${routeKey} (existing: ${existing.registeredAt}, new: ${new Date().toISOString()})`;
+      this.conflicts.push(conflict);
+      console.warn(`🚨 ${conflict}`);
+      return;
+    }
+
+    // Check for parameter conflicts (e.g., /:id vs /:vehicleId)
+    this.checkParameterConflicts(normalizedMethod, normalizedPath);
+
+    this.routes.set(routeKey, {
+      method: normalizedMethod,
+      path: normalizedPath,
+      version,
+      registeredAt: new Date().toISOString()
+    });
+
+    console.log(`✅ Registered: ${normalizedMethod} /api/${version}${normalizedPath}`);
+  }
+
+  private normalizePath(path: string): string {
+    // Remove /api and version prefixes for comparison
+    return path.replace(/^\/api\/(v\d+\/)?/, '/');
+  }
+
+  private checkParameterConflicts(method: string, path: string): void {
+    const pathSegments = path.split('/').filter(Boolean);
+    const existingRoutes = Array.from(this.routes.entries()).filter(([key]) => 
+      key.startsWith(`${method}:`)
+    );
+
+    for (const [existingKey, existingRoute] of existingRoutes) {
+      const existingSegments = existingRoute.path.split('/').filter(Boolean);
+      
+      if (pathSegments.length === existingSegments.length) {
+        let potentialConflict = true;
+        const conflicts: string[] = [];
+
+        for (let i = 0; i < pathSegments.length; i++) {
+          const current = pathSegments[i];
+          const existing = existingSegments[i];
+
+          // Both are parameters but different names
+          if (current.startsWith(':') && existing.startsWith(':') && current !== existing) {
+            conflicts.push(`Parameter mismatch: ${current} vs ${existing} at position ${i}`);
+          }
+          // One is parameter, one is not, but same position
+          else if (current !== existing && !(current.startsWith(':') && existing.startsWith(':'))) {
+            potentialConflict = false;
+            break;
+          }
+        }
+
+        if (potentialConflict && conflicts.length > 0) {
+          const conflict = `Parameter conflict: ${method} ${path} vs ${existingRoute.path} - ${conflicts.join(', ')}`;
+          this.conflicts.push(conflict);
+          console.warn(`⚠️  ${conflict}`);
+        }
+      }
+    }
+  }
+
+  getConflicts(): string[] {
+    return [...this.conflicts];
+  }
+
+  getAllRoutes(): RouteInfo[] {
+    return Array.from(this.routes.values()).sort((a, b) => 
+      `${a.method}:${a.path}`.localeCompare(`${b.method}:${b.path}`)
+    );
+  }
+
+  validateVersionConsistency(): string[] {
+    const versionIssues: string[] = [];
+    const routesByPath = new Map<string, RouteInfo[]>();
+
+    // Group routes by normalized path
+    for (const route of this.routes.values()) {
+      const basePath = route.path.split('/:')[0]; // Get base path without parameters
+      if (!routesByPath.has(basePath)) {
+        routesByPath.set(basePath, []);
+      }
+      routesByPath.get(basePath)!.push(route);
+    }
+
+    // Check for version inconsistencies within the same resource
+    for (const [path, routes] of routesByPath) {
+      const versions = new Set(routes.map(r => r.version));
+      if (versions.size > 1) {
+        versionIssues.push(`Version inconsistency for ${path}: ${Array.from(versions).join(', ')}`);
+      }
+    }
+
+    return versionIssues;
+  }
+}
+
+const routeRegistry = new ApiRouteRegistry();
+
 // JWT middleware to process Bearer tokens
 export function processJWT(req: any, res: any, next: any) {
   const authHeader = req.headers.authorization;
@@ -142,6 +260,57 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Enhanced Express app with route registry
+  const originalGet = app.get.bind(app);
+  const originalPost = app.post.bind(app);
+  const originalPut = app.put.bind(app);
+  const originalPatch = app.patch.bind(app);
+  const originalDelete = app.delete.bind(app);
+
+  // Override Express methods to auto-register routes
+  app.get = function(path: string, ...handlers: any[]) {
+    if (typeof path === 'string' && path.startsWith('/api/')) {
+      routeRegistry.register('GET', path);
+    }
+    return originalGet(path, ...handlers);
+  };
+
+  app.post = function(path: string, ...handlers: any[]) {
+    if (typeof path === 'string' && path.startsWith('/api/')) {
+      routeRegistry.register('POST', path);
+    }
+    return originalPost(path, ...handlers);
+  };
+
+  app.put = function(path: string, ...handlers: any[]) {
+    if (typeof path === 'string' && path.startsWith('/api/')) {
+      routeRegistry.register('PUT', path);
+    }
+    return originalPut(path, ...handlers);
+  };
+
+  app.patch = function(path: string, ...handlers: any[]) {
+    if (typeof path === 'string' && path.startsWith('/api/')) {
+      routeRegistry.register('PATCH', path);
+    }
+    return originalPatch(path, ...handlers);
+  };
+
+  app.delete = function(path: string, ...handlers: any[]) {
+    if (typeof path === 'string' && path.startsWith('/api/')) {
+      routeRegistry.register('DELETE', path);
+    }
+    return originalDelete(path, ...handlers);
+  };
+
+  // Create uploads directory
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  applySecurity(app);
+
   // Single v1 auth endpoint - GET user profile
   app.get('/api/v1/auth/user', processJWT, requireAuth, async (req: any, res) => {
     try {
@@ -392,7 +561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/vehicles/:id/history', async (req, res) => {
+  app.get('/api/v1/vehicles/:id/history', async (req, res) => {
     try {
       const history = await storage.getVehicleHistory(req.params.id);
       res.json(history);
@@ -525,7 +694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Convert draft to full vehicle (add VIN later)
-  app.post('/api/vehicles/:id/add-vin', isAuthenticated, async (req: any, res) => {
+  app.post('/api/v1/vehicles/:id/add-vin', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { vin } = z.object({ vin: z.string().min(17).max(17) }).parse(req.body);
@@ -585,7 +754,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/vehicles', isAuthenticated, async (req: any, res) => {
+  app.post('/api/v1/vehicles', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicleData = insertVehicleSchema.parse(req.body);
@@ -603,7 +772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/vehicles/:id', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/v1/vehicles/:id', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicle = await storage.getVehicle(req.params.id);
@@ -687,7 +856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vehicle Transfer routes
-  app.post('/api/vehicles/:id/transfer', isAuthenticated, async (req: any, res) => {
+  app.post('/api/v1/vehicles/:id/transfer', isAuthenticated, async (req: any, res) => {
     try {
       const fromUserId = req.user.id;
       const { toUserId, message } = req.body;
@@ -792,16 +961,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Modifications
-  app.get('/api/vehicles/:vehicleId/modifications', async (req, res) => {
+  app.get('/api/v1/vehicles/:id/modifications', async (req, res) => {
     try {
-      const modifications = await storage.getModifications(req.params.vehicleId);
+      const modifications = await storage.getModifications(req.params.id);
       res.json(modifications);
     } catch (error) {
       res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch modifications' });
     }
   });
 
-  app.post('/api/vehicles/:vehicleId/modifications', isAuthenticated, upload.fields([
+  app.post('/api/v1/vehicles/:id/modifications', isAuthenticated, upload.fields([
     { name: 'photos', maxCount: 10 },
     { name: 'documents', maxCount: 5 }
   ]), async (req: any, res) => {
@@ -862,16 +1031,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Maintenance Records
-  app.get('/api/vehicles/:vehicleId/maintenance', async (req, res) => {
+  app.get('/api/v1/vehicles/:id/maintenance', async (req, res) => {
     try {
-      const records = await storage.getMaintenanceRecords(req.params.vehicleId);
+      const records = await storage.getMaintenanceRecords(req.params.id);
       res.json(records);
     } catch (error) {
       res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch maintenance records' });
     }
   });
 
-  app.post('/api/vehicles/:vehicleId/maintenance', isAuthenticated, upload.fields([
+  app.post('/api/v1/vehicles/:id/maintenance', isAuthenticated, upload.fields([
     { name: 'photos', maxCount: 10 },
     { name: 'documents', maxCount: 5 }
   ]), async (req: any, res) => {
@@ -931,9 +1100,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upcoming Maintenance
-  app.get('/api/vehicles/:vehicleId/upcoming-maintenance', async (req, res) => {
+  app.get('/api/v1/vehicles/:id/upcoming-maintenance', async (req, res) => {
     try {
-      const upcoming = await storage.getUpcomingMaintenance(req.params.vehicleId);
+      const upcoming = await storage.getUpcomingMaintenance(req.params.id);
       res.json(upcoming);
     } catch (error) {
       res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to fetch upcoming maintenance' });
@@ -968,7 +1137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Statistics endpoint
   app.get('/api/vehicles/:vehicleId/stats', async (req, res) => {
     try {
-      const vehicleId = req.params.vehicleId;
+      const vehicleId = req.params.id;
       const [modifications, maintenanceRecords] = await Promise.all([
         storage.getModifications(vehicleId),
         storage.getMaintenanceRecords(vehicleId)
@@ -1258,6 +1427,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const message = err?.message || 'Internal Server Error';
     res.status(status).json({ ok: false, error: { message } });
   });
+
+  // Route Registry Diagnostic Endpoint
+  app.get('/api/v1/admin/routes', isAdminJWT, async (req, res) => {
+    try {
+      const routes = routeRegistry.getAllRoutes();
+      const conflicts = routeRegistry.getConflicts();
+      const versionIssues = routeRegistry.validateVersionConsistency();
+      
+      res.json({
+        ok: true,
+        data: {
+          totalRoutes: routes.length,
+          routes: routes,
+          conflicts: conflicts,
+          versionIssues: versionIssues,
+          summary: {
+            hasConflicts: conflicts.length > 0,
+            hasVersionIssues: versionIssues.length > 0,
+            routesByVersion: routes.reduce((acc, route) => {
+              acc[route.version] = (acc[route.version] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>)
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Error generating route registry report:", error);
+      res.status(500).json({ ok: false, error: { message: "Failed to generate route registry report" } });
+    }
+  });
+
+  // Log final route registry summary
+  console.log(`\n🏁 Route Registry Summary:`);
+  console.log(`📊 Total routes registered: ${routeRegistry.getAllRoutes().length}`);
+  
+  const conflicts = routeRegistry.getConflicts();
+  if (conflicts.length > 0) {
+    console.log(`🚨 Conflicts detected: ${conflicts.length}`);
+    conflicts.forEach(conflict => console.log(`   ⚠️  ${conflict}`));
+  }
+  
+  const versionIssues = routeRegistry.validateVersionConsistency();
+  if (versionIssues.length > 0) {
+    console.log(`📋 Version inconsistencies: ${versionIssues.length}`);
+    versionIssues.forEach(issue => console.log(`   📝 ${issue}`));
+  }
+  
+  if (conflicts.length === 0 && versionIssues.length === 0) {
+    console.log(`✅ No conflicts or version inconsistencies detected!`);
+  }
 
   const httpServer = createServer(app);
   return httpServer;
