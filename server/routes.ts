@@ -1344,7 +1344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Routes
-  app.get('/api/v1/admin/stats', isAdminJWT, async (req, res) => {
+  app.get('/api/v1/admin/stats', processJWT, isAdminJWT, async (req, res) => {
     try {
       const stats = await storage.getPlatformStats();
       res.json(stats);
@@ -1354,7 +1354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/v1/admin/users', isAdminJWT, async (req, res) => {
+  app.get('/api/v1/admin/users', processJWT, isAdminJWT, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -1366,7 +1366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/v1/admin/users/:id/suspend', isAdminJWT, async (req: any, res) => {
+  app.post('/api/v1/admin/users/:id/suspend', processJWT, isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const { reason } = req.body;
@@ -1383,7 +1383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/v1/admin/users/:id/reactivate', isAdminJWT, async (req: any, res) => {
+  app.post('/api/v1/admin/users/:id/reactivate', processJWT, isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const { reason } = req.body;
@@ -1400,7 +1400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/v1/admin/users/:id/promote', isAdminJWT, async (req: any, res) => {
+  app.post('/api/v1/admin/users/:id/promote', processJWT, isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const success = await storage.promoteUserToAdmin(req.params.id, adminId);
@@ -1416,7 +1416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/v1/admin/vehicles', isAdminJWT, async (req, res) => {
+  app.get('/api/v1/admin/vehicles', processJWT, isAdminJWT, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -1428,7 +1428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/v1/admin/vehicles/:id', isAdminJWT, async (req: any, res) => {
+  app.delete('/api/v1/admin/vehicles/:id', processJWT, isAdminJWT, async (req: any, res) => {
     try {
       const adminId = req.adminUser.id;
       const { reason } = req.body;
@@ -1445,7 +1445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/v1/admin/action-logs', isAdminJWT, async (req, res) => {
+  app.get('/api/v1/admin/action-logs', processJWT, isAdminJWT, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -1475,7 +1475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Enterprise Audit Routes - Admin Only
-  app.use('/api/v1/admin/audit', isAdminJWT, auditRoutes);
+  app.use('/api/v1/admin/audit', processJWT, isAdminJWT, auditRoutes);
   routeRegistry.register('GET', '/api/v1/admin/audit/events');
   routeRegistry.register('GET', '/api/v1/admin/audit/events/:id');
   routeRegistry.register('POST', '/api/v1/admin/audit/verify');
@@ -1483,7 +1483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   routeRegistry.register('GET', '/api/v1/admin/audit/export');
 
   // Route Registry Diagnostic Endpoint
-  app.get('/api/v1/admin/routes', isAdminJWT, async (req, res) => {
+  app.get('/api/v1/admin/routes', processJWT, isAdminJWT, async (req, res) => {
     try {
       const routes = routeRegistry.getAllRoutes();
       const conflicts = routeRegistry.getConflicts();
