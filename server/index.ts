@@ -15,13 +15,15 @@ const app = express();
 applySecurity(app);
 
 // Add audit context middleware (captures request metadata)
-app.use(auditRequestContext);
+// Temporarily disabled until audit_events table is created
+// app.use(auditRequestContext);
 
 // Add request logging
 app.use(logMiddleware);
 
 // Add audit auto-instrumentation (logs mutating operations)
-app.use(auditAutoInstrumentation);
+// Temporarily disabled until audit_events table is created
+// app.use(auditAutoInstrumentation);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
