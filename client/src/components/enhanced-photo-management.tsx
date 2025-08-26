@@ -24,17 +24,25 @@ import {
   Filter
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface Photo {
   id: string;
   url: string;
-  title: string;
-  date: string;
-  category: string;
-  tags: string[];
+  title?: string;
+  date?: string;
+  category?: string;
+  tags?: string[];
   modification?: string;
   isBeforePhoto?: boolean;
   isAfterPhoto?: boolean;
+  vehicleId?: string;
+  userId?: string;
+  filename?: string;
+  originalName?: string;
+  mimeType?: string;
+  size?: number;
+  createdAt?: string | Date;
 }
 
 interface PhotoComparison {
@@ -59,85 +67,45 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
   const [searchTerm, setSearchTerm] = useState("");
   const intervalRef = useRef<NodeJS.Timeout>();
 
-  // Mock photo data
-  const mockPhotos: Photo[] = [
-    {
-      id: "1",
-      url: "https://images.unsplash.com/photo-1494976688153-d4d4c0e3a9c8?w=400",
-      title: "Engine Bay - Original",
-      date: "2025-01-15",
-      category: "engine",
-      tags: ["engine", "stock", "original"],
-      modification: "Cold Air Intake",
-      isBeforePhoto: true
-    },
-    {
-      id: "2", 
-      url: "https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=400",
-      title: "Engine Bay - After CAI Install",
-      date: "2025-01-20",
-      category: "engine",
-      tags: ["engine", "cold air intake", "performance", "modified"],
-      modification: "Cold Air Intake",
-      isAfterPhoto: true
-    },
-    {
-      id: "3",
-      url: "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=400", 
-      title: "Suspension Work - Before",
-      date: "2025-02-01",
-      category: "suspension",
-      tags: ["suspension", "stock", "original"],
-      modification: "Coilover Install",
-      isBeforePhoto: true
-    },
-    {
-      id: "4",
-      url: "https://images.unsplash.com/photo-1558618047-3dd6349f0ac4?w=400",
-      title: "Suspension Work - After",
-      date: "2025-02-05", 
-      category: "suspension",
-      tags: ["suspension", "coilovers", "lowered", "modified"],
-      modification: "Coilover Install",
-      isAfterPhoto: true
-    },
-    {
-      id: "5",
-      url: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=400",
-      title: "Progress Update - Week 1",
-      date: "2025-02-10",
-      category: "progress",
-      tags: ["progress", "build", "timelapse"]
-    },
-    {
-      id: "6",
-      url: "https://images.unsplash.com/photo-1544636331-e26879cd4d9b?w=400",
-      title: "Progress Update - Week 2", 
-      date: "2025-02-17",
-      category: "progress",
-      tags: ["progress", "build", "timelapse"]
-    }
-  ];
+  // Fetch real photos from API
+  const { data: photosResponse, isLoading: photosLoading } = useQuery({
+    queryKey: ['/api/v1/media/photos', vehicleId],
+    queryFn: () => apiRequest('GET', `/api/v1/media/photos/${vehicleId}`),
+  });
 
-  const mockComparisons: PhotoComparison[] = [
-    {
-      id: "1",
-      title: "Cold Air Intake Installation",
-      beforePhoto: mockPhotos[0],
-      afterPhoto: mockPhotos[1],
-      modification: "Cold Air Intake"
-    },
-    {
-      id: "2", 
-      title: "Suspension Upgrade",
-      beforePhoto: mockPhotos[2],
-      afterPhoto: mockPhotos[3],
-      modification: "Coilover Install"
-    }
-  ];
+  const photos: Photo[] = (photosResponse?.data || []).map((photo: any) => ({
+    ...photo,
+    title: photo.originalName || photo.filename || 'Untitled Photo',
+    date: photo.createdAt ? new Date(photo.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    category: photo.category || 'general',
+    tags: photo.tags || []
+  }));
 
-  const categories = ["all", "engine", "suspension", "exterior", "interior", "progress"];
-  const progressPhotos = mockPhotos.filter(photo => photo.category === "progress");
+  // Generate comparisons from real photos that have before/after pairs
+  const comparisons: PhotoComparison[] = [];
+  const beforePhotos = photos.filter(p => p.isBeforePhoto);
+  const afterPhotos = photos.filter(p => p.isAfterPhoto);
+  
+  beforePhotos.forEach(beforePhoto => {
+    const matchingAfter = afterPhotos.find(after => 
+      after.modification === beforePhoto.modification
+    );
+    if (matchingAfter) {
+      comparisons.push({
+        id: `comp_${beforePhoto.id}_${matchingAfter.id}`,
+        title: `${beforePhoto.modification} Installation`,
+        beforePhoto,
+        afterPhoto: matchingAfter,
+        modification: beforePhoto.modification || 'Modification'
+      });
+    }
+  });
+
+  // Generate categories from actual photo data
+  const allCategories = photos.map(p => p.category).filter(Boolean);
+  const uniqueCategories = Array.from(new Set(allCategories));
+  const categories = ["all", ...uniqueCategories];
+  const progressPhotos = photos.filter(photo => photo.category === "progress");
 
   // Auto-tag functionality using mock AI recognition
   const autoTagPhoto = async (photoId: string) => {
@@ -149,10 +117,10 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
     return aiTags;
   };
 
-  const filteredPhotos = mockPhotos.filter(photo => {
+  const filteredPhotos = photos.filter(photo => {
     const matchesCategory = selectedCategory === "all" || photo.category === selectedCategory;
-    const matchesSearch = photo.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         photo.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = photo.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (photo.tags || []).some((tag: string) => tag.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
 
@@ -271,14 +239,14 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
                     <h4 className="font-medium text-sm mb-1 truncate">{photo.title}</h4>
                     <p className="text-xs text-gray-500 mb-2">{new Date(photo.date).toLocaleDateString()}</p>
                     <div className="flex flex-wrap gap-1">
-                      {photo.tags.slice(0, 2).map(tag => (
-                        <Badge key={tag} variant="outline" className="text-xs">
+                      {(photo.tags || []).slice(0, 2).map((tag, index) => (
+                        <Badge key={`${tag}-${index}`} variant="outline" className="text-xs">
                           {tag}
                         </Badge>
                       ))}
-                      {photo.tags.length > 2 && (
+                      {(photo.tags || []).length > 2 && (
                         <Badge variant="outline" className="text-xs">
-                          +{photo.tags.length - 2}
+                          +{(photo.tags || []).length - 2}
                         </Badge>
                       )}
                     </div>
@@ -289,7 +257,14 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
           </TabsContent>
 
           <TabsContent value="comparisons" className="space-y-6 mt-6">
-            {mockComparisons.map((comparison) => (
+            {comparisons.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No comparisons available</p>
+                <p className="text-sm">Upload before and after photos with matching modifications</p>
+              </div>
+            ) : (
+              comparisons.map((comparison) => (
               <Card key={comparison.id} className="card-modern">
                 <CardHeader>
                   <CardTitle className="text-lg">{comparison.title}</CardTitle>
@@ -347,7 +322,8 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              ))
+            )}
           </TabsContent>
 
           <TabsContent value="timelapse" className="space-y-6 mt-6">
@@ -465,7 +441,7 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold">AI-Detected Parts & Modifications</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {mockPhotos.slice(0, 4).map((photo) => (
+                      {photos.slice(0, 4).map((photo) => (
                         <Card key={photo.id} className="card-hover">
                           <CardContent className="p-4">
                             <div className="flex space-x-3">
@@ -477,8 +453,8 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
                               <div className="flex-1">
                                 <h4 className="font-medium text-sm mb-1">{photo.title}</h4>
                                 <div className="flex flex-wrap gap-1 mb-2">
-                                  {photo.tags.map(tag => (
-                                    <Badge key={tag} variant="secondary" className="text-xs">
+                                  {(photo.tags || []).map((tag, index) => (
+                                    <Badge key={`${tag}-${index}`} variant="secondary" className="text-xs">
                                       {tag}
                                     </Badge>
                                   ))}
