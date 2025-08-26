@@ -19,7 +19,7 @@ export default function Community() {
   const [, navigate] = useLocation();
 
   const handleAddEntry = () => {
-    // Placeholder for add entry functionality
+    navigate("/vehicles");
   };
 
   const { data: response, isLoading } = useQuery({

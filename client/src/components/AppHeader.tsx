@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import BellDropdown from "@/features/notifications/BellDropdown";
 import { SearchBar } from "./search-bar";
+import AddEntryModal from "./add-entry-modal";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 
 function NavLink({ href, label }: { href: string; label: string }) {
   return (
@@ -15,11 +18,22 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 export default function AppHeader() {
   const [open, setOpen] = useState(false);
+  const [addEntryModalOpen, setAddEntryModalOpen] = useState(false);
+  const [entryType, setEntryType] = useState<"modification" | "maintenance">("modification");
+  
   useEffect(() => {
     const onResize = () => { if (window.innerWidth >= 1024) setOpen(false); };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // Get user's vehicles to use for the modal
+  const { data: vehicles = [] } = useQuery({
+    queryKey: ["/api/v1/vehicles"],
+    queryFn: () => api("/vehicles").then(r => r.data),
+  });
+
+  const defaultVehicleId = vehicles.length > 0 ? vehicles[0].id : null;
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200">
@@ -54,10 +68,14 @@ export default function AppHeader() {
 
           {/* Actions (single Admin chip) */}
           <div className="flex items-center gap-2 ml-2">
-            <a href="/entry/new" className="hidden sm:inline-flex items-center gap-2 h-9 px-3 rounded-xl bg-slate-900 text-white text-sm font-semibold shadow-sm hover:bg-slate-800">
+            <button 
+              onClick={() => setAddEntryModalOpen(true)}
+              className="hidden sm:inline-flex items-center gap-2 h-9 px-3 rounded-xl bg-slate-900 text-white text-sm font-semibold shadow-sm hover:bg-slate-800"
+              data-testid="button-add-entry-header"
+            >
               <span className="-ml-1 inline-block h-5 w-5 rounded-full bg-white/10 grid place-items-center">+</span>
               Add Entry
-            </a>
+            </button>
 
             <BellDropdown />
 
@@ -82,13 +100,30 @@ export default function AppHeader() {
               <NavLink href="/showcase" label="Showcase" />
               <NavLink href="/modifications" label="Modifications" />
               <NavLink href="/community" label="Community" />
-              <a href="/entry/new" className="mt-1 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold">Add Entry</a>
+              <button 
+                onClick={() => setAddEntryModalOpen(true)}
+                className="mt-1 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold"
+                data-testid="button-add-entry-mobile"
+              >
+                Add Entry
+              </button>
               <a href="/notifications" className="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm text-slate-700">Notifications</a>
               <a href="/admin" className="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm text-slate-700">Admin</a>
             </nav>
           </div>
         )}
       </div>
+
+      {/* Add Entry Modal */}
+      {defaultVehicleId && (
+        <AddEntryModal
+          isOpen={addEntryModalOpen}
+          onClose={() => setAddEntryModalOpen(false)}
+          vehicleId={defaultVehicleId}
+          entryType={entryType}
+          onEntryTypeChange={setEntryType}
+        />
+      )}
     </header>
   );
 }
