@@ -30,6 +30,24 @@ import { vehicleTransfers } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
+// JWT middleware to process Bearer tokens
+export function processJWT(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET!;
+    
+    try {
+      const claims = jwt.verify(token, secret) as any;
+      req.user = { id: claims.id };
+    } catch (err) {
+      // Token invalid, continue without setting user
+    }
+  }
+  next();
+}
+
 // Consistent auth middleware for protected routes
 export function requireAuth(req: any, res: any, next: any){
   if (!req.user) {
@@ -404,7 +422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vehicles (protected) - moved to /api/v1
-  app.get('/api/v1/vehicles', requireAuth, async (req: any, res) => {
+  app.get('/api/v1/vehicles', processJWT, requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicles = await storage.getVehiclesByOwner(userId);
@@ -436,7 +454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Enhanced VIN-based vehicle creation
-  app.post('/api/v1/vehicles/create-from-vin', requireAuth, async (req: any, res) => {
+  app.post('/api/v1/vehicles/create-from-vin', processJWT, requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { vin, currentMileage } = z.object({ 
@@ -502,7 +520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create draft vehicle (without VIN)
-  app.post('/api/v1/vehicles/create-draft', requireAuth, async (req: any, res) => {
+  app.post('/api/v1/vehicles/create-draft', processJWT, requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicleData = insertVehicleSchema.parse({
