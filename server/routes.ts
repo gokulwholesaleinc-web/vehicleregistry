@@ -772,7 +772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/v1/vehicles/:id', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/v1/vehicles/:id', processJWT, requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const vehicle = await storage.getVehicle(req.params.id);
