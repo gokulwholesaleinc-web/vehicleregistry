@@ -214,22 +214,30 @@ export default function VehiclesPage() {
                       </div>
 
                       {/* Privacy Toggle */}
-                      <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <span className="text-gray-600 dark:text-gray-400 flex items-center">
+                      <div className="flex items-center justify-between text-sm pt-3 mt-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 -mx-6 -mb-6 px-6 pb-4 rounded-b-lg">
+                        <span className="text-gray-700 dark:text-gray-300 flex items-center font-medium">
                           {vehicle.isPublic ? (
-                            <Globe className="h-3 w-3 mr-1" />
+                            <Globe className="h-4 w-4 mr-2 text-blue-600 dark:text-blue-400" />
                           ) : (
-                            <Lock className="h-3 w-3 mr-1" />
+                            <Lock className="h-4 w-4 mr-2 text-amber-600 dark:text-amber-400" />
                           )}
-                          {vehicle.isPublic ? 'Public' : 'Private'}
+                          <span className={vehicle.isPublic ? 'text-blue-700 dark:text-blue-300' : 'text-amber-700 dark:text-amber-300'}>
+                            {vehicle.isPublic ? 'Public' : 'Private'}
+                          </span>
                         </span>
-                        <Switch
-                          checked={vehicle.isPublic}
-                          onCheckedChange={() => handlePrivacyToggle(vehicle)}
-                          disabled={togglePrivacyMutation.isPending}
-                          data-testid={`switch-privacy-${vehicle.id}`}
-                          aria-label={`Toggle ${vehicle.year} ${vehicle.make} ${vehicle.model} privacy`}
-                        />
+                        <div className="flex items-center space-x-2">
+                          {togglePrivacyMutation.isPending && (
+                            <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-blue-600 rounded-full"></div>
+                          )}
+                          <Switch
+                            checked={vehicle.isPublic}
+                            onCheckedChange={() => handlePrivacyToggle(vehicle)}
+                            disabled={togglePrivacyMutation.isPending}
+                            data-testid={`switch-privacy-${vehicle.id}`}
+                            aria-label={`Toggle ${vehicle.year} ${vehicle.make} ${vehicle.model} privacy`}
+                            className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-amber-200 dark:data-[state=unchecked]:bg-amber-800"
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 pt-2">
