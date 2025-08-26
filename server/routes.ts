@@ -72,7 +72,6 @@ export const isAdmin: RequestHandler = async (req: any, res, next) => {
   }
 };
 import { 
-  decodeVIN, 
   generateMaintenanceRecommendations, 
   analyzeModificationPhoto, 
   smartCategorizeEntry 
@@ -443,17 +442,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Vehicle with this VIN already exists in the system' });
       }
 
-      // Decode VIN using AI
-      const vinData = await decodeVIN(vin);
+      // Decode VIN using hybrid decoder
+      const vinResponse = await fetch(`http://localhost:5000/api/v1/vin/decode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vin })
+      });
       
-      if (vinData.confidence < 0.5) {
-        return res.status(400).json({ message: 'Unable to decode VIN with sufficient confidence. Please enter vehicle details manually.' });
+      if (!vinResponse.ok) {
+        throw new Error('VIN decode service unavailable');
+      }
+      
+      const vinResult = await vinResponse.json();
+      if (!vinResult.ok) {
+        throw new Error('VIN decode failed');
+      }
+      
+      const vinData = vinResult.data;
+      
+      if (!vinData.make || !vinData.model || !vinData.modelYear) {
+        return res.status(400).json({ message: 'Unable to decode VIN. Please enter vehicle details manually.' });
       }
 
-      // Create vehicle with AI-decoded data
+      // Create vehicle with hybrid-decoded data
       const vehicleData = {
         vin,
-        year: vinData.year,
+        year: vinData.modelYear,
         make: vinData.make,
         model: vinData.model,
         trim: vinData.trim || null,
@@ -468,7 +482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         vehicle, 
         vinData,
-        message: 'Vehicle created successfully using AI VIN decoding'
+        message: 'Vehicle created successfully using hybrid VIN decoding'
       });
     } catch (error) {
       console.error('VIN vehicle creation error:', error);
@@ -518,17 +532,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Vehicle is not a draft' });
       }
 
-      // Decode VIN and update vehicle
-      const vinData = await decodeVIN(vin);
+      // Decode VIN using hybrid decoder
+      const vinResponse = await fetch(`http://localhost:5000/api/v1/vin/decode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vin })
+      });
+      
+      if (!vinResponse.ok) {
+        throw new Error('VIN decode service unavailable');
+      }
+      
+      const vinResult = await vinResponse.json();
+      if (!vinResult.ok) {
+        throw new Error('VIN decode failed');
+      }
+      
+      const vinData = vinResult.data;
       
       const updatedVehicle = await storage.updateVehicle(req.params.id, {
         vin,
-        year: vinData.confidence > 0.7 ? vinData.year : vehicle.year,
-        make: vinData.confidence > 0.7 ? vinData.make : vehicle.make,
-        model: vinData.confidence > 0.7 ? vinData.model : vehicle.model,
-        trim: vinData.confidence > 0.7 ? vinData.trim : vehicle.trim,
+        year: vinData.make && vinData.model ? vinData.modelYear : vehicle.year,
+        make: vinData.make || vehicle.make,
+        model: vinData.model || vehicle.model,
+        trim: vinData.trim || vehicle.trim,
         isDraft: false,
-        autoFilled: vinData.confidence > 0.7
+        autoFilled: !!(vinData.make && vinData.model)
       });
 
       res.json({ 

@@ -3,18 +3,6 @@ import OpenAI from "openai";
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export interface VinDecodeResult {
-  make: string;
-  model: string;
-  year: number;
-  trim?: string;
-  engine: string;
-  transmission: string;
-  fuelType: string;
-  bodyStyle: string;
-  drivetrain: string;
-  confidence: number;
-}
 
 export interface MaintenanceRecommendation {
   task: string;
@@ -25,55 +13,113 @@ export interface MaintenanceRecommendation {
   reason: string;
 }
 
-export async function decodeVIN(vin: string): Promise<VinDecodeResult> {
+export interface VehicleInsights {
+  funFacts: string[];
+  marketValue: {
+    estimated: string;
+    factors: string[];
+  };
+  performance: {
+    acceleration: string;
+    topSpeed: string;
+    mpg: string;
+  };
+  reliability: {
+    score: string;
+    commonIssues: string[];
+    strongPoints: string[];
+  };
+  maintenance: {
+    annualCost: string;
+    criticalServices: string[];
+    tips: string[];
+  };
+  modifications: {
+    popular: string[];
+    recommendations: string[];
+  };
+  trivia: {
+    productionNumbers: string;
+    celebrities: string[];
+    historical: string[];
+  };
+}
+
+export async function enhanceVehicleData(vehicleData: {
+  make: string;
+  model: string;
+  modelYear: number;
+  trim?: string;
+  engine?: string;
+  mileage?: number;
+}): Promise<VehicleInsights> {
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `You are an expert automotive VIN decoder. Decode the provided VIN number and extract detailed vehicle information. 
+          content: `You are an automotive expert analyst. Provide comprehensive insights about the given vehicle.
           Respond with JSON in this exact format: {
-            "make": "string",
-            "model": "string", 
-            "year": number,
-            "trim": "string (optional)",
-            "engine": "string",
-            "transmission": "string",
-            "fuelType": "string",
-            "bodyStyle": "string",
-            "drivetrain": "string",
-            "confidence": number (0-1)
+            "funFacts": ["array of 3-5 interesting facts"],
+            "marketValue": {
+              "estimated": "price range like '$15,000-25,000'",
+              "factors": ["factors affecting value"]
+            },
+            "performance": {
+              "acceleration": "0-60 time or description",
+              "topSpeed": "top speed",
+              "mpg": "fuel economy"
+            },
+            "reliability": {
+              "score": "rating like '8/10' or 'Above Average'",
+              "commonIssues": ["known problems"],
+              "strongPoints": ["reliable aspects"]
+            },
+            "maintenance": {
+              "annualCost": "estimated yearly cost",
+              "criticalServices": ["important maintenance items"],
+              "tips": ["maintenance advice"]
+            },
+            "modifications": {
+              "popular": ["common modifications"],
+              "recommendations": ["suggested upgrades"]
+            },
+            "trivia": {
+              "productionNumbers": "how many made",
+              "celebrities": ["famous owners if any"],
+              "historical": ["historical significance"]
+            }
           }
-          Be as accurate as possible. If you cannot determine a field with high confidence, use "Unknown" for strings and 0 for numbers.
-          Include trim level if identifiable from VIN.`
+          Be informative and engaging. If unsure about specifics, provide reasonable estimates based on the vehicle type.`
         },
         {
           role: "user",
-          content: `Decode this VIN: ${vin}`
+          content: `Analyze this vehicle:
+          ${vehicleData.modelYear} ${vehicleData.make} ${vehicleData.model}
+          ${vehicleData.trim ? `Trim: ${vehicleData.trim}` : ''}
+          ${vehicleData.engine ? `Engine: ${vehicleData.engine}` : ''}
+          ${vehicleData.mileage ? `Mileage: ${vehicleData.mileage} miles` : ''}`
         }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.1
+      temperature: 0.3
     });
 
     const result = JSON.parse(response.choices[0].message.content || '{}');
     
     return {
-      make: result.make || 'Unknown',
-      model: result.model || 'Unknown',
-      year: result.year || 0,
-      trim: result.trim || undefined,
-      engine: result.engine || 'Unknown',
-      transmission: result.transmission || 'Unknown',
-      fuelType: result.fuelType || 'Unknown',
-      bodyStyle: result.bodyStyle || 'Unknown',
-      drivetrain: result.drivetrain || 'Unknown',
-      confidence: Math.max(0, Math.min(1, result.confidence || 0))
+      funFacts: result.funFacts || [],
+      marketValue: result.marketValue || { estimated: "Unknown", factors: [] },
+      performance: result.performance || { acceleration: "Unknown", topSpeed: "Unknown", mpg: "Unknown" },
+      reliability: result.reliability || { score: "Unknown", commonIssues: [], strongPoints: [] },
+      maintenance: result.maintenance || { annualCost: "Unknown", criticalServices: [], tips: [] },
+      modifications: result.modifications || { popular: [], recommendations: [] },
+      trivia: result.trivia || { productionNumbers: "Unknown", celebrities: [], historical: [] }
     };
   } catch (error) {
-    console.error("VIN decode error:", error);
-    throw new Error("Failed to decode VIN with AI");
+    console.error("Vehicle enhancement error:", error);
+    throw new Error("Failed to enhance vehicle data with AI");
   }
 }
 

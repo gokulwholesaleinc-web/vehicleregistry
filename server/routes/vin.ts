@@ -2,7 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { requireAuth } from "../auth/middleware";
-import { decodeVIN } from "../services/openai";
+// Using hybrid decoder from http/routes/vin.ts
 
 const router = Router();
 
@@ -18,34 +18,27 @@ const DecodeInput = z.object({
   mileage: z.number().int().nonnegative().optional() 
 });
 
+// Redirect to the main hybrid VIN decoder
 router.post('/decode', requireAuth, limiter, async (req, res) => {
   try {
-    const body = DecodeInput.safeParse(req.body);
-    if (!body.success) {
-      return res.status(400).json({ 
+    // Forward the request to our hybrid decoder
+    const response = await fetch(`http://localhost:5000/api/v1/vin/decode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    
+    if (!response.ok) {
+      return res.status(response.status).json({ 
         ok: false, 
-        error: { 
-          message: "Invalid input", 
-          details: body.error.flatten() 
-        } 
+        error: { message: 'VIN decode service unavailable' } 
       });
     }
     
-    const vin = body.data.vin.toUpperCase();
-    
-    // Use existing OpenAI VIN decode service
-    const decoded = await decodeVIN(vin);
-    
-    res.json({ 
-      ok: true, 
-      data: {
-        vin,
-        ...decoded,
-        mileage: body.data.mileage
-      }
-    });
+    const result = await response.json();
+    res.json(result);
   } catch (error) {
-    console.error('VIN decode error:', error);
+    console.error('VIN decode forward error:', error);
     res.status(500).json({ 
       ok: false, 
       error: { 
