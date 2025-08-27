@@ -1,0 +1,164 @@
+# 🚑 Production blank page — root cause & drop‑in fix
+
+**Root cause (from your screenshots):** your server tries to serve `/home/runner/workspace/client/dist/index.html` but that file doesn’t exist in the running container. That means (a) the client build didn’t run on deploy **and**/or (b) the server is resolving the static path from `process.cwd()` ("workspace") instead of from the compiled server dir. Result: JSON error → empty page.
+
+Below is a minimal, non‑over‑engineered patch that:
+
+1. builds the client during deploy, and
+2. serves it from a stable path computed off `__dirname`.
+
+It also loosens CSP just enough for your external APIs (NHTSA/OpenAI) so you don’t get blocked requests after the page loads.
+
+---
+
+## 1) Add a tiny helper to serve the client reliably
+
+**Create:** `server/src/serveClient.ts`
+
+```ts
+// server/src/serveClient.ts
+import path from "node:path";
+import fs from "node:fs";
+import type express from "express";
+
+export function mountClient(app: express.Express) {
+  // __dirname will be .../server/dist in production; walk back to repo root
+  const clientDist = path.resolve(__dirname, "../../client/dist");
+
+  // Serve all built static assets (JS/CSS/images)
+  app.use(express.static(clientDist, { index: false, maxAge: "1h" }));
+
+  // For every non-API route, return index.html (SPA fallback)
+  app.get(/^\/(?!api\b).*/, (_req, res) => {
+    const indexFile = path.join(clientDist, "index.html");
+    fs.access(indexFile, fs.constants.F_OK, (err) => {
+      if (err) {
+        console.error("Client build missing at:", indexFile);
+        return res
+          .status(500)
+          .send(
+            "<h1>Build missing</h1><p>Run <code>npm run build:client</code> to generate client/dist</p>"
+          );
+      }
+      res.sendFile(indexFile);
+    });
+  });
+}
+```
+
+---
+
+## 2) Wire it into your server startup
+
+Open **`server/src/index.ts`** (or your main Express entry file) and add the highlighted bits.
+
+```ts
+// server/src/index.ts
+import express from "express";
+import helmet from "helmet";
+import { mountClient } from "./serveClient"; // ← add
+
+const app = express();
+
+// Relax CSP just enough for fonts + external APIs you call from the browser
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "img-src": ["'self'", "data:", "https:"],
+        "font-src": ["'self'", "https://fonts.gstatic.com"],
+        "style-src": ["'self'", "https://fonts.googleapis.com"],
+        "connect-src": [
+          "'self'",
+          "https:", // allows NHTSA, OpenAI, etc.
+          "data:"
+        ],
+      },
+    },
+  })
+);
+
+app.use(express.json());
+
+// ... your API routes under /api go here ...
+
+// Mount the SPA last so it doesn't swallow /api
+mountClient(app);
+
+const PORT = Number(process.env.PORT) || 3000;
+app.listen(PORT, () => console.log(`server listening on :${PORT}`));
+```
+
+> If your entry file is named differently (e.g., `server.ts`, `app.ts`), import and call `mountClient` there instead.
+
+---
+
+## 3) Ensure the client actually gets built on deploy
+
+Open **root** `package.json` and add these scripts (adjust if a script already exists):
+
+```json
+{
+  "scripts": {
+    "build:client": "vite build",
+    "postinstall": "npm run build:client"
+  }
+}
+```
+
+*Why `postinstall`?* Replit runs an install step on deploy. Hooking a build there guarantees `client/dist/index.html` exists before the server starts — no more ENOENT.
+
+If you prefer not to use `postinstall`, you can change the start command to run the build explicitly (see next step).
+
+---
+
+## 4) Replit start command (either option works)
+
+### Option A — keep `postinstall` and start normally
+
+No change needed if you already start your server with `node server/dist/index.js` or `tsx server/src/index.ts`.
+
+### Option B — no `postinstall`, build on start
+
+Edit **`.replit`** to use:
+
+```ini
+run = "bash -lc 'npm ci && npm run build:client && tsx server/src/index.ts'"
+```
+
+> Replace `tsx ...` with your actual server start (e.g., `node server/dist/index.js`) if you compile the server.
+
+---
+
+## 5) Quick verification
+
+1. In Replit shell, run:
+
+   ```bash
+   npm ci
+   npm run build:client
+   tsx server/src/index.ts   # or your start script
+   ```
+2. Visit the app — it should now serve `client/dist/index.html` and load assets.
+3. Open the browser console and confirm no CSP blocks for calls to NHTSA/OpenAI.
+
+---
+
+## 6) Why this fixes your exact error
+
+* Your logs show: `ENOENT: ... client/dist/index.html` → the server looked in a path based on the *current working directory* ("workspace") instead of the compiled server folder. Using `__dirname` + `../../client/dist` removes that fragility.
+* Building the client during deploy guarantees the `dist` folder exists.
+* Adjusted CSP prevents a "page loads but fetches fail" follow‑up issue.
+
+---
+
+## 7) Optional: add a tiny health endpoint for uptime checks
+
+```ts
+app.get('/healthz', (_req, res) => res.json({ ok: true }));
+```
+
+---
+
+**That’s it.** This is the smallest reliable fix: make sure the client is built, and serve it from a stable path. Drop these changes in, redeploy, and the blank page goes away.
