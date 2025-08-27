@@ -165,10 +165,12 @@ export default function SmartMaintenancePredictions({ vehicleId }: SmartMaintena
         </div>
 
         <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-2 gap-1">
-            <TabsTrigger value="predictions" className="flex-shrink-0 mobile-text">Maintenance Predictions</TabsTrigger>
-            <TabsTrigger value="seasonal" className="flex-shrink-0 mobile-text">Seasonal Prep</TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto horizontal-scroll-tabs">
+            <TabsList className="inline-flex w-auto min-w-full md:grid md:grid-cols-2 md:w-full gap-1">
+              <TabsTrigger value="predictions" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Maintenance Predictions</TabsTrigger>
+              <TabsTrigger value="seasonal" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Seasonal Prep</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="predictions" className="space-y-4 mt-6">
             {predictions.length > 0 ? (

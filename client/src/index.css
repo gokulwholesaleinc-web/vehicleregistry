@@ -712,6 +712,8 @@
 /* Tab components mobile fix */
 .tabs-mobile {
   @apply w-full overflow-x-auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tabs-mobile .tabs-list {
@@ -720,6 +722,21 @@
 
 .tabs-mobile .tabs-trigger {
   @apply flex-shrink-0 whitespace-nowrap px-3 py-2 text-xs sm:text-sm;
+}
+
+/* Enhanced horizontal scroll for tabs */
+.horizontal-scroll-tabs {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.horizontal-scroll-tabs::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
 /* Mobile-Optimized Tables */

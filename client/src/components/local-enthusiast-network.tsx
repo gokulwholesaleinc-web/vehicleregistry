@@ -174,11 +174,13 @@ export default function LocalEnthusiastNetwork({ vehicleId }: LocalEnthusiastNet
       
       <CardContent>
         <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-3 gap-1">
-            <TabsTrigger value="nearby" className="flex-shrink-0 mobile-text">Nearby Users</TabsTrigger>
-            <TabsTrigger value="events" className="flex-shrink-0 mobile-text">Local Events</TabsTrigger>
-            <TabsTrigger value="skills" className="flex-shrink-0 mobile-text">Skill Sharing</TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto horizontal-scroll-tabs">
+            <TabsList className="inline-flex w-auto min-w-full md:grid md:grid-cols-3 md:w-full gap-1">
+              <TabsTrigger value="nearby" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Nearby Users</TabsTrigger>
+              <TabsTrigger value="events" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Local Events</TabsTrigger>
+              <TabsTrigger value="skills" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Skill Sharing</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="nearby" className="space-y-6 mt-6">
             {/* Search and Filter Controls */}

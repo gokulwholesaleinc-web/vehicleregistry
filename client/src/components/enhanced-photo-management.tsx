@@ -170,12 +170,14 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
       
       <CardContent>
         <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-4 gap-1">
-            <TabsTrigger value="gallery" className="flex-shrink-0 mobile-text">Photo Gallery</TabsTrigger>
-            <TabsTrigger value="comparisons" className="flex-shrink-0 mobile-text">Before/After</TabsTrigger>
-            <TabsTrigger value="timelapse" className="flex-shrink-0 mobile-text">Time-lapse</TabsTrigger>
-            <TabsTrigger value="organize" className="flex-shrink-0 mobile-text">AI Organize</TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto horizontal-scroll-tabs">
+            <TabsList className="inline-flex w-auto min-w-full md:grid md:grid-cols-4 md:w-full gap-1">
+              <TabsTrigger value="gallery" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Photo Gallery</TabsTrigger>
+              <TabsTrigger value="comparisons" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Before/After</TabsTrigger>
+              <TabsTrigger value="timelapse" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Time-lapse</TabsTrigger>
+              <TabsTrigger value="organize" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">AI Organize</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="gallery" className="space-y-6 mt-6">
             {/* Search and Filter Controls */}

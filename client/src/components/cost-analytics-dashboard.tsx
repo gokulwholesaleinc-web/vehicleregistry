@@ -172,12 +172,14 @@ export default function CostAnalyticsDashboard({ vehicleId }: CostAnalyticsDashb
       
       <CardContent>
         <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-4 gap-1">
-            <TabsTrigger value="overview" className="flex-shrink-0 mobile-text">Overview</TabsTrigger>
-            <TabsTrigger value="breakdown" className="flex-shrink-0 mobile-text">Breakdown</TabsTrigger>
-            <TabsTrigger value="roi" className="flex-shrink-0 mobile-text">ROI Analysis</TabsTrigger>
-            <TabsTrigger value="budget" className="flex-shrink-0 mobile-text">Budget Planning</TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto horizontal-scroll-tabs">
+            <TabsList className="inline-flex w-auto min-w-full md:grid md:grid-cols-4 md:w-full gap-1">
+              <TabsTrigger value="overview" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Overview</TabsTrigger>
+              <TabsTrigger value="breakdown" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Breakdown</TabsTrigger>
+              <TabsTrigger value="roi" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">ROI Analysis</TabsTrigger>
+              <TabsTrigger value="budget" className="flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm">Budget Planning</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
             {totalCosts > 0 ? (
