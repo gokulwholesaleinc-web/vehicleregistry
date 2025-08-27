@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import AppHeader from "@/components/AppHeader";
 import VehicleSelector from "@/components/vehicle-selector";
@@ -22,64 +22,19 @@ import EnhancedPhotoManagement from "@/components/enhanced-photo-management";
 import LocalEnthusiastNetwork from "@/components/local-enthusiast-network";
 
 export default function Dashboard() {
-  // Initialize selectedVehicleId from localStorage or empty string
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('vg.selectedVehicleId') || '';
-    }
-    return '';
-  });
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
   const [isAddEntryModalOpen, setIsAddEntryModalOpen] = useState(false);
   const [entryType, setEntryType] = useState<"modification" | "maintenance">("modification");
   const [isVehicleDetailsModalOpen, setIsVehicleDetailsModalOpen] = useState(false);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const breadcrumbs = useBreadcrumbs();
 
-  // Fetch vehicles to enable auto-selection
-  const { data: vehiclesResponse, isLoading: vehiclesLoading } = useQuery({
-    queryKey: ["/api/v1/vehicles"],
-  });
-
-  const vehicles = (vehiclesResponse as any)?.data || [];
-
-  // Auto-select first vehicle if none selected and vehicles are available
-  useEffect(() => {
-    if (!selectedVehicleId && vehicles.length > 0 && !vehiclesLoading) {
-      const firstVehicleId = vehicles[0].id;
-      setSelectedVehicleId(firstVehicleId);
-      localStorage.setItem('vg.selectedVehicleId', firstVehicleId);
-    }
-  }, [vehicles, selectedVehicleId, vehiclesLoading]);
-
-  // Enhanced vehicle selection handler with persistence
-  const handleVehicleSelect = (vehicleId: string) => {
-    setSelectedVehicleId(vehicleId);
-    localStorage.setItem('vg.selectedVehicleId', vehicleId);
-  };
-
   const handleAddEntry = (type: "modification" | "maintenance") => {
     setEntryType(type);
     setIsAddEntryModalOpen(true);
   };
 
-  // Show loading state while vehicles are being fetched
-  if (vehiclesLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-        <AppHeader />
-        <div className="py-8">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-center min-h-64">
-              <div className="animate-pulse text-gray-600 dark:text-gray-300">Loading your vehicles...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show "Start Your Registry" only if no vehicles exist AND not loading
-  if (!selectedVehicleId && vehicles.length === 0) {
+  if (!selectedVehicleId) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
         <AppHeader />
@@ -97,7 +52,7 @@ export default function Dashboard() {
               
               <VehicleSelector 
                 selectedVehicleId={selectedVehicleId}
-                onVehicleSelect={handleVehicleSelect}
+                onVehicleSelect={setSelectedVehicleId}
                 onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
               />
 
@@ -137,7 +92,7 @@ export default function Dashboard() {
           
           <VehicleSelector 
             selectedVehicleId={selectedVehicleId}
-            onVehicleSelect={handleVehicleSelect}
+            onVehicleSelect={setSelectedVehicleId}
             onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
           />
           

@@ -61,7 +61,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "compression": "^1.8.1",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
     "date-fns": "^3.6.0",
@@ -86,7 +85,6 @@
     "memorystore": "^1.6.7",
     "minimist": "^1.2.8",
     "mkdirp": "^3.0.1",
-    "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "nanoid": "^5.1.5",
     "next-themes": "^0.4.6",
@@ -116,8 +114,7 @@
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0",
-    "zustand": "^5.0.8"
+    "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
     "@replit/vite-plugin-cartographer": "^0.3.0",

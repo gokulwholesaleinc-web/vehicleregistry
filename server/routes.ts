@@ -14,7 +14,6 @@ import { mileageVerificationRouter } from "./routes/mileageVerification";
 import { pdfReportsRouter } from "./routes/pdfReports";
 import { csvImportExportRouter } from "./routes/csvImportExport";
 import vinRouter from "./routes/vin";
-import { maintenanceRouter } from "./routes/maintenance";
 import { applySecurity } from "./http/security";
 import auditRoutes from "./audit/auditRoutes";
 import { 
@@ -378,9 +377,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // CSV import/export routes
   app.use("/api/v1/csv", csvImportExportRouter);
-  
-  // Maintenance prediction routes
-  app.use(maintenanceRouter);
 
   // Parts, Media, and Sharing routes  
   const partsRouter = (await import('./routes/parts')).default;
@@ -467,6 +463,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Search functionality
+  app.get('/api/search', isAuthenticated, async (req: any, res) => {
+    try {
+      const { q, type = 'all' } = z.object({
+        q: z.string().min(1),
+        type: z.enum(['all', 'vehicles', 'modifications', 'maintenance']).default('all')
+      }).parse(req.query);
+      
+      const userId = req.user.id;
+      const results: any = {};
+      
+      if (type === 'all' || type === 'vehicles') {
+        const vehicles = await storage.getVehiclesByOwner(userId);
+        results.vehicles = vehicles.filter(vehicle => 
+          vehicle.make.toLowerCase().includes(q.toLowerCase()) ||
+          vehicle.model.toLowerCase().includes(q.toLowerCase()) ||
+          vehicle.year.toString().includes(q) ||
+(vehicle.vin?.toLowerCase().includes(q.toLowerCase()) ?? false)
+        );
+      }
+      
+      if (type === 'all' || type === 'modifications') {
+        // Search modifications across all user's vehicles
+        const userVehicles = await storage.getVehiclesByOwner(userId);
+        const allModifications = [];
+        for (const vehicle of userVehicles) {
+          const mods = await storage.getModifications(vehicle.id);
+          allModifications.push(...mods.map(mod => ({ ...mod, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` })));
+        }
+        results.modifications = allModifications.filter(mod =>
+          (mod as any).title?.toLowerCase().includes(q.toLowerCase()) ||
+          mod.description?.toLowerCase().includes(q.toLowerCase()) ||
+          (mod as any).category?.toLowerCase().includes(q.toLowerCase())
+        );
+      }
+      
+      if (type === 'all' || type === 'maintenance') {
+        // Search maintenance records across all user's vehicles
+        const userVehicles = await storage.getVehiclesByOwner(userId);
+        const allRecords = [];
+        for (const vehicle of userVehicles) {
+          const records = await storage.getMaintenanceRecords(vehicle.id);
+          allRecords.push(...records.map(record => ({ ...record, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` })));
+        }
+        results.maintenance = allRecords.filter(record =>
+          (record as any).title?.toLowerCase().includes(q.toLowerCase()) ||
+          record.description?.toLowerCase().includes(q.toLowerCase()) ||
+          (record as any).category?.toLowerCase().includes(q.toLowerCase())
+        );
+      }
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "Search failed" });
+    }
+  });
 
   // Notifications
   app.get('/api/notifications', isAuthenticated, async (req: any, res) => {

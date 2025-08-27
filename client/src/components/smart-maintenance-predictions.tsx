@@ -16,8 +16,6 @@ import {
   DollarSign
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useMaintenanceRecommendations } from "@/hooks/useAI";
-import { apiRequest } from "@/lib/queryClient";
 
 interface MaintenancePrediction {
   id: string;
@@ -29,15 +27,6 @@ interface MaintenancePrediction {
   urgency: "low" | "medium" | "high";
   reason: string;
   aiInsight: string;
-}
-
-interface AIRecommendation {
-  task: string;
-  priority: "low" | "medium" | "high" | "urgent";
-  description: string;
-  estimatedCost: string;
-  dueDate: string;
-  reason: string;
 }
 
 interface SeasonalSuggestion {
@@ -57,7 +46,6 @@ interface SmartMaintenancePredictionsProps {
 export default function SmartMaintenancePredictions({ vehicleId }: SmartMaintenancePredictionsProps) {
   const [selectedTab, setSelectedTab] = useState("predictions");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiRecommendations, setAiRecommendations] = useState<AIRecommendation[]>([]);
 
   // Fetch vehicle data to analyze actual maintenance patterns
   const { data: vehicle } = useQuery({
@@ -73,55 +61,14 @@ export default function SmartMaintenancePredictions({ vehicleId }: SmartMaintena
   });
 
   // Generate predictions based on actual vehicle data
-  const convertAIRecommendationsToPredictions = (recommendations: AIRecommendation[]): MaintenancePrediction[] => {
-    return recommendations.map((rec, index) => {
-      const urgency = rec.priority === 'urgent' ? 'high' : rec.priority as 'low' | 'medium' | 'high';
-      
-      // Estimate cost from the cost string
-      const costMatch = rec.estimatedCost.match(/\$(\d+)/);
-      const estimatedCost = costMatch ? parseInt(costMatch[1]) : 100;
-      
-      // Convert due date to actual date
-      let estimatedDate = new Date();
-      if (rec.dueDate.toLowerCase().includes('days')) {
-        const daysMatch = rec.dueDate.match(/\d+/);
-        if (daysMatch) {
-          estimatedDate.setDate(estimatedDate.getDate() + parseInt(daysMatch[0]));
-        }
-      } else if (rec.dueDate.toLowerCase().includes('miles')) {
-        // Assume 1000 miles = 30 days for scheduling
-        estimatedDate.setDate(estimatedDate.getDate() + 30);
-      } else {
-        estimatedDate.setDate(estimatedDate.getDate() + 14);
-      }
-      
-      return {
-        id: `ai-rec-${index}`,
-        type: rec.task,
-        description: rec.description,
-        estimatedDate: estimatedDate.toISOString().split('T')[0],
-        confidence: 90,
-        cost: estimatedCost,
-        urgency,
-        reason: rec.reason,
-        aiInsight: `AI recommendation based on manufacturer specs and owner community feedback`
-      };
-    });
-  };
-
   const generateMaintenancePredictions = (): MaintenancePrediction[] => {
-    // Use AI recommendations if available
-    if (aiRecommendations.length > 0) {
-      return convertAIRecommendationsToPredictions(aiRecommendations);
-    }
-    
-    // Fallback to basic predictions if AI not available
     if (!vehicle?.data || !maintenanceRecords?.data) return [];
     
     const vehicleData = vehicle.data;
     const records = maintenanceRecords.data;
     const predictions: MaintenancePrediction[] = [];
     
+    // Calculate basic maintenance intervals based on vehicle age and mileage
     const currentYear = new Date().getFullYear();
     const vehicleAge = currentYear - vehicleData.year;
     const currentMileage = vehicleData.currentMileage || 0;
@@ -151,35 +98,12 @@ export default function SmartMaintenancePredictions({ vehicleId }: SmartMaintena
 
   const predictions = generateMaintenancePredictions();
 
-  const maintenanceRecommendationsMutation = useMaintenanceRecommendations();
-
   const analyzeWithAI = async () => {
-    if (!vehicle?.data) return;
-    
     setIsAnalyzing(true);
-    try {
-      const recommendations = await maintenanceRecommendationsMutation.mutateAsync({
-        make: vehicle.data.make || '',
-        model: vehicle.data.model || '',
-        year: parseInt(vehicle.data.year) || new Date().getFullYear(),
-        mileage: vehicle.data.currentMileage || 0,
-        modifications: [],
-        lastMaintenance: maintenanceRecords?.data?.map((r: any) => `${r.serviceType}: ${r.mileage} miles`) || []
-      });
-      setAiRecommendations(recommendations);
-    } catch (error) {
-      console.error('Failed to get AI recommendations:', error);
-    } finally {
-      setIsAnalyzing(false);
-    }
+    // Simulate AI analysis
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    setIsAnalyzing(false);
   };
-
-  // Auto-generate AI recommendations when vehicle data is available
-  useEffect(() => {
-    if (vehicle?.data && vehicle.data.currentMileage && vehicle.data.currentMileage > 1000) {
-      analyzeWithAI();
-    }
-  }, [vehicle?.data?.id]);
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {

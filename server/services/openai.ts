@@ -139,41 +139,24 @@ export async function generateMaintenanceRecommendations(
       messages: [
         {
           role: "system",
-          content: `You are an expert automotive maintenance advisor with deep knowledge of manufacturer-specific service schedules, TSBs (Technical Service Bulletins), and vehicle-specific forum knowledge from enthusiast communities.
-
-          For each vehicle, draw from these specific sources:
-          - Official manufacturer maintenance schedules (BMW service intervals, Honda maintenance minder, etc.)
-          - Model-specific forums (M3Post, VWVortex, Club Lexus, F150Forum, etc.)
-          - TSBs and known issues for the specific year/model
-          - Performance vehicle requirements (M cars, AMG, STI, Type R, etc.)
-          - Enthusiast community preventive maintenance wisdom
-          
-          Vehicle-Specific Examples:
-          - BMW M3: Rod bearing inspection, VANOS service, differential service
-          - Honda Civic Si: Timing chain tensioner, valve adjustment
-          - Subaru STI: Head gasket monitoring, ringland failure prevention
-          - Ford Mustang GT: Oil cooler lines, IRS bushing inspection
-          
-          Respond with JSON in this exact format: {"recommendations": [{
-            "task": "string (specific to the vehicle)",
-            "priority": "low|medium|high|urgent", 
-            "description": "string (detailed, vehicle-specific explanation)",
-            "estimatedCost": "string like '$50-100' (realistic for this specific vehicle)",
+          content: `You are an expert automotive maintenance advisor. Generate personalized maintenance recommendations based on vehicle data.
+          Respond with JSON array of recommendations in this format: [{
+            "task": "string",
+            "priority": "low|medium|high|urgent",
+            "description": "string",
+            "estimatedCost": "string like '$50-100'",
             "dueDate": "string like 'Next 1000 miles' or 'Within 30 days'",
-            "reason": "string explaining why this is needed for THIS specific vehicle based on manufacturer specs, known issues, or forum wisdom"
-          }]}
-          
-          Focus on vehicle-specific preventive maintenance, known failure points, and performance optimization unique to this make/model/year.`
+            "reason": "string explaining why this is needed"
+          }]
+          Focus on preventive maintenance, safety, and performance optimization.`
         },
         {
           role: "user",
-          content: `Generate vehicle-specific maintenance recommendations for:
+          content: `Generate maintenance recommendations for:
           Vehicle: ${vehicleData.year} ${vehicleData.make} ${vehicleData.model}
-          Current Mileage: ${vehicleData.mileage} miles
+          Mileage: ${vehicleData.mileage} miles
           Modifications: ${vehicleData.modifications?.join(', ') || 'None'}
-          Recent Maintenance: ${vehicleData.lastMaintenance?.join(', ') || 'None recorded'}
-          
-          Based on this specific vehicle's manufacturer service schedule, known issues for this exact year/model from forums and TSBs, and enthusiast community recommendations - what maintenance should be performed at this mileage? Be specific to this vehicle, not generic advice.`
+          Recent Maintenance: ${vehicleData.lastMaintenance?.join(', ') || 'None recorded'}`
         }
       ],
       response_format: { type: "json_object" },
