@@ -1,11 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { log } from "./vite";
 import { applySecurity } from "./http/security";
 import { logMiddleware } from "./http/logging";
 import { validateEnvironment } from "./security/environment";
 import { auditRequestContext, auditAutoInstrumentation } from "./audit/auditLogger";
-import { mountClient } from "./serveClient";
 
 // Validate environment before starting
 validateEnvironment();
@@ -28,6 +27,12 @@ app.use(logMiddleware);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
+
+// Force JSON content type for all API responses
+app.use("/api", (_req, res, next) => {
+  res.type("application/json");
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -62,27 +67,41 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+  // Health check endpoint - shows API is working
+  app.get("/", (_req, res) => {
+    res.json({ 
+      service: "vintagegarage-api", 
+      status: "ok",
+      message: "VINtage Garage Registry API Server" 
+    });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    // Use simplified, reliable static client serving
-    mountClient(app);
-  }
+  // 404 handler for non-API routes
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api") && req.path !== "/") {
+      return res.status(404).json({ 
+        error: "Not Found", 
+        message: "API-only server - no static files served",
+        hint: "Use /api/* endpoints for API calls"
+      });
+    }
+    next();
+  });
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
+  // Global error handler - always return JSON
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    console.error(err);
+    const status = err.status || err.statusCode || 500;
+    res.status(status).json({
+      error: status === 404 ? "Not Found" : "Internal Server Error",
+      message: err.message || "An error occurred",
+      details: process.env.NODE_ENV === "development" ? String(err) : undefined,
+    });
+  });
+
+  // ALWAYS serve the API on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
+  // This serves the API only - frontend deployed separately.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
