@@ -60,7 +60,7 @@ export function applySecurity(app: Express) {
   // Enhanced Helmet configuration
   app.use(helmet({
     crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
-    crossOriginResourcePolicy: { policy: 'same-origin' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Fix favicon and static asset CORP warnings
     dnsPrefetchControl: { allow: false },
     frameguard: { action: 'sameorigin' },
     hidePoweredBy: true,
