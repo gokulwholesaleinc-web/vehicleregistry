@@ -36,7 +36,7 @@ export default function Dashboard() {
   const breadcrumbs = useBreadcrumbs();
 
   // Fetch vehicles to enable auto-selection
-  const { data: vehiclesResponse } = useQuery({
+  const { data: vehiclesResponse, isLoading: vehiclesLoading } = useQuery({
     queryKey: ["/api/v1/vehicles"],
   });
 
@@ -44,12 +44,12 @@ export default function Dashboard() {
 
   // Auto-select first vehicle if none selected and vehicles are available
   useEffect(() => {
-    if (!selectedVehicleId && vehicles.length > 0) {
+    if (!selectedVehicleId && vehicles.length > 0 && !vehiclesLoading) {
       const firstVehicleId = vehicles[0].id;
       setSelectedVehicleId(firstVehicleId);
       localStorage.setItem('vg.selectedVehicleId', firstVehicleId);
     }
-  }, [vehicles, selectedVehicleId]);
+  }, [vehicles, selectedVehicleId, vehiclesLoading]);
 
   // Enhanced vehicle selection handler with persistence
   const handleVehicleSelect = (vehicleId: string) => {
@@ -62,7 +62,24 @@ export default function Dashboard() {
     setIsAddEntryModalOpen(true);
   };
 
-  if (!selectedVehicleId) {
+  // Show loading state while vehicles are being fetched
+  if (vehiclesLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
+        <AppHeader />
+        <div className="py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-center min-h-64">
+              <div className="animate-pulse text-gray-600 dark:text-gray-300">Loading your vehicles...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show "Start Your Registry" only if no vehicles exist AND not loading
+  if (!selectedVehicleId && vehicles.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
         <AppHeader />
