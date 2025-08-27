@@ -696,6 +696,32 @@
   @apply mt-1;
 }
 
+/* Mobile layout utilities for tabs fix */
+.mobile-container {
+  @apply px-3 sm:px-4 md:px-6;
+}
+
+.mobile-spacing {
+  @apply space-y-3 sm:space-y-4 md:space-y-6;
+}
+
+.mobile-gap {
+  @apply gap-3 sm:gap-4 md:gap-6;
+}
+
+/* Tab components mobile fix */
+.tabs-mobile {
+  @apply w-full overflow-x-auto;
+}
+
+.tabs-mobile .tabs-list {
+  @apply flex flex-nowrap min-w-max;
+}
+
+.tabs-mobile .tabs-trigger {
+  @apply flex-shrink-0 whitespace-nowrap px-3 py-2 text-xs sm:text-sm;
+}
+
 /* Mobile-Optimized Tables */
 .table-mobile {
   @apply w-full overflow-x-auto;

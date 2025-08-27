@@ -170,16 +170,16 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
       
       <CardContent>
         <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="gallery">Photo Gallery</TabsTrigger>
-            <TabsTrigger value="comparisons">Before/After</TabsTrigger>
-            <TabsTrigger value="timelapse">Time-lapse</TabsTrigger>
-            <TabsTrigger value="organize">AI Organize</TabsTrigger>
+          <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-4 gap-1">
+            <TabsTrigger value="gallery" className="flex-shrink-0 mobile-text">Photo Gallery</TabsTrigger>
+            <TabsTrigger value="comparisons" className="flex-shrink-0 mobile-text">Before/After</TabsTrigger>
+            <TabsTrigger value="timelapse" className="flex-shrink-0 mobile-text">Time-lapse</TabsTrigger>
+            <TabsTrigger value="organize" className="flex-shrink-0 mobile-text">AI Organize</TabsTrigger>
           </TabsList>
 
           <TabsContent value="gallery" className="space-y-6 mt-6">
             {/* Search and Filter Controls */}
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row mobile-gap mobile-spacing">
               <div className="flex-1">
                 <Label htmlFor="search-photos">Search Photos</Label>
                 <div className="relative">
@@ -213,7 +213,7 @@ export default function EnhancedPhotoManagement({ vehicleId }: EnhancedPhotoMana
             </div>
 
             {/* Photo Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 mobile-gap">
               {filteredPhotos.map((photo) => (
                 <Card key={photo.id} className="card-hover group overflow-hidden">
                   <div className="relative">

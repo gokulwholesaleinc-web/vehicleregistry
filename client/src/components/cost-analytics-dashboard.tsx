@@ -172,18 +172,18 @@ export default function CostAnalyticsDashboard({ vehicleId }: CostAnalyticsDashb
       
       <CardContent>
         <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
-            <TabsTrigger value="roi">ROI Analysis</TabsTrigger>
-            <TabsTrigger value="budget">Budget Planning</TabsTrigger>
+          <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-4 gap-1">
+            <TabsTrigger value="overview" className="flex-shrink-0 mobile-text">Overview</TabsTrigger>
+            <TabsTrigger value="breakdown" className="flex-shrink-0 mobile-text">Breakdown</TabsTrigger>
+            <TabsTrigger value="roi" className="flex-shrink-0 mobile-text">ROI Analysis</TabsTrigger>
+            <TabsTrigger value="budget" className="flex-shrink-0 mobile-text">Budget Planning</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
             {totalCosts > 0 ? (
               <>
                 {/* Key Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 mobile-gap mobile-spacing">
                   <Card className="card-modern">
                     <CardContent className="p-4">
                       <div className="flex items-center space-x-2">
