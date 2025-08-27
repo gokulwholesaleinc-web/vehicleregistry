@@ -63,7 +63,7 @@ export function useMaintenanceRecommendations() {
       modifications?: string[];
       lastMaintenance?: string[];
     }): Promise<MaintenanceRecommendation[]> => {
-      const response = await fetch('/api/ai/maintenance-recommendations', {
+      const response = await fetch('/api/v1/ai/maintenance-recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vehicleData)
@@ -84,7 +84,7 @@ export function usePhotoAnalysis() {
       const formData = new FormData();
       formData.append('photo', photo);
       
-      const response = await fetch('/api/ai/analyze-photo', {
+      const response = await fetch('/api/v1/ai/analyze-photo', {
         method: 'POST',
         body: formData
       });
@@ -105,7 +105,7 @@ export function useEntryCategorizer() {
       description: string;
       cost: number;
     }): Promise<EntryCategorization> => {
-      const response = await fetch('/api/ai/categorize-entry', {
+      const response = await fetch('/api/v1/ai/categorize-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entryData)
@@ -126,7 +126,7 @@ export function useDuplicateChecker() {
       type: 'vin' | 'modification' | 'maintenance';
       identifier: string;
     }): Promise<DuplicateCheckResult> => {
-      const response = await fetch('/api/registry/check-duplicate', {
+      const response = await fetch('/api/v1/registry/check-duplicate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(checkData)
