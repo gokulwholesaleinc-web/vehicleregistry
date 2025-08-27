@@ -11,8 +11,8 @@ function firstExisting(paths: string[]) {
 export function mountStatic(app: Express) {
   const candidates = [
     path.resolve(process.cwd(), "client", "dist"),
-    path.resolve(__dirname, "../client/dist"),
-    path.resolve(__dirname, "../../client/dist"),
+    path.resolve(import.meta.dirname, "../client/dist"),
+    path.resolve(import.meta.dirname, "../../client/dist"),
     path.resolve(process.cwd(), "dist/public"), // our current build output
   ];
   const dist = firstExisting(candidates);
@@ -21,7 +21,7 @@ export function mountStatic(app: Express) {
   app.get("/__debug/static", (_req: Request, res: Response) => {
     res.json({
       cwd: process.cwd(),
-      __dirname,
+      dirname: import.meta.dirname,
       candidates,
       distExists: Boolean(dist),
       resolvedDist: dist,
