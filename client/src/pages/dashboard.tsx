@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import AppHeader from "@/components/AppHeader";
 import VehicleSelector from "@/components/vehicle-selector";
@@ -22,12 +22,40 @@ import EnhancedPhotoManagement from "@/components/enhanced-photo-management";
 import LocalEnthusiastNetwork from "@/components/local-enthusiast-network";
 
 export default function Dashboard() {
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
+  // Initialize selectedVehicleId from localStorage or empty string
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('vg.selectedVehicleId') || '';
+    }
+    return '';
+  });
   const [isAddEntryModalOpen, setIsAddEntryModalOpen] = useState(false);
   const [entryType, setEntryType] = useState<"modification" | "maintenance">("modification");
   const [isVehicleDetailsModalOpen, setIsVehicleDetailsModalOpen] = useState(false);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const breadcrumbs = useBreadcrumbs();
+
+  // Fetch vehicles to enable auto-selection
+  const { data: vehiclesResponse } = useQuery({
+    queryKey: ["/api/v1/vehicles"],
+  });
+
+  const vehicles = (vehiclesResponse as any)?.data || [];
+
+  // Auto-select first vehicle if none selected and vehicles are available
+  useEffect(() => {
+    if (!selectedVehicleId && vehicles.length > 0) {
+      const firstVehicleId = vehicles[0].id;
+      setSelectedVehicleId(firstVehicleId);
+      localStorage.setItem('vg.selectedVehicleId', firstVehicleId);
+    }
+  }, [vehicles, selectedVehicleId]);
+
+  // Enhanced vehicle selection handler with persistence
+  const handleVehicleSelect = (vehicleId: string) => {
+    setSelectedVehicleId(vehicleId);
+    localStorage.setItem('vg.selectedVehicleId', vehicleId);
+  };
 
   const handleAddEntry = (type: "modification" | "maintenance") => {
     setEntryType(type);
@@ -52,7 +80,7 @@ export default function Dashboard() {
               
               <VehicleSelector 
                 selectedVehicleId={selectedVehicleId}
-                onVehicleSelect={setSelectedVehicleId}
+                onVehicleSelect={handleVehicleSelect}
                 onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
               />
 
@@ -92,7 +120,7 @@ export default function Dashboard() {
           
           <VehicleSelector 
             selectedVehicleId={selectedVehicleId}
-            onVehicleSelect={setSelectedVehicleId}
+            onVehicleSelect={handleVehicleSelect}
             onOpenVehicleDetails={() => setIsVehicleDetailsModalOpen(true)}
           />
           
