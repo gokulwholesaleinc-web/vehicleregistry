@@ -14,6 +14,7 @@ import { mileageVerificationRouter } from "./routes/mileageVerification";
 import { pdfReportsRouter } from "./routes/pdfReports";
 import { csvImportExportRouter } from "./routes/csvImportExport";
 import vinRouter from "./routes/vin";
+import { maintenanceRouter } from "./routes/maintenance";
 import { applySecurity } from "./http/security";
 import auditRoutes from "./audit/auditRoutes";
 import { 
@@ -377,6 +378,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // CSV import/export routes
   app.use("/api/v1/csv", csvImportExportRouter);
+  
+  // Maintenance prediction routes
+  app.use(maintenanceRouter);
 
   // Parts, Media, and Sharing routes  
   const partsRouter = (await import('./routes/parts')).default;
