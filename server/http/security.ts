@@ -2,6 +2,8 @@ import type { Express } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import compression from 'compression';
+import morgan from 'morgan';
 import { getEnv, isDevelopment } from '../security/environment';
 import { enforceVINUniqueness, vinTransferGuard } from '../security/vinSecurity';
 
@@ -48,6 +50,12 @@ function buildAllowlist() {
 export function applySecurity(app: Express) {
   const env = getEnv();
   const isDev = isDevelopment();
+  
+  // Compression for better performance
+  app.use(compression());
+  
+  // Request logging (less verbose in production)
+  app.use(morgan(isDev ? 'dev' : 'combined'));
   
   // Enhanced Helmet configuration
   app.use(helmet({
