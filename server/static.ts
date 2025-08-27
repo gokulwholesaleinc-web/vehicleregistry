@@ -10,10 +10,12 @@ function firstExisting(paths: string[]) {
 
 export function mountStatic(app: Express) {
   const candidates = [
-    path.resolve(process.cwd(), "client", "dist"),
+    path.resolve(process.cwd(), "dist/public"), // our current build output - PRIORITY
+    path.resolve(import.meta.dirname, "../dist/public"),
+    path.resolve(import.meta.dirname, "../../dist/public"), 
+    path.resolve(process.cwd(), "client", "dist"), // legacy fallback
     path.resolve(import.meta.dirname, "../client/dist"),
     path.resolve(import.meta.dirname, "../../client/dist"),
-    path.resolve(process.cwd(), "dist/public"), // our current build output
   ];
   const dist = firstExisting(candidates);
 
