@@ -72,8 +72,9 @@ class ApiRouteRegistry {
   }
 
   private normalizePath(path: string): string {
-    // Remove /api and version prefixes for comparison
-    return path.replace(/^\/api\/(v\d+\/)?/, '/');
+    // Keep the full path structure to avoid false conflicts between different endpoints
+    // Only remove the /api prefix but preserve the rest of the path structure
+    return path.replace(/^\/api\//, '/');
   }
 
   private checkParameterConflicts(method: string, path: string): void {
