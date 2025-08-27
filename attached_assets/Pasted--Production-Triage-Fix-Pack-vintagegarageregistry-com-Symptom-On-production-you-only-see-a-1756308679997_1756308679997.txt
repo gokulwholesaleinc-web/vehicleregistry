@@ -1,0 +1,289 @@
+# Production Triage & Fix Pack — vintagegarageregistry.com
+
+> Symptom: On production, you only see a few bare boxes with headers and raw JSON. In dev it looked fine.
+>
+> **Most likely root causes (ranked):**
+>
+> 1. **Tailwind content globs are wrong** → purge removed nearly all CSS in the production build → UI looks like unstyled boxes.
+> 2. **Main JS/CSS assets 404 or blocked (CSP)** → app doesn’t hydrate; you see fallback or debug blocks.
+> 3. **SPA fallback missing** → router URLs 404 on refresh; some hosts show raw JSON or directory index.
+> 4. **API base URL / CORS mismatch** → components render `<pre>` JSON fallbacks.
+>
+> Below is a surgical, copy‑paste plan to diagnose and fix quickly.
+
+---
+
+## A) 5‑Minute Triage (run locally in your browser devtools)
+
+1. **Open Console** on `https://vintagegarageregistry.com/` → note any red errors:
+
+   * `GET /assets/*.js 404` → **Vite base path / hosting path issue**.
+   * `Refused to execute script due to Content Security Policy` → **CSP blocking**.
+2. **Network tab**: reload page.
+
+   * Are main `index-*.css` and `index-*.js` loading (200)? If not, note paths.
+3. **Elements tab → pick a card** and check **Computed styles**.
+
+   * If almost no Tailwind classes have effect → tailwind purge likely nuked styles.
+
+Proceed to the fixes below in order.
+
+---
+
+## B) Tailwind Purge Fix (most common)
+
+Ensure Tailwind **content globs** match your actual file layout.
+
+**`tailwind.config.ts`** (or `tailwind.config.js`)
+
+```ts
+import type { Config } from "tailwindcss";
+
+export default {
+  content: [
+    "./client/index.html",
+    "./client/src/**/*.{ts,tsx,js,jsx,html}",
+    "./server/views/**/*.{html,tsx}" // if you render any server views
+  ],
+  theme: { extend: {} },
+  plugins: [],
+} satisfies Config;
+```
+
+> If you have a different layout, make it even broader while debugging: `"./**/*.{html,js,jsx,ts,tsx}"` (excluding node\_modules).
+
+Verify **PostCSS** exists:
+
+**`postcss.config.js`**
+
+```js
+export default { plugins: { tailwindcss: {}, autoprefixer: {} } };
+```
+
+Ensure your **entry CSS** includes Tailwind directives and is imported by the client entry:
+
+**`client/src/index.css`**
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+**`client/src/main.tsx`**
+
+```ts
+import "./index.css"; // keep this import!
+```
+
+Rebuild locally to confirm styles exist in the produced CSS.
+
+---
+
+## C) Vite Base & Asset Paths
+
+If your site is served from the domain root, keep `base: "/"`. If you deploy under a subpath, set it accordingly.
+
+**`vite.config.ts`**
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  base: "/",        // IMPORTANT for absolute asset URLs on prod
+  build: { outDir: "dist" },
+  server: {
+    proxy: {
+      "/api": { target: "http://localhost:8080", changeOrigin: true }, // dev only
+    },
+  },
+});
+```
+
+If assets 404 in prod, your host may be serving from a different base. Keep `base:"/"` for root domains.
+
+---
+
+## D) SPA Fallback (host config)
+
+Your router (React Router) needs a **catch‑all** so direct navigation to `/dashboard` returns `index.html`.
+
+### If you serve static via **Express** (recommended):
+
+**`server/static.ts`** (wire into your server init)
+
+```ts
+import path from "node:path";
+import express from "express";
+
+export function mountStatic(app: import("express").Express) {
+  const dist = path.resolve(process.cwd(), "client", "dist");
+  app.use(express.static(dist, { index: false, maxAge: "1y", setHeaders(res){ res.setHeader("Cache-Control","public, max-age=31536000, immutable"); }}));
+  app.get(["/", "/dashboard", "/vehicles", "/vehicle/:id", "/settings", "/login"], (_req, res) => {
+    res.sendFile(path.join(dist, "index.html"));
+  });
+}
+```
+
+Then in your server:
+
+```ts
+import { mountStatic } from "./static";
+mountStatic(app);
+```
+
+### If you use **Nginx** in front:
+
+**`nginx.conf`** (location block)
+
+```nginx
+location / {
+  try_files $uri /index.html;
+}
+```
+
+### If hosting on **Netlify** or similar:
+
+Add `_redirects` file to client `dist` or `public`:
+
+```
+/*  /index.html  200
+```
+
+### If hosting on **Cloudflare Pages**:
+
+Enable **Single‑Page App** fallback (serves `index.html` on 404).
+
+---
+
+## E) Content Security Policy (CSP) — unblock app JS for now
+
+If console shows CSP errors, loosen temporarily (then tighten later):
+
+**Express (helmet)**
+
+```ts
+import helmet from "helmet";
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "script-src": ["'self'", "'unsafe-inline'"], // TODO: replace with hashes
+      "style-src": ["'self'", "'unsafe-inline'"],
+      "connect-src": ["'self'", "https://api.openai.com"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+```
+
+> After it works, replace `'unsafe-inline'` with **hashes** for your inline tags or remove inline scripts.
+
+---
+
+## F) API Base URL & CORS (avoid blank panels)
+
+Use a single API base that defaults to same‑origin in prod, proxied in dev.
+
+**`client/src/lib/api.ts`**
+
+```ts
+const API_BASE = import.meta.env.VITE_API_BASE || ""; // "" => same origin
+
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const res = await fetch(url, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    ...(init||{}),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+```
+
+**Production env** (frontend):
+
+```
+VITE_API_BASE=/  # if API served by same domain
+```
+
+Or set to your API domain: `https://api.vintagegarageregistry.com` and enable CORS.
+
+**Server CORS allowlist** must include your prod origin:
+
+```
+ALLOW_ORIGINS=https://vintagegarageregistry.com
+```
+
+---
+
+## G) Hide Dev‑Only JSON Blocks
+
+If you left `<pre>{JSON.stringify(...)}</pre>` debug panels, wrap them:
+
+```tsx
+{import.meta.env.DEV && (
+  <pre className="text-xs bg-gray-50 border p-3 rounded">{JSON.stringify(data,null,2)}</pre>
+)}
+```
+
+Or gate behind an env flag:
+
+```tsx
+const SHOW_DEBUG = import.meta.env.VITE_DEBUG_JSON === "1";
+{SHOW_DEBUG && <pre>...</pre>}
+```
+
+---
+
+## H) End‑to‑End Production Checklist
+
+* [ ] Tailwind CSS classes render in prod (buttons look styled). If not → fix `content` globs.
+* [ ] No red 404s for `index-*.js` / `index-*.css` in Network tab → fix `base` or hosting path.
+* [ ] No CSP errors for app JS/CSS → loosen CSP then replace with hashes.
+* [ ] Navigating directly to `/dashboard` loads the app (SPA fallback works).
+* [ ] API calls from prod succeed (200s), not blocked by CORS.
+* [ ] No raw `<pre>` JSON visible unless `VITE_DEBUG_JSON=1`.
+
+---
+
+## I) Quick Commands (local verify)
+
+```bash
+# from client/
+npm run build
+npx serve -s dist  # or any static server
+# visit http://localhost:3000 and test routes, styles, and console
+```
+
+---
+
+## J) If You Serve Client From the Server
+
+Make sure the server actually serves the built client.
+
+**`package.json` (root)**
+
+```json
+{
+  "scripts": {
+    "build:client": "cd client && npm run build",
+    "start:server": "node server/index.js",
+    "start": "npm run build:client && npm run start:server"
+  }
+}
+```
+
+Deploy with `npm start` so the latest client is built and served.
+
+---
+
+## K) What likely happened here
+
+* In dev, Tailwind JIT covered your classes. In prod, misconfigured `content` globs meant Tailwind thought you weren’t using those classes and shipped almost‑empty CSS. The UI then looked like raw boxes with debug JSON.
+* Alternatively, your host didn’t serve the built assets or CSP blocked them, so the app never hydrated.
+
+Apply sections **B → C → D** first; then **E → F → G** as needed. Report back with any console errors you still see in production.

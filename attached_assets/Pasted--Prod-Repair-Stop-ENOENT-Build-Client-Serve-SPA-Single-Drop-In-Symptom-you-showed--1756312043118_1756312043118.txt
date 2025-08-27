@@ -1,0 +1,213 @@
+# Prod Repair — Stop ENOENT, Build Client, Serve SPA (Single Drop‑In)
+
+**Symptom you showed:**
+
+* `{ ok:false, error: { message: "ENOENT: no such file or directory, stat '/home/runner/workspace/client/dist/index.html'" } }`
+* Browser console warning about favicon (CORP / OpaqueResponseBlocking).
+
+**What this means:** Your server is trying to send `client/dist/index.html` but that folder wasn’t built/deployed. You also have a strict resource policy on static assets. This pack fixes both.
+
+Follow these steps exactly (copy‑paste). Where files already exist, **replace them fully** with the versions below.
+
+---
+
+## 1) Replace any hard‑coded `sendFile`/static code
+
+**Search your server for code like:**
+
+```ts
+res.sendFile("/home/runner/workspace/client/dist/index.html");
+```
+
+…or any variant that directly references `client/dist`. **Delete** those lines — they cause the ENOENT.
+
+---
+
+## 2) Add a robust static mounter (auto‑detects dist and gives debug info)
+
+**Create:** `server/static.ts`
+
+```ts
+// server/static.ts
+import fs from "node:fs";
+import path from "node:path";
+import type { Express, Request, Response } from "express";
+
+function firstExisting(paths: string[]) {
+  for (const p of paths) if (fs.existsSync(p)) return p;
+  return null;
+}
+
+export function mountStatic(app: Express) {
+  const candidates = [
+    path.resolve(process.cwd(), "client", "dist"),
+    path.resolve(__dirname, "../client/dist"),
+    path.resolve(__dirname, "../../client/dist"),
+  ];
+  const dist = firstExisting(candidates);
+
+  // Debug endpoint so we can verify on prod
+  app.get("/__debug/static", (_req: Request, res: Response) => {
+    res.json({ cwd: process.cwd(), candidates, distExists: Boolean(dist), resolvedDist: dist });
+  });
+
+  if (!dist) {
+    // Friendly message until the client is actually built
+    app.get(["/", "/*"], (_req, res) => {
+      res.status(500).json({ ok: false, error: { message: "Client build not found. Run `npm run build:client` so client/dist exists on the server." } });
+    });
+    return;
+  }
+
+  // Serve static assets with long cache
+  app.use((await import("express")).default.static(dist, {
+    index: false,
+    maxAge: "1y",
+    setHeaders(res) { res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); }
+  }));
+
+  // SPA fallback — always return index.html for app routes
+  app.get(["/", "/*"], (_req, res) => {
+    res.sendFile(path.join(dist, "index.html"));
+  });
+}
+```
+
+**Wire it in your server bootstrap** (after API routes, before 404):
+
+`server/index.ts` (or your main server file)
+
+```ts
+import express from "express";
+import helmet from "helmet";
+import { mountStatic } from "./static";
+
+const app = express();
+
+// Helmet — relax CORP so favicon/static aren’t blocked
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false, // keep simple while we stabilize
+}));
+
+// …your JSON middleware + API routes here…
+
+// Mount the client last
+mountStatic(app);
+
+// No custom 404 for SPA; mountStatic handles it.
+
+const PORT = Number(process.env.PORT || 8080);
+app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
+```
+
+> If you already call `helmet()` elsewhere, update that call to include `crossOriginResourcePolicy: { policy: "cross-origin" }` and `crossOriginEmbedderPolicy: false`.
+
+---
+
+## 3) Ensure the client **actually builds** during deploy
+
+At the repo **root** `package.json`, add these scripts (or update them to match):
+
+```json
+{
+  "scripts": {
+    "build:client": "cd client && npm ci && npm run build",
+    "start:server": "node server/index.js",
+    "start": "npm run build:client && npm run start:server"
+  }
+}
+```
+
+Notes:
+
+* `npm ci` inside `client/` guarantees your Vite build has deps on a clean deploy.
+* If you start the server via TypeScript directly, use: `"start:server": "tsx server/index.ts"` and ensure `tsx` is a devDependency.
+
+**Client package.json** (`client/package.json`) must have:
+
+```json
+{
+  "scripts": {
+    "build": "vite build"
+  }
+}
+```
+
+**Vite config** (`client/vite.config.ts`) should export base for root deploy:
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+export default defineConfig({ plugins: [react()], base: "/" });
+```
+
+**Tailwind sanity** (if you use it): `client/tailwind.config.ts`
+
+```ts
+export default {
+  content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
+  theme: { extend: {} },
+  plugins: [],
+};
+```
+
+And ensure `client/src/main.tsx` imports `./index.css` which contains Tailwind directives.
+
+---
+
+## 4) Replit / host run command
+
+Make sure your deployment uses `npm start` from the repo root (so it runs the client build first). If your host uses a Procfile or `.replit`, ensure the run command maps to `npm start`.
+
+* **Procfile (optional):**
+
+```
+web: npm start
+```
+
+* **.replit (optional):** set `run = "npm start"`
+
+---
+
+## 5) Verify on production
+
+1. Go to `https://vintagegarageregistry.com/__debug/static`
+
+   * Expect: `{ distExists: true, resolvedDist: ".../client/dist" }`
+2. Reload homepage. Open **Network** tab:
+
+   * Ensure `index-*.js` and `index-*.css` return **200** (not 404).
+3. **Console**: favicon warning should be gone (CORP relaxed). If it persists, ensure `helmet()` snippet is active **before** `mountStatic()`.
+
+---
+
+## 6) If `distExists` is still false
+
+* From your server shell, run:
+
+```
+ls -la client/dist
+ls -la client
+node -e "console.log(process.cwd())"
+```
+
+* If `client/dist` truly isn’t there, run locally:
+
+```
+cd client && npm ci && npm run build
+```
+
+* Commit artifacts **only if** your platform doesn’t build on deploy (normally you shouldn’t commit `dist`). Prefer fixing scripts so deploy builds.
+
+---
+
+## 7) Why this fixes it
+
+* Removes hard‑coded `sendFile` that pointed to a non‑existent path.
+* Guarantees your client is built before the server starts.
+* Serves static assets correctly and falls back to `index.html` for SPA routes.
+* Adjusts Helmet so static resources (favicon, etc.) aren’t blocked by CORP.
+
+After applying, send me the output of `/__debug/static` and any red lines from the Network tab if something still blocks hydration.

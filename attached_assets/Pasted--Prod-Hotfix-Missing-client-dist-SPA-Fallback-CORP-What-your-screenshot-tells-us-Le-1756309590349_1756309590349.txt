@@ -1,0 +1,209 @@
+# Prod Hotfix — Missing `client/dist` + SPA Fallback + CORP
+
+**What your screenshot tells us**
+
+* Left panel: `{"ok":false,"error":{"message":"ENOENT: no such file or directory, stat '/home/runner/workspace/client/dist/index.html'"}}`
+
+  * ✅ Root cause: your server is trying to serve `client/dist/index.html` but that folder **doesn’t exist** on the box (the client wasn’t built or path is wrong).
+* Right panel: `Cross‑Origin‑Resource‑Policy` warning on `favicon.ico`
+
+  * ✅ You likely have a strict embedder/resource policy; the easy fix is to set helmet’s **crossOriginResourcePolicy** to `cross-origin` (or disable COEP if you had it on).
+
+Below is a surgical drop‑in to:
+
+1. Robustly mount the built client (with a nice error if it’s missing),
+2. Add a catch‑all SPA fallback so deep links work,
+3. Relax CORP for static assets to avoid the favicon warning,
+4. Ensure your deploy BUILD step actually creates `client/dist`.
+
+---
+
+## 1) Mount static client safely (server)
+
+Create `server/static.ts` and wire it in. This locates `client/dist` from multiple possible roots and gives a clear error if missing.
+
+```ts
+// server/static.ts
+import fs from "node:fs";
+import path from "node:path";
+import type { Express, Request, Response } from "express";
+
+function firstExisting(paths: string[]) {
+  for (const p of paths) if (fs.existsSync(p)) return p;
+  return null;
+}
+
+export function mountStatic(app: Express) {
+  const candidates = [
+    path.resolve(process.cwd(), "client", "dist"),
+    path.resolve(__dirname, "../client/dist"),
+    path.resolve(__dirname, "../../client/dist"),
+  ];
+  const dist = firstExisting(candidates);
+
+  // Debug endpoint either way
+  app.get("/__debug/static", (_req: Request, res: Response) => {
+    res.json({
+      cwd: process.cwd(),
+      candidates,
+      distExists: Boolean(dist),
+      resolvedDist: dist,
+    });
+  });
+
+  if (!dist) {
+    // Friendly JSON until the client is built
+    app.get(["/", "/dashboard", "/vehicles", "/vehicle/:id", "/settings", "/login"], (_req, res) => {
+      res.status(500).json({
+        ok: false,
+        error: {
+          message:
+            "Client build not found. Run `npm run build:client` (or see package.json scripts) so client/dist exists on the server.",
+        },
+      });
+    });
+    return;
+  }
+
+  // Serve static files
+  app.use(
+    (await import("express")).default.static(dist, {
+      index: false,
+      maxAge: "1y",
+      setHeaders(res) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      },
+    })
+  );
+
+  // SPA fallback
+  app.get(["/", "/dashboard", "/vehicles", "/vehicle/:id", "/settings", "/login", "/*"], (_req, res) => {
+    res.sendFile(path.join(dist, "index.html"));
+  });
+}
+```
+
+**Wire it** in your server bootstrap (where you create the express app), *after* API routes and *before* 404 handler:
+
+```ts
+// server/index.ts (or server/app.ts, wherever you build the app)
+import helmet from "helmet"; // ensure imported
+import { mountStatic } from "./static";
+
+// helmet – relax CORP for static assets
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
+  })
+);
+
+// ... your API routes here ...
+
+// mount the SPA last
+mountStatic(app);
+```
+
+> If you already call `helmet()` elsewhere, update it to include `crossOriginResourcePolicy: { policy: "cross-origin" }` and keep `crossOriginEmbedderPolicy: false`.
+
+---
+
+## 2) Ensure the client actually builds on deploy
+
+Add or update root `package.json` scripts so **production start** always builds the client first.
+
+```json
+{
+  "scripts": {
+    "build:client": "cd client && npm ci && npm run build",
+    "start:server": "node server/index.js", // or: tsx server/index.ts if you run TS directly
+    "start": "npm run build:client && npm run start:server",
+
+    // optional quality gates
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx server/index.ts",
+    "dev:client": "cd client && vite"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "tsx": "^4.7.0"
+  }
+}
+```
+
+> If your platform uses a Procfile or separate build step, ensure it runs `npm run build:client` before launching the server.
+
+---
+
+## 3) Vite base + Tailwind sanity checks (client)
+
+**`client/vite.config.ts`**
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+export default defineConfig({
+  plugins: [react()],
+  base: "/", // root domain deploy
+});
+```
+
+**`client/tailwind.config.ts`** (or `.js`)
+
+```ts
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{ts,tsx,js,jsx}",
+    "../server/views/**/*.{html,tsx}",
+  ],
+  theme: { extend: {} },
+  plugins: [],
+};
+```
+
+**`client/src/main.tsx`** must import the CSS:
+
+```ts
+import "./index.css"; // contains @tailwind base; @tailwind components; @tailwind utilities
+```
+
+---
+
+## 4) Quick verification
+
+After deploying with these scripts, hit:
+
+* `https://vintagegarageregistry.com/__debug/static` → should show `{ distExists: true, resolvedDist: ".../client/dist" }`
+* Reload homepage → UI should be styled and hydrated (no raw JSON blocks)
+* Console should **not** show CORP warning for `favicon.ico`
+
+If you still see raw JSON:
+
+* Open **Network** tab → confirm `index-*.js` and `index-*.css` load with 200.
+* If 404, re‑check `vite.config.ts base` and your host’s static root.
+
+---
+
+## 5) Optional: favicon route (if your host proxies oddly)
+
+Serve favicon explicitly to silence any remaining warnings:
+
+```ts
+import path from "node:path";
+app.get("/favicon.ico", (_req, res) => {
+  res.sendFile(path.resolve(process.cwd(), "client", "public", "favicon.ico"));
+});
+```
+
+Make sure the icon exists at `client/public/favicon.ico` and Vite copies it.
+
+---
+
+## TL;DR
+
+* Your server can’t find `client/dist/index.html` → **build the client and serve it**.
+* Add catch‑all **SPA fallback**.
+* Relax CORP via Helmet to quiet favicon warnings.
+* Verify with `/__debug/static` then reload prod.

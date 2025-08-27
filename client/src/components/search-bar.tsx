@@ -17,7 +17,7 @@ export function SearchBar() {
 
   const { data: searchResults, isLoading } = useQuery<SearchResult>({
     queryKey: ["/api/v1/search", query],
-    queryFn: () => api(`/search?q=${encodeURIComponent(query)}`).then(r => r),
+    queryFn: () => api(`/api/v1/search?q=${encodeURIComponent(query)}`).then(r => r),
     enabled: query.length >= 2,
     staleTime: 30000, // 30 seconds
   });

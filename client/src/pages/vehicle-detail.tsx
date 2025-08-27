@@ -15,11 +15,16 @@ import CostSummary from '@/components/cost-summary';
 import VehiclePartsLedger from '@/components/VehiclePartsLedger';
 import VehicleMediaPipeline from '@/components/VehicleMediaPipeline';
 import PublicVehicleShare from '@/components/PublicVehicleShare';
+import SmartMaintenancePanel from '@/components/SmartMaintenancePanel';
+import { useBanner } from '@/providers/BannerProvider';
+import { useSelectedVehicle } from '@/stores/selectedVehicle';
 
 export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [engineData, setEngineData] = useState<any>(null);
   const [reliabilityData, setReliabilityData] = useState<any>(null);
+  const { show } = useBanner();
+  const { setVehicle } = useSelectedVehicle();
   
   const { data: vehicle, isLoading, error } = useQuery({
     queryKey: ['/api/v1/vehicles', id],
@@ -79,7 +84,22 @@ export default function VehicleDetailPage() {
     if (vehicle && !reliabilityData) {
       reliabilityMutation.mutate(vehicle);
     }
-  }, [vehicle]);
+    // Update selected vehicle in Zustand store
+    if (vehicle) {
+      setVehicle({
+        id: vehicle.id,
+        vin: vehicle.vin,
+        nickname: vehicle.nickname,
+        mileage: vehicle.mileage
+      });
+      // Show success banner to test the banner system
+      show({
+        kind: "success",
+        text: `Vehicle "${vehicle.nickname || vehicle.make + ' ' + vehicle.model}" loaded successfully with AI-powered insights`,
+        ttlMs: 5000
+      });
+    }
+  }, [vehicle, setVehicle, show]);
 
   if (isLoading) {
     return (
@@ -555,6 +575,10 @@ export default function VehicleDetailPage() {
               <div className="space-y-6">
                 <RecentModifications vehicleId={id!} />
                 <MaintenanceTimeline vehicleId={id!} />
+                <SmartMaintenancePanel 
+                  vin={vehicle?.vin || ""} 
+                  mileage={vehicle?.mileage}
+                />
                 <UpcomingMaintenance vehicleId={id!} />
               </div>
               
