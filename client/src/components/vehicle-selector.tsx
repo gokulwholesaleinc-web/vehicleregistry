@@ -41,8 +41,17 @@ export default function VehicleSelector({ selectedVehicleId, onVehicleSelect, on
           <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
             {selectedVehicle && (
               <>
-                <div className="w-16 h-12 sm:w-20 sm:h-14 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-xl flex items-center justify-center shadow-lg mx-auto sm:mx-0">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">No Image</span>
+                <div className="w-16 h-12 sm:w-20 sm:h-14 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-xl flex items-center justify-center shadow-lg mx-auto sm:mx-0 overflow-hidden">
+                  {selectedVehicle.photos && selectedVehicle.photos.length > 0 ? (
+                    <img 
+                      src={selectedVehicle.photos[0]} 
+                      alt={`${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}`}
+                      className="w-full h-full object-cover"
+                      data-testid="img-vehicle-profile"
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-500 dark:text-gray-400">No Image</span>
+                  )}
                 </div>
                 <div className="text-center sm:text-left">
                   <button 
