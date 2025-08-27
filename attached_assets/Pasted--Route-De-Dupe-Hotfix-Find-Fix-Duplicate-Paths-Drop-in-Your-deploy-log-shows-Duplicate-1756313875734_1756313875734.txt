@@ -1,0 +1,213 @@
+# Route De‑Dupe Hotfix — Find & Fix Duplicate Paths (Drop‑in)
+
+> Your deploy log shows: **`Duplicate route: GET:/search`**. This happens when the same method+path is registered twice — e.g., `app.get('/search', ...)` **and** `app.use('/search', searchRouter)` where `searchRouter` also has `router.get('/search', ...)` (should be `router.get('/')`). It can also come from mounting the same router twice or booting the app twice.
+>
+> Below is a **copy‑paste** fix pack: a route indexer + debug endpoint, a safe `mountRouter` helper that prevents duplicates, and a checklist to correct typical causes. Replace/add the files exactly as shown. Run in prod too (debug endpoints are read‑only).
+
+---
+
+## 1) Add a route indexer (lists routes + detects duplicates)
+
+Create **`server/utils/routeIndex.ts`**
+
+```ts
+// server/utils/routeIndex.ts
+import type { Express } from "express";
+
+export type RouteDef = { method: string; path: string };
+
+function collectFromStack(stack: any[], prefix = ""): RouteDef[] {
+  const out: RouteDef[] = [];
+  for (const layer of stack || []) {
+    if (layer.route) {
+      const p = prefix + layer.route.path;
+      const methods = Object.keys(layer.route.methods || {});
+      for (const m of methods) out.push({ method: m.toUpperCase(), path: p });
+    } else if (layer.name === "router" && layer.handle?.stack) {
+      // Express stores the mount path in regexp; we can’t reliably stringify it, so
+      // rely on layer.path if present (Express 5) or assume prefix unchanged.
+      const mount = (layer.path && layer.path !== "/") ? prefix + layer.path : prefix;
+      out.push(...collectFromStack(layer.handle.stack, mount));
+    }
+  }
+  return out;
+}
+
+export function listRoutes(app: Express): RouteDef[] {
+  const stack: any[] = (app as any)?._router?.stack || [];
+  return collectFromStack(stack, "").sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
+}
+
+export function findDuplicates(routes: RouteDef[]): { key: string; items: RouteDef[] }[] {
+  const map = new Map<string, RouteDef[]>();
+  for (const r of routes) {
+    const k = `${r.method}:${r.path}`;
+    if (!map.has(k)) map.set(k, []);
+    map.get(k)!.push(r);
+  }
+  return [...map.entries()].filter(([, v]) => v.length > 1).map(([key, items]) => ({ key, items }));
+}
+```
+
+Add a debug endpoint to your server entry (after all routers are mounted):
+
+```ts
+import { listRoutes, findDuplicates } from "./utils/routeIndex";
+
+app.get("/__debug/routes", (_req, res) => {
+  const routes = listRoutes(app);
+  const dups = findDuplicates(routes);
+  res.json({ routes, duplicates: dups });
+});
+```
+
+> Hit `/__debug/routes` in prod to see **exact** paths/methods and what’s duplicated.
+
+---
+
+## 2) Prevent duplicates at mount time (safe helper)
+
+Create **`server/utils/mountRouter.ts`**
+
+```ts
+// server/utils/mountRouter.ts
+import type { Express, Router } from "express";
+import { listRoutes, findDuplicates } from "./routeIndex";
+
+export function mountRouter(app: Express, base: string, router: Router, opts?: { failOnDuplicate?: boolean }) {
+  const before = listRoutes(app);
+  app.use(base, router);
+  const after = listRoutes(app);
+  // Compare route sets and flag any new duplicates that involve the base
+  const dupes = findDuplicates(after).filter(d => d.items.some(x => x.path.startsWith(base)));
+  if (dupes.length) {
+    const msg = `Duplicate route(s) after mounting '${base}': ` + dupes.map(d => d.key).join(", ");
+    if (opts?.failOnDuplicate) {
+      throw new Error(msg);
+    } else {
+      console.warn(msg);
+    }
+  }
+}
+```
+
+Use it **instead of** `app.use('/x', router)` in your server entry:
+
+```ts
+import { mountRouter } from "./utils/mountRouter";
+import { router as searchRouter } from "./routes/search";
+
+// ❌ app.use("/search", searchRouter);
+// ✅
+mountRouter(app, "/search", searchRouter, { failOnDuplicate: true });
+```
+
+> If it throws on deploy, your repo *does* register the same route twice. The debug endpoint below will show you from where.
+
+---
+
+## 3) Fix the usual root causes (make these edits now)
+
+### A) Router pathing
+
+Inside feature routers, paths should be **relative** to the mount point — **never** re‑include the base path.
+
+**Bad** (`server/routes/search.ts`):
+
+```ts
+router.get("/search", handler); // ❌ duplicates when mounted at /search
+```
+
+**Good**:
+
+```ts
+router.get("/", handler);       // ✅ handled at GET /search
+router.get("/:id", getOne);      // ✅ handled at GET /search/:id
+```
+
+### B) Double mounting
+
+Ensure you don’t mount the same router twice.
+
+```ts
+// search mounted once only
+mountRouter(app, "/search", searchRouter);
+// mountRouter(app, "/search", searchRouter); // ❌ remove extra
+```
+
+### C) App booted twice
+
+If you export a `buildApp()` and also import it in two different entry points, you can register routes twice. Only **one** file should call `app.listen(...)`.
+
+**server/index.ts** (single entry):
+
+```ts
+import { buildApp } from "./app"; // buildApp must NOT call listen()
+const app = buildApp();
+app.listen(PORT);
+```
+
+### D) Glob‑loading routes
+
+If you use a file glob like `routes/**/*.ts` and a router also re‑exports itself elsewhere, it can register twice. Only import each router from a **single barrel file** (e.g., `routes/index.ts`) and ensure JS build output isn’t also present (`.ts` and `.js` both picked up). Add a `.dockerignore`/deploy ignore for `server/dist` if running TS directly so you don’t import both.
+
+### E) TS/ESM path variants
+
+Importing the same router via two specifiers (e.g., `"./routes/search"` and `"./routes/search.ts"`) can create **two module instances**. Normalize imports (omit extensions) and stick to one style.
+
+---
+
+## 4) Optional: idempotent boot guard
+
+Prevent accidental double‑boot in clustered/dev contexts.
+
+`server/utils/bootGuard.ts`
+
+```ts
+// server/utils/bootGuard.ts
+export function ensureSingleBoot(tag = "APP_BOOTED") {
+  const g = globalThis as any;
+  if (g[tag]) throw new Error("Server booted twice — check your entrypoints/mounts.");
+  g[tag] = true;
+}
+```
+
+Use in your entry before mounting routers:
+
+```ts
+import { ensureSingleBoot } from "./utils/bootGuard";
+ensureSingleBoot();
+```
+
+---
+
+## 5) How to verify (prod‑safe)
+
+1. Deploy with `mountRouter(..., { failOnDuplicate: true })` on all mounts.
+2. Hit **`/__debug/routes`** — you’ll get a JSON list of all routes and a `duplicates` array. This should be **empty**.
+3. Check logs — there should be **no** “Duplicate route” warnings.
+
+---
+
+## 6) Quick grep commands (locally)
+
+```bash
+# Look for suspicious double definitions
+rg "app\.get\('/search'|router\.get\('/search'" -n server || true
+rg "app\.use\('/search'" -n server || true
+# List all mounts:
+rg "app\.use\('\/" -n server
+```
+
+*(Use ripgrep `rg`; or `grep -R` if you prefer.)*
+
+---
+
+## 7) Why this solves it
+
+* Forces a **single source of truth** for each base path (`mountRouter`).
+* Makes router files **relative** to their mount, killing the common `'/search'` in both places mistake.
+* Detects duplicates deterministically at startup with `failOnDuplicate` — your deployment will fail fast instead of running a flaky server.
+* `/__debug/routes` gives you a simple lens to audit the live app.
+
+If you still see a duplicate after this, paste the JSON from `/__debug/routes` and I’ll point to the exact files to edit.
