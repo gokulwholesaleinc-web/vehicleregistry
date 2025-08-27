@@ -5,7 +5,7 @@ import { applySecurity } from "./http/security";
 import { logMiddleware } from "./http/logging";
 import { validateEnvironment } from "./security/environment";
 import { auditRequestContext, auditAutoInstrumentation } from "./audit/auditLogger";
-import { mountStatic } from "./static";
+import { mountClient } from "./serveClient";
 
 // Validate environment before starting
 validateEnvironment();
@@ -76,8 +76,8 @@ app.use((req, res, next) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    // Use robust production static serving with multi-path resolution
-    mountStatic(app);
+    // Use simplified, reliable static client serving
+    mountClient(app);
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT

@@ -1,8 +1,8 @@
 import path from "node:path";
 import fs from "node:fs";
-import type express from "express";
+import express, { type Express } from "express";
 
-export function mountClient(app: express.Express) {
+export function mountClient(app: Express) {
   // __dirname will be .../dist in production; walk back to repo root, then to dist/public
   const clientDist = path.resolve(import.meta.dirname, "../dist/public");
 
