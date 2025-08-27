@@ -1,0 +1,159 @@
+# 🔧 Make the server API‑only (permanent fix for blank page & HTML responses)
+
+**Why this fixes it:** Your blank page + `text/html` on API endpoints happens because the SPA catch‑all (`app.get('*')` / regex fallback) returns `index.html` when the client build is missing or when a route looks non‑API. Removing SPA serving entirely guarantees `/api/*` always returns JSON and non‑API paths never return `index.html`.
+
+This is the **smallest change** to permanently eliminate the failure mode—no over‑engineering.
+
+---
+
+## ✅ What changes
+
+* **Remove** all static/SPA serving from the API server.
+* **Keep** only `/api/**` routes.
+* **Return JSON** for errors / non‑API paths.
+* **(Optional)** add a JSON root status so visiting the base URL isn’t a blank page.
+
+> You’ll host the UI (if needed) separately (Netlify/Vercel/Replit Static). Until then, base URL will show a JSON status instead of a web app—which is intentional for an API‑only service.
+
+---
+
+## 1) Replace your server entry with this (TypeScript)
+
+**File:** `server/src/index.ts`
+
+```ts
+// server/src/index.ts — API-only server
+import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+
+const app = express();
+
+// Security hardening (no CSP for static since we serve no SPA here)
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// CORS: allow your deployed UI origins (edit these as needed)
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",           // Vite dev
+      "https://vintagegarage.replit.app" // your client host (if/when you deploy it)
+    ],
+    credentials: true,
+  })
+);
+
+app.use(express.json());
+
+// --- OPTIONAL: force JSON type for all API responses ---
+app.use("/api", (_req, res, next) => {
+  res.type("application/json");
+  next();
+});
+
+// --- API routes go here (mount your existing routers under /api) ---
+// Example:
+// import { apiRouter } from "./routes";
+// app.use("/api", apiRouter);
+
+// Health & base status (so the root URL isn't a blank page)
+app.get("/", (_req, res) => {
+  res.json({ service: "vehicleregistry-api", status: "ok" });
+});
+
+// 404 for everything not handled above
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api") && req.path !== "/") {
+    return res.status(404).json({ error: "Not Found", hint: "API-only server" });
+  }
+  next();
+});
+
+// Central error handler — always JSON
+app.use((err: any, _req: express.Request, res: express.Response, _next: any) => {
+  console.error(err);
+  const status = err.status || 500;
+  res.status(status).json({
+    error: status === 404 ? "Not Found" : "Internal Server Error",
+    details: process.env.NODE_ENV === "development" ? String(err) : undefined,
+  });
+});
+
+const PORT = Number(process.env.PORT) || 3000;
+app.listen(PORT, () => console.log(`API listening on :${PORT}`));
+```
+
+> If your entry file has a different name/path, apply the same content there.
+
+---
+
+## 2) Delete/comment any SPA/static code
+
+Search and remove **all** of the following anywhere in your server:
+
+* `app.use(express.static(...))`
+* `app.get('*', ...)` or regex equivalents like `app.get(/^\/(?!api).*/, ...)` that return `index.html`
+* Helpers like `mountClient(app)` or custom **path normalizers** that rewrite `/api` → `/`
+
+This prevents HTML fallbacks from ever intercepting API calls again.
+
+---
+
+## 3) Simplify scripts (no client build on this server)
+
+**File:** `package.json` (root)
+
+```json
+{
+  "scripts": {
+    "start": "node server/dist/index.js",
+    "dev": "tsx server/src/index.ts"
+  }
+}
+```
+
+* Remove any `postinstall` or `build:client` scripts from this repo if the API server no longer builds the UI.
+* If you still keep the client folder, that’s fine — it just won’t be built/served by this server.
+
+**.replit (optional)**
+
+```ini
+run = "bash -lc 'npm ci && npm run start'"
+```
+
+---
+
+## 4) Verify (quick checks)
+
+**Replit shell:**
+
+```bash
+npm ci
+npm run dev   # or npm run start in prod mode
+```
+
+**Then test:**
+
+```bash
+curl -i https://vintagegarage.replit.app/            # 200 JSON { service, status }
+curl -i https://vintagegarage.replit.app/api/health  # whatever your API returns
+curl -i https://vintagegarage.replit.app/anything    # 404 JSON (API-only server)
+```
+
+* All API endpoints should now send `Content-Type: application/json`.
+* No request should ever return `index.html` again.
+
+---
+
+## 5) (When ready) Host the UI separately
+
+* Build the client: `cd client && npm ci && npm run build` → deploy `client/dist` to Netlify/Vercel/Replit Static.
+* Point the client to the API with `VITE_API_BASE_URL`.
+* Keep the CORS `origin` list in `index.ts` in sync with the client URL.
+
+---
+
+### Summary
+
+* The blank page was caused by a missing client build + a catch‑all that served `index.html` (even for API routes).
+* By making the server **API‑only**, we remove the class of bugs where HTML bleeds into API responses. This is a permanent, minimal fix.
