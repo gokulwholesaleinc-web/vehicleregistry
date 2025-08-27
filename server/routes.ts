@@ -561,7 +561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).parse(req.body);
 
       // Normalize VIN and validate
-      const { normalizeVIN, isValidVIN } = await import('../lib/vin.js');
+      const { normalizeVIN, isValidVIN } = await import('./lib/vin.js');
       const vin = normalizeVIN(rawVin);
       
       if (!isValidVIN(vin)) {
@@ -1192,7 +1192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         engine: z.string().optional()
       }).parse(req.body);
 
-      const { getEngineFactoryName } = await import('../services/openai');
+      const { getEngineFactoryName } = await import('./services/openai.js');
       const engineData = await getEngineFactoryName({
         make,
         model,
@@ -1221,7 +1221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         trim: z.string().optional()
       }).parse(req.body);
 
-      const { getReliabilityScore } = await import('../services/openai');
+      const { getReliabilityScore } = await import('./services/openai.js');
       const reliabilityData = await getReliabilityScore({
         make,
         model,
